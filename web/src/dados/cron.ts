@@ -5,7 +5,7 @@
 export type Job = {
   expressao: string
   rotulo: string
-  dono?: string
+  dono?: string | null
 }
 
 export type Disparo = {
@@ -18,6 +18,15 @@ export type ResultadoProximosDisparos = {
   disparos: Disparo[]
   ilegiveis: Job[]
   lidas: number
+}
+
+const MESES_MAP: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+}
+
+const DOW_MAP: Record<string, number> = {
+  sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
 }
 
 /** Formata data para HH:MM em UTC */
@@ -37,16 +46,36 @@ export function horaGastao(d: Date): string {
   })
 }
 
-function parseCampo(campo: string, min: number, max: number): Set<number> | null {
-  const valores = new Set<number>()
-  if (campo === '*') {
-    for (let i = min; i <= max; i++) valores.add(i)
-    return valores
+function normalizarToken(tok: string, nomes?: Record<string, number>): number | null {
+  if (nomes) {
+    const low = tok.toLowerCase()
+    if (low in nomes) return nomes[low]
+  }
+  if (/^\d+$/.test(tok)) return parseInt(tok, 10)
+  return null
+}
+
+export function expandir(
+  campo: string,
+  min: number,
+  max: number,
+  nomes?: Record<string, number>
+): Set<number> | null {
+  if (!campo || typeof campo !== 'string') return null
+  const campoTrim = campo.trim()
+  if (!campoTrim) return null
+  if (campoTrim === '*') {
+    const set = new Set<number>()
+    for (let i = min; i <= max; i++) set.add(i)
+    return set
   }
 
-  const partes = campo.split(',')
+  const partes = campoTrim.split(',')
+  const valores = new Set<number>()
+
   for (const parte of partes) {
-    const stepMatch = parte.match(/^(\*|\d+(?:-\d+)?)\/(\d+)$/)
+    if (!parte) return null // ex: 1,,3
+    const stepMatch = parte.match(/^(\*|[A-Za-z0-9]+(?:-[A-Za-z0-9]+)?)\/(\d+)$/)
     if (stepMatch) {
       const step = parseInt(stepMatch[2], 10)
       if (isNaN(step) || step <= 0) return null
@@ -54,63 +83,94 @@ function parseCampo(campo: string, min: number, max: number): Set<number> | null
       let end = max
       if (stepMatch[1] !== '*') {
         if (stepMatch[1].includes('-')) {
-          const [r1, r2] = stepMatch[1].split('-').map(Number)
-          start = r1
-          end = r2
+          const [r1, r2] = stepMatch[1].split('-')
+          const v1 = normalizarToken(r1, nomes)
+          const v2 = normalizarToken(r2, nomes)
+          if (v1 === null || v2 === null || v1 > v2 || v1 < min || v2 > max) return null
+          start = v1
+          end = v2
         } else {
-          start = parseInt(stepMatch[1], 10)
+          const v = normalizarToken(stepMatch[1], nomes)
+          if (v === null || v < min || v > max) return null
+          start = v
         }
       }
       for (let i = start; i <= end; i += step) {
-        if (i >= min && i <= max) valores.add(i)
+        valores.add(i)
       }
       continue
     }
 
-    const rangeMatch = parte.match(/^(\d+)-(\d+)$/)
-    if (rangeMatch) {
-      const start = parseInt(rangeMatch[1], 10)
-      const end = parseInt(rangeMatch[2], 10)
-      if (isNaN(start) || isNaN(end) || start > end) return null
-      for (let i = start; i <= end; i++) {
-        if (i >= min && i <= max) valores.add(i)
-      }
+    if (parte.includes('-')) {
+      const [r1, r2, ...extra] = parte.split('-')
+      if (extra.length > 0) return null
+      const v1 = normalizarToken(r1, nomes)
+      const v2 = normalizarToken(r2, nomes)
+      if (v1 === null || v2 === null || v1 > v2 || v1 < min || v2 > max) return null
+      for (let i = v1; i <= v2; i++) valores.add(i)
       continue
     }
 
-    if (/^\d+$/.test(parte)) {
-      const num = parseInt(parte, 10)
-      if (num >= min && num <= max) valores.add(num)
-      else return null
-      continue
-    }
-
-    return null
+    const v = normalizarToken(parte, nomes)
+    if (v === null || v < min || v > max) return null
+    valores.add(v)
   }
 
   return valores.size > 0 ? valores : null
 }
 
-export function proximosDisparos(jobs: Job[], agora: Date, janelaMinutos: number): ResultadoProximosDisparos {
+export function disparaEm(job: Job, d: Date): boolean | null {
+  const expr = (job.expressao ?? '').trim().split(/\s+/)
+  if (expr.length !== 5) return null
+  const [minStr, horaStr, domStr, mesStr, dowStr] = expr
+  const min = expandir(minStr, 0, 59)
+  const hora = expandir(horaStr, 0, 23)
+  const dom = expandir(domStr, 1, 31)
+  const mes = expandir(mesStr, 1, 12, MESES_MAP)
+  const dow = expandir(dowStr, 0, 7, DOW_MAP)
+  if (!min || !hora || !dom || !mes || !dow) return null
+
+  if (dow.has(7)) dow.add(0)
+  if (dow.has(0)) dow.add(7)
+
+  const mMatch = min.has(d.getUTCMinutes())
+  const hMatch = hora.has(d.getUTCHours())
+  const mesMatch = mes.has(d.getUTCMonth() + 1)
+  const dDay = d.getUTCDate()
+  const dDow = d.getUTCDay()
+
+  const domRestrito = domStr !== '*'
+  const dowRestrito = dowStr !== '*'
+
+  let diaMatch = false
+  if (domRestrito && dowRestrito) {
+    diaMatch = dom.has(dDay) || dow.has(dDow)
+  } else {
+    diaMatch = dom.has(dDay) && dow.has(dDow)
+  }
+
+  return mMatch && hMatch && mesMatch && diaMatch
+}
+
+export function proximosDisparos(
+  jobs: Job[],
+  agora: Date = new Date(),
+  janelaMinutos: number = 60
+): ResultadoProximosDisparos {
   const disparos: Disparo[] = []
   const ilegiveis: Job[] = []
   let lidas = 0
 
   for (const job of jobs) {
-    const tokens = job.expressao.trim().split(/\s+/)
-    if (tokens.length < 5) {
+    // Validação prévia
+    const expr = (job.expressao ?? '').trim().split(/\s+/)
+    if (expr.length !== 5) {
       ilegiveis.push(job)
       continue
     }
 
-    const [minStr, horaStr, domStr, mesStr, dowStr] = tokens
-    const minutos = parseCampo(minStr, 0, 59)
-    const horas = parseCampo(horaStr, 0, 23)
-    const doms = parseCampo(domStr, 1, 31)
-    const meses = parseCampo(mesStr, 1, 12)
-    const dows = parseCampo(dowStr, 0, 7) // 0 e 7 = domingo
-
-    if (!minutos || !horas || !doms || !meses || !dows) {
+    const testValido = disparaEm(job, agora)
+    if (testValido === null) {
       ilegiveis.push(job)
       continue
     }
@@ -120,18 +180,12 @@ export function proximosDisparos(jobs: Job[], agora: Date, janelaMinutos: number
     let primeiro: Date | null = null
     let vezes = 0
 
-    // Avança minuto a minuto dentro da janela em UTC (pois crontab no servidor roda em UTC)
-    const inicioMs = Math.floor(agora.getTime() / 60000) * 60000
+    // Avança minuto a minuto dentro da janela em UTC a partir do início do minuto de agora + 1
+    const inicioMs = (Math.floor(agora.getTime() / 60000) + 1) * 60000
     for (let offset = 0; offset <= janelaMinutos; offset++) {
       const t = new Date(inicioMs + offset * 60000)
-      const m = t.getUTCMinutes()
-      const h = t.getUTCHours()
-      const dom = t.getUTCDate()
-      const mes = t.getUTCMonth() + 1
-      let dow = t.getUTCDay()
-      if (dow === 0 && dows.has(7)) dow = 7
-
-      if (minutos.has(m) && horas.has(h) && doms.has(dom) && meses.has(mes) && (dows.has(dow) || dows.has(t.getUTCDay()))) {
+      if (t.getTime() > agora.getTime() + janelaMinutos * 60000) break
+      if (disparaEm(job, t)) {
         if (!primeiro) primeiro = t
         vezes++
       }

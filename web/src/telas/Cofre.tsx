@@ -168,8 +168,90 @@ function Mapa({
   // encostar: 135 nós na mesa e 80 no celular, medidos em 10/09. Mapa
   // encavalado sem aviso é a mesma família do rótulo escondido sem aviso.
   const comoCoube = diagnosticarLayout(postos, caixa)
+
+  // Zoom e Pan interativo para navegação e exploração de alta resolução
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [arrastando, setArrastando] = useState(false)
+  const [pontoInicial, setPontoInicial] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
+  const [moveu, setMoveu] = useState(false)
+
+  const resetarNavegacao = () => {
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+  }
+
+  const aoRolar = (e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault()
+    const delta = e.deltaY < 0 ? 1.15 : 0.87
+    setZoom((z) => Math.min(3.5, Math.max(0.7, Number((z * delta).toFixed(2)))))
+  }
+
+  const aoIniciarArrasto = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.button !== 0) return
+    setArrastando(true)
+    setMoveu(false)
+    setPontoInicial({ x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y })
+    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+  }
+
+  const aoArrastar = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!arrastando || !pontoInicial) return
+    const dx = e.clientX - pontoInicial.x
+    const dy = e.clientY - pontoInicial.y
+    if (Math.hypot(dx, dy) > 4) {
+      setMoveu(true)
+    }
+    setPan({ x: pontoInicial.panX + dx, y: pontoInicial.panY + dy })
+  }
+
+  const aoFinalizarArrasto = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!arrastando) return
+    setArrastando(false)
+    setPontoInicial(null)
+    try {
+      ;(e.currentTarget as Element).releasePointerCapture?.(e.pointerId)
+    } catch {
+      // noop
+    }
+  }
+
   return (
     <>
+    <div className="relative overflow-hidden rounded border border-linha bg-carta">
+      {/* Controles de Zoom Flutuantes */}
+      <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1 rounded border border-linha bg-carta/90 p-1 shadow-sm backdrop-blur-sm">
+        <button
+          type="button"
+          title="Aumentar zoom"
+          aria-label="Aumentar zoom"
+          onClick={() => setZoom((z) => Math.min(3.5, Number((z + 0.25).toFixed(2))))}
+          className="flex h-7 w-7 items-center justify-center rounded border border-linha bg-carta-forte text-xs font-bold text-tinta hover:bg-linha active:scale-95"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          title="Diminuir zoom"
+          aria-label="Diminuir zoom"
+          onClick={() => setZoom((z) => Math.max(0.7, Number((z - 0.25).toFixed(2))))}
+          className="flex h-7 w-7 items-center justify-center rounded border border-linha bg-carta-forte text-xs font-bold text-tinta hover:bg-linha active:scale-95"
+        >
+          −
+        </button>
+        {(zoom !== 1 || pan.x !== 0 || pan.y !== 0) && (
+          <button
+            type="button"
+            title="Restaurar visualização original (100%)"
+            aria-label="Restaurar visualização original"
+            onClick={resetarNavegacao}
+            className="rounded border border-linha bg-carta-forte px-2 py-1 font-mono text-[10px] text-tinta-2 hover:text-tinta hover:bg-linha active:scale-95"
+          >
+            {Math.round(zoom * 100)}% · Reset
+          </button>
+        )}
+      </div>
+
     <svg
       data-grafo-cofre
       // `role="img"` torna os filhos apresentacionais, e aqui cada nó é um
@@ -177,7 +259,12 @@ function Mapa({
       role="group"
       aria-label="Mapa dos aprendizados da operação e das ligações declaradas entre eles"
       viewBox={`0 0 ${caixa.largura} ${caixa.altura}`}
-      className="h-auto w-full"
+      className="h-auto w-full touch-none select-none cursor-grab active:cursor-grabbing"
+      onWheel={aoRolar}
+      onPointerDown={aoIniciarArrasto}
+      onPointerMove={aoArrastar}
+      onPointerUp={aoFinalizarArrasto}
+      onPointerCancel={aoFinalizarArrasto}
     >
       <defs>
         <marker id="seta-cofre" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
@@ -188,6 +275,11 @@ function Mapa({
           <stop offset="1" stopColor="var(--color-lima)" stopOpacity="0" />
         </radialGradient>
       </defs>
+
+      <g transform={zoom !== 1 || pan.x !== 0 || pan.y !== 0
+        ? `translate(${caixa.largura / 2 + pan.x}, ${caixa.altura / 2 + pan.y}) scale(${zoom}) translate(${-caixa.largura / 2}, ${-caixa.altura / 2})`
+        : undefined}
+      >
       <circle cx={caixa.largura / 2} cy={caixa.altura / 2} r={Math.min(caixa.largura, caixa.altura) * 0.34} fill="url(#brilho-cofre)" />
 
       {arestasVisiveis.map((a) => {
@@ -249,7 +341,11 @@ function Mapa({
             data-no-cofre data-id={no.id} data-area={no.area}
             key={no.id} role="button" tabIndex={0}
             aria-label={`${no.rotulo}, ${no.especie} de ${no.autor}`}
-            onClick={(e) => (e.shiftKey ? aoLigar(no.id) : aoEscolher(no.id))}
+            onClick={(e) => {
+              if (moveu) return
+              if (e.shiftKey) aoLigar(no.id)
+              else aoEscolher(no.id)
+            }}
             onKeyDown={(e) => {
               if (e.key !== 'Enter' && e.key !== ' ') return
               e.preventDefault()
@@ -303,7 +399,9 @@ function Mapa({
           </text>
         )
       })}
+      </g>
     </svg>
+    </div>
     {/* ‼️ O NÚMERO DO QUE NÃO COUBE VAI JUNTO. Rótulo escondido sem aviso faz
         quem lê achar que o mapa está mostrando tudo, e é a mesma família da
         ressalva de cobertura sem percentual: quem vê a tela limpa conclui que
