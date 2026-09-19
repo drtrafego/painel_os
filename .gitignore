@@ -1,0 +1,61 @@
+# painel_os — .gitignore
+# Montado em 19/09/2026 pelo deployer (Duke) na varredura de segurança antes
+# do primeiro push pro GitHub. Ver decisões completas no relatório da tarefa.
+
+# --- dependências e build (regeneráveis, não são código-fonte) ---
+node_modules/
+web/node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
+web/node_modules/.vite-temp/
+
+# --- bytecode Python ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- logs de runtime (não são código-fonte, e podem crescer com o tempo) ---
+*.log
+
+# --- estado de runtime do servidor local (não é código, é estado desta máquina) ---
+servidor/.https-ativo
+
+# --- dados reais da operação (NUNCA sobem: PII de cliente e estado real interno) ---
+# dados/ e data/ têm permissão 700 no servidor de propósito. Confirmado em
+# 19/09/2026: cofre.json é a base real de aprendizados internos (não
+# sintética); os demais .json de data/ são estado operacional real (prazos,
+# URLs de Drive, contagens). dados/chamadas-inbox recebe inbox real.
+dados/
+data/
+
+# --- estado.json: snapshot REAL da operação, não é fixture sintético ---
+# Confirmado em 19/09/2026: contém nome de cliente real (AutonomIA), métricas
+# reais e narrativas reais de incidente. É citado em validar.teste.ts como "o
+# estado.json de verdade" e importado estaticamente por web/src/dados/estado.ts
+# (bundlado no build). Excluído por conter dado real; isso QUEBRA `npm run
+# build` e o teste validar.teste.ts até alguém criar um estado.json sintético
+# com o mesmo formato (recomendado: tarefa pro dev, não pro deploy).
+web/src/dados/estado.json
+
+# --- variáveis de ambiente e segredos (defensivo — nenhum encontrado hoje) ---
+.env
+.env.*
+!.env.example
+*.credencial
+*credential*
+*secret*
+*.pem
+*.key
+*htpasswd*
+
+# --- link simbólico local pra outro projeto (Renato, fora deste repo) ---
+# Confirmado em 19/09/2026: web/public/sac é um symlink pra
+# /opt/gastaomatos/renato/operacao/multicanal/painel, outro agente/projeto.
+# Não é código deste repositório, quebra em qualquer outra máquina, e é a
+# origem do dado real de cliente (autonomia.json) que apareceu bundlado em
+# web/dist/. Nunca sobe.
+web/public/sac
+
+# --- editor / SO ---
+.DS_Store
+*.swp

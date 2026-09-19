@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+/* Arquivos latinos completos indicados pela própria identidade visual. O
+   painel não depende de CDN nem da fonte instalada no computador de quem abre. */
+@font-face {
+  font-family: "Archivo";
+  src: url("/fontes/archivo-700.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fontes/inter-400.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fontes/jetbrains-mono-500.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Fonte canônica: MANUAL-DA-MARCA-autonomia.txt, seção 4. A versão clara
+     é o padrão aprovado; a paleta verde/escura foi arquivada como histórico. */
+  --color-fundo: #f7f1e6;       /* Creme, fundo mestre */
+  --color-fundo-2: #f7f1e6;
+  --color-topo: #f7f1e6;
+  --color-carta: #fdfaf3;       /* Creme Alto, superfície elevada */
+  --color-carta-alta: #fdfaf3;
+  --color-carta-heroi: #fdfaf3;
+  --color-linha: #e3d8c4;
+  --color-linha-forte: #7a6a57;
+
+  --color-tinta: #1a1410;       /* Tinta Sépia */
+  --color-tinta-2: #7a6a57;     /* Cinza Tabaco, 4,64:1 no Creme */
+  --color-tinta-3: #7a4a0f;     /* Bronze, 6,64:1 no Creme */
+
+  /* Latão Aceso (#F5A623) é superfície, nunca letra no Creme (1,80:1).
+     Classes usadas em texto apontam para Bronze ou Azul Fumaça. */
+  --color-lima: #7a4a0f;
+  --color-ambar: #7a4a0f;
+  --color-verde: #3e6e8e;
+  --color-ciano: #3e6e8e;
+  --color-agua: #3e6e8e;
+  --color-dourado: #f5a623;
+  --color-pervinca: #7a6a57;
+  --color-laranja: #7a4a0f;
+  --color-roxo: #3e6e8e;
+  --color-cinza: #7a6a57;
+
+  /* Cor semântica de perigo, fora da identidade, mantida por legibilidade. */
+  --color-vermelho: #9f2d20;
+}
+
+@layer base {
+  html { color-scheme: light; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 680px at 72% -14%, rgba(245, 166, 35, 0.20), transparent 62%),
+      radial-gradient(820px 460px at 6% 2%, rgba(62, 110, 142, 0.08), transparent 58%),
+      var(--color-fundo);
+    background-attachment: fixed;
+    color: var(--color-tinta);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(245, 166, 35, 0.36); }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #e3d8c4; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #7a6a57; }
+  :focus-visible { outline: 2px solid var(--color-lima); outline-offset: 2px; border-radius: 4px; }
+}
+
+/* ‼️ O TIQUE QUE CARREGA O ESTILO INTEIRO, segundo a espec: rotulo micro em
+   caixa alta com letter-spacing MUITO aberto (0,18 a 0,25em), 10 a 11px reais,
+   na cor terciaria. Sem ele a reproducao nao parece a mesma coisa por mais que
+   a cor bata. Estava em 0.16em: subiu para dentro da faixa medida. */
+@utility rotulo {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-tinta-3);
+}
+
+/* Titulo de pagina. ‼️ TODO titulo termina em PONTO FINAL na referencia
+   ("Red de agentes." · "Cola de trabajo." · "Memoria compartida."). E um tique
+   editorial deliberado, e sai de graca. O ponto vem escrito no texto de cada
+   tela, nao gerado aqui, pra ninguem quebrar a cabeca quando um titulo
+   precisar de outra pontuacao. */
+@utility titulo-pagina {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--color-tinta);
+}
+
+/* O cabecalho-atomo: barrinha vertical na cor do dono + rotulo micro. E o
+   componente mais reaproveitado do sistema de referencia, e e o que costura
+   a tela. Mora em `ui/primitivos.tsx` como <Cabecalho>. */
+@utility hairline {
+  border-color: var(--color-linha);
+}
+
+/* ‼️ OS CARTOES NAO TEM COR PROPRIA (medido na 2a rodada, e corrige a 1a).
+   Quatro KPI da MESMA faixa mediram #232F28, #212629 e #1D3C3B: nao sao tres
+   cores de cartao, e o gradiente da pagina varrendo por baixo de cartoes
+   TRANSLUCIDOS. Pintar cada um com cor solida mata o efeito e a tela fica
+   chapada, que foi o defeito da 1a leitura. */
+@utility carta-vidro {
+  background: rgba(253, 250, 243, 0.82);
+  border: 1px solid var(--color-linha);
+  border-radius: 10px;
+}
+
+/* ‼️ E ANINHAMENTO ESCURECE, NAO CLAREIA. O palco do visor mede #14181B dentro
+   de um cartao de #212629: o que esta POR CIMA e mais escuro, que e o inverso
+   do resto do sistema. Reproduzir clareando deixa a peca sem palco. */
+@utility poco {
+  background: color-mix(in srgb, var(--color-linha) 34%, var(--color-carta));
+  border: 1px solid var(--color-linha);
+  border-radius: 8px;
+}
+
+@utility carta {
+  background: linear-gradient(180deg, rgba(245, 166, 35, 0.035), transparent), var(--color-carta);
+  border: 1px solid var(--color-linha);
+  border-radius: 10px;
+}
+
+/* Realce lima atras dos glifos quando um numero muda de valor. Medido no
+   frame f_32s. Detalhe barato, e e o que da vida a tela. */
+@keyframes piscar-valor {
+  0% { background-color: color-mix(in oklab, var(--color-lima) 34%, transparent); }
+  100% { background-color: transparent; }
+}
+@utility valor-mudou {
+  animation: piscar-valor 900ms ease-out;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

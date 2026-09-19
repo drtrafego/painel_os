@@ -1,0 +1,684 @@
+/**
+ * O ROTEIRO DO COFRE NO NAVEGADOR.
+ *
+ * Rodar (com o servidor de pé na 5199):
+ *   node /opt/gastaomatos/luana/painel_os/provas/cofre.navegador.mjs
+ *
+ * Ele existe porque o roteiro geral (`navegador.teste.mjs`) mede EXISTÊNCIA no
+ * Cofre: conta nó, conta aresta, clica e vê a ficha trocar. Com 5 nós isso
+ * aprova qualquer desenho. O defeito que o dono apontou é de ESCALA e só
+ * aparece no volume, então aqui o estado real é substituído por 45 nós
+ * SINTÉTICOS que atravessaram o coletor de verdade (`cofre_sintetico.py`).
+ *
+ * ‼️ ELE COMEÇA PROVANDO QUE SABE REPROVAR, em duas frentes:
+ *   1. o detector de sobreposição é apontado para dois rótulos empilhados de
+ *      propósito. Se ele não acusar ALI, todo "zero sobreposto" abaixo seria
+ *      falso, e falso verde é o defeito voltando sem ninguém ver.
+ *   2. o mesmo detector roda contra o CÓDIGO EM PRODUÇÃO antes da mudança
+ *      (`--antes`), que é onde os rótulos de fato se sobrepõem. Instrumento que
+ *      só foi visto aprovando não distingue "está certo" de "parei de olhar".
+ *
+ * A credencial vem do mesmo arquivo que o servidor lê e NUNCA é impressa.
+ */
+import { chromium } from '/opt/gastaomatos/gabinete-mcp/node_modules/playwright/index.mjs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+
+const RAIZ = '/opt/gastaomatos/luana/painel_os'
+const PROVAS = `${RAIZ}/provas`
+const BASE = 'http://127.0.0.1:5199'
+const CELULAR = { width: 390, height: 844 }
+const MESA = { width: 1440, height: 900 }
+const ANTES = process.argv.includes('--antes')
+const MARCA = ANTES ? 'antes' : 'depois'
+
+function acharNavegador() {
+  const cache = '/home/claude/.cache/ms-playwright'
+  if (existsSync(cache)) {
+    for (const pasta of readdirSync(cache).filter((d) => d.startsWith('chromium-'))) {
+      const alvo = `${cache}/${pasta}/chrome-linux64/chrome`
+      if (existsSync(alvo)) return alvo
+    }
+  }
+  for (const alvo of ['/usr/bin/chromium-browser', '/usr/bin/chromium', '/usr/bin/google-chrome']) {
+    if (existsSync(alvo)) return alvo
+  }
+  throw new Error('não achei navegador nenhum nesta máquina')
+}
+
+function credencial() {
+  const bruto = readFileSync('/opt/gastaomatos/luana/.painel_os.credencial', 'utf8')
+  const linha = bruto.split('\n').find((l) => l.trim() && !l.trim().startsWith('#'))
+  const i = linha.indexOf(':')
+  return { username: linha.slice(0, i).trim(), password: linha.slice(i + 1).trim() }
+}
+
+let passou = 0
+let falhou = 0
+function ok(nome, condicao, detalhe = '') {
+  if (condicao) {
+    passou += 1
+    console.log(`  ok    ${nome}`)
+  } else {
+    falhou += 1
+    console.log(`  FALHA ${nome}${detalhe ? `  ->  ${detalhe}` : ''}`)
+  }
+}
+
+/**
+ * Mede o que o navegador DESENHOU, não o que o layout pretendia: pega a caixa
+ * real de cada rótulo do grafo e conta os pares que se cruzam. Estimativa de
+ * largura por caractere mora no código do layout; aqui é bbox de verdade, e é
+ * por isso que os dois números valem como triangulação e não como eco.
+ */
+const MEDIR_ROTULOS = () => {
+  const svg = document.querySelector('[data-grafo-cofre]')
+  if (!svg) return { erro: 'sem svg do cofre' }
+  const textos = [...svg.querySelectorAll('text')].filter((t) => t.textContent.trim())
+  const caixas = textos.map((t) => {
+    const r = t.getBoundingClientRect()
+    return { texto: t.textContent.trim(), x: r.x, y: r.y, w: r.width, h: r.height }
+  })
+  const cruza = (a, b) =>
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+  const pares = []
+  for (let i = 0; i < caixas.length; i += 1) {
+    for (let j = i + 1; j < caixas.length; j += 1) {
+      if (cruza(caixas[i], caixas[j])) pares.push(`${caixas[i].texto} × ${caixas[j].texto}`)
+    }
+  }
+  return { rotulos: caixas.length, sobrepostos: pares.length, exemplos: pares.slice(0, 3) }
+}
+
+const MEDIR_ESTOURO = () => {
+  const d = document.documentElement
+  const b = document.body
+  return { doc: d.scrollWidth - d.clientWidth, body: b.scrollWidth - b.clientWidth }
+}
+
+/**
+ * Seção que não derruba o roteiro. Rodando contra o código VELHO (`--antes`),
+ * metade dos seletores não existe: o clique estoura e mataria o processo antes
+ * de medir o resto. Falha vira FALHA contada, que é o resultado que interessa.
+ */
+async function secao(nome, fn) {
+  try {
+    await fn()
+  } catch (e) {
+    ok(`${nome} (a seção nem rodou)`, false, String(e).split('\n')[0].slice(0, 120))
+  }
+}
+
+console.log(`\n=== COFRE, ${MARCA.toUpperCase()} ===`)
+console.log('gerando os 45 nós sintéticos pelo coletor real...')
+const COFRE45 = JSON.parse(
+  execFileSync('python3', [`${PROVAS}/cofre_sintetico.py`], { encoding: 'utf8', maxBuffer: 8e6 }),
+)
+console.log(
+  `  massa: ${COFRE45.nos.length} nós, ${COFRE45.arestas.length} arestas, ` +
+    `${COFRE45.arestas.filter((a) => a.ponte).length} pontes`,
+)
+
+const navegador = await chromium.launch({ executablePath: acharNavegador() })
+const ctx = await navegador.newContext({ httpCredentials: credencial(), viewport: MESA })
+const pagina = await ctx.newPage()
+const excecoes = []
+pagina.on('pageerror', (e) => excecoes.push(String(e)))
+
+/**
+ * Troca só o bloco `cofre` da resposta real: o resto do estado continua vivo.
+ *
+ * O estado base é buscado UMA vez de dentro da página, com a sessão já
+ * autenticada. `route.fetch()` refazia a chamada por fora e voltava 401, e o
+ * front, corretamente, ficava com o snapshot do build: cinco nós com cara de
+ * quarenta e cinco. Zero de erro e zero de ausência outra vez, agora no meu
+ * próprio instrumento.
+ */
+let estadoBase = null
+async function injetar45() {
+  if (estadoBase === null) {
+    await pagina.goto(`${BASE}/#/cofre`, { waitUntil: 'networkidle' })
+    estadoBase = await pagina.evaluate(async () =>
+      await fetch('/api/estado', { cache: 'no-store' }).then((r) => r.json()))
+    if (!estadoBase || !estadoBase.cofre) throw new Error('não consegui ler o estado real da API')
+  }
+  await pagina.route('**/api/estado', async (rota) => {
+    await rota.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify({ ...estadoBase, cofre: COFRE45 }),
+    })
+  })
+}
+async function pararInjecao() {
+  await pagina.unroute('**/api/estado')
+}
+
+/**
+ * Abre a tela e ESPERA o número de nós que se espera ver.
+ *
+ * Antes esperava 500ms fixos: o estado injetado chega pela rede e o React
+ * redesenha depois, então a contagem pegava os 5 nós do snapshot do build e
+ * reprovava um layout que nem tinha sido desenhado ainda. Espera de relógio
+ * mede a minha paciência, não a tela.
+ */
+async function abrirCofre(esperados = null) {
+  // ‼️ `goto` pra MESMA url com hash é navegação no mesmo documento: o React não
+  // remonta e o `fetch` do estado não é refeito, então a tela continuava com os
+  // 5 nós do snapshot do build e o roteiro reprovava um layout que não tinha
+  // sido desenhado. O `reload` força a busca de novo, com a rota já interceptada.
+  await pagina.goto(`${BASE}/#/cofre`, { waitUntil: 'networkidle' })
+  await pagina.reload({ waitUntil: 'networkidle' })
+  await pagina.waitForSelector('[data-grafo-cofre]', { timeout: 15_000 })
+  if (esperados !== null) {
+    await pagina.waitForFunction(
+      (n) => document.querySelectorAll('[data-no-cofre]').length === n,
+      esperados,
+      { timeout: 15_000 },
+    )
+  }
+  await pagina.waitForTimeout(400)
+}
+
+console.log('\n0. O DETECTOR DE SOBREPOSIÇÃO SABE REPROVAR?')
+await abrirCofre()
+{
+  const limpo = await pagina.evaluate(MEDIR_ROTULOS)
+  console.log(`  (estado real: ${limpo.rotulos} rótulos, ${limpo.sobrepostos} sobrepostos)`)
+  const sujo = await pagina.evaluate(() => {
+    const svg = document.querySelector('[data-grafo-cofre]')
+    for (const i of [0, 1]) {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+      t.setAttribute('x', '40')
+      t.setAttribute('y', '40')
+      t.setAttribute('font-size', '10')
+      t.setAttribute('data-sonda-empilhada', String(i))
+      t.textContent = `SONDA EMPILHADA ${i}`
+      svg.appendChild(t)
+    }
+    return true
+  })
+  const medida = await pagina.evaluate(MEDIR_ROTULOS)
+  ok('com dois rótulos empilhados, o detector ACUSA', sujo && medida.sobrepostos > 0,
+    `sobrepostos=${medida.sobrepostos}`)
+  await pagina.evaluate(() => {
+    document.querySelectorAll('[data-sonda-empilhada]').forEach((n) => n.remove())
+  })
+  const voltou = await pagina.evaluate(MEDIR_ROTULOS)
+  ok('e volta ao número anterior quando a sonda sai', voltou.sobrepostos === limpo.sobrepostos,
+    `${voltou.sobrepostos} vs ${limpo.sobrepostos}`)
+}
+
+console.log('\n0B. AS ASSERÇÕES DESTE ROTEIRO SABEM REPROVAR?')
+{
+  // ‼️ POR QUE ESTA SEÇÃO EXISTE: em 10/09 o QA provou que a asserção do
+  // "porquê do salto" passava com TODO `porque` vazio, porque ela procurava a
+  // palavra `porque`, que é RÓTULO do JSX. Ela media o texto que descreve o
+  // evento, não o evento. Aqui a massa é servida com as razões apagadas, e a
+  // condição corrigida TEM que dar falso.
+  await pagina.unroute('**/api/estado')
+  const mudo = JSON.parse(JSON.stringify(COFRE45))
+  for (const e of mudo.arestas) e.porque = ''
+  const base = await pagina.evaluate(async () =>
+    await fetch('/api/estado', { cache: 'no-store' }).then((r) => r.json()))
+  await pagina.route('**/api/estado', (r) => r.fulfill({
+    status: 200, contentType: 'application/json; charset=utf-8',
+    body: JSON.stringify({ ...base, cofre: mudo }),
+  }))
+  await abrirCofre(45)
+  const ids = mudo.nos.map((n) => n.id)
+  await pagina.locator(`[data-no-cofre][data-id="${ids[0]}"]`).click()
+  const outro = mudo.arestas.find((e) => e.de === ids[0] || e.para === ids[0])
+  const parceiro = outro ? (outro.de === ids[0] ? outro.para : outro.de) : ids[1]
+  await pagina.locator(`[data-no-cofre][data-id="${parceiro}"]`).click({ modifiers: ['Shift'] })
+  await pagina.waitForTimeout(300)
+  const painel = await pagina.locator('[data-caminho-cofre]').innerText()
+  const aRegua = (texto) => COFRE45.arestas.filter((e) => e.porque && texto.includes(e.porque)).length > 0
+  const aReguaVelha = (texto) => texto.toLowerCase().includes('porque')
+  ok('com todo `porque` apagado, a régua NOVA reprova', !aRegua(painel), painel.slice(0, 90))
+  ok('e a régua VELHA aprovaria a mesma tela, que é o defeito que o QA achou',
+    aReguaVelha(painel), painel.slice(0, 60))
+
+  // O detector de "rótulo por cima de coto" também precisa saber acusar: um
+  // coto é injetado embaixo de um rótulo de propósito.
+  const sonda = await pagina.evaluate(() => {
+    const svg = document.querySelector('[data-grafo-cofre]')
+    const t = svg.querySelector('text')
+    if (!t) return null
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+    c.setAttribute('cx', t.getAttribute('x'))
+    c.setAttribute('cy', t.getAttribute('y'))
+    c.setAttribute('r', '6')
+    c.setAttribute('data-ponte-coto', '')
+    c.setAttribute('data-sonda-coto', '1')
+    svg.appendChild(c)
+    const caixas = (sel) => [...svg.querySelectorAll(sel)].map((e) => e.getBoundingClientRect())
+    const cruza = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+    let pares = 0
+    for (const r of caixas('text')) for (const k of caixas('[data-ponte-coto]')) if (cruza(r, k)) pares += 1
+    document.querySelectorAll('[data-sonda-coto]').forEach((n) => n.remove())
+    return pares
+  })
+  ok('o detector de rótulo sobre coto ACUSA quando há um', sonda > 0, `pares=${sonda}`)
+  await pagina.unroute('**/api/estado')
+}
+
+console.log('\n1. O DADO REAL')
+await abrirCofre()
+{
+  const medida = await pagina.evaluate(MEDIR_ROTULOS)
+  // ‼️ O título desta seção dizia "(5 NÓS)" e envelheceu no dia em que o Cofre
+  // passou a 46: número chumbado em rótulo de teste é frase falsa que passa em
+  // todo teste verde, porque nenhuma asserção lê o rótulo. Agora o tamanho do
+  // dado é MEDIDO e impresso, então ele não pode mais mentir sozinho.
+  console.log(`   (dado de hoje: ${medida.rotulos} rótulos desenhados no mapa)`)
+  ok('nenhum rótulo se sobrepõe com o dado de hoje', medida.sobrepostos === 0,
+    `${medida.sobrepostos} pares: ${medida.exemplos.join(' | ')}`)
+  await pagina.screenshot({ path: `${PROVAS}/cofre-${MARCA}-real-desktop.png`, fullPage: true })
+}
+
+console.log('\n2. OS 45 NÓS QUE VÊM DEPOIS')
+await injetar45()
+await secao('volume', async () => {
+  await abrirCofre(45)
+  const nos = await pagina.locator('[data-no-cofre]').count()
+  ok('a tela desenha os 45', nos === 45, `nós=${nos}`)
+  const medida = await pagina.evaluate(MEDIR_ROTULOS)
+  ok('e nenhum rótulo se sobrepõe no volume', medida.sobrepostos === 0,
+    `${medida.sobrepostos} pares: ${medida.exemplos.join(' | ')}`)
+  console.log(`  (${medida.rotulos} rótulos desenhados de ${nos} nós)`)
+
+  // Raio por grau: o nó mais ligado tem que ser visivelmente maior que o menos
+  // ligado. Sem isto "raio por grau" é decoração que ninguém consegue ver.
+  const raios = await pagina.$$eval('[data-no-cofre] circle[data-corpo-no]', (cs) =>
+    cs.map((c) => ({ r: Number(c.getAttribute('r')), grau: Number(c.getAttribute('data-grau')) })))
+  const porGrau = new Map()
+  for (const { r, grau } of raios) porGrau.set(grau, r)
+  const graus = [...porGrau.keys()].sort((a, b) => a - b)
+  ok('o raio cresce com o grau', graus.length > 1 && porGrau.get(graus.at(-1)) > porGrau.get(graus[0]) + 2,
+    `grau ${graus[0]}=${porGrau.get(graus[0])} · grau ${graus.at(-1)}=${porGrau.get(graus.at(-1))}`)
+
+  // Cor por área: sete áreas, sete cores distintas.
+  const cores = await pagina.$$eval('[data-no-cofre] circle[data-corpo-no]', (cs) =>
+    [...new Set(cs.map((c) => `${c.getAttribute('data-area')}=${c.getAttribute('fill')}`))])
+  ok('cada área tem a sua cor', new Set(cores.map((c) => c.split('=')[1])).size >= 6,
+    cores.join(' '))
+  await pagina.screenshot({ path: `${PROVAS}/cofre-${MARCA}-45-desktop.png`, fullPage: true })
+})
+
+console.log('\n3. O FILTRO ISOLA A ÁREA E PRESERVA A PONTE')
+await secao('filtro', async () => {
+  // ‼️ A ÁREA DO FILTRO SAI MEDIDA, não chutada: pra este teste valer, ela
+  // precisa ter uma ponte para OUTRA área comum (senão nunca aparece coto) e
+  // ligação interna (senão não há o que sumir). Era `'trafego'` fixo.
+  const areaPorNo = new Map(COFRE45.nos.map((n) => [n.id, n.area]))
+  const alvo = (() => {
+    for (const e of COFRE45.arestas) {
+      const a = areaPorNo.get(e.de)
+      const b = areaPorNo.get(e.para)
+      if (e.ponte && a !== 'transversal' && b !== 'transversal') return a
+    }
+    throw new Error('a massa não tem ponte entre duas áreas comuns')
+  })()
+  console.log(`  (área do filtro medida: ${alvo})`)
+  const antes = {
+    nos: await pagina.locator('[data-no-cofre]').count(),
+    daArea: await pagina.locator(`[data-no-cofre][data-area="${alvo}"]`).count(),
+    pontes: await pagina.locator('[data-aresta-cofre][data-ponte="true"]').count(),
+  }
+  ok('há nó e ponte suficientes para o teste valer', antes.daArea > 2 && antes.pontes > 2,
+    JSON.stringify(antes))
+
+  // ‼️ ERA `'conteudo'` CHUTADO, e conteúdo não tinha NENHUMA ligação interna
+  // na massa: a asserção "a ligação interna de quem saiu não sobrevive"
+  // comparava zero com zero. A área sai medida do próprio dado.
+  const outraArea = (() => {
+    const area = new Map(COFRE45.nos.map((n) => [n.id, n.area]))
+    const internas = {}
+    for (const a of COFRE45.arestas) {
+      if (!a.ponte && area.get(a.de) !== alvo) {
+        internas[area.get(a.de)] = (internas[area.get(a.de)] ?? 0) + 1
+      }
+    }
+    const escolhida = Object.entries(internas).sort((x, y) => y[1] - x[1])[0]
+    if (!escolhida) throw new Error('a massa não tem área com ligação interna: o teste não teria o que medir')
+    console.log(`  (área de controle medida: ${escolhida[0]}, com ${escolhida[1]} ligações internas)`)
+    return escolhida[0]
+  })()
+  const antesDaOutra = await pagina.locator(`[data-no-cofre][data-area="${outraArea}"]`).count()
+  ok('e a outra área está no mapa antes do filtro', antesDaOutra > 0, `${outraArea}=${antesDaOutra}`)
+
+  await pagina.locator(`[data-filtro-area][data-area="${alvo}"]`).click()
+  await pagina.waitForTimeout(350)
+
+  const depois = {
+    nos: await pagina.locator('[data-no-cofre]').count(),
+    daArea: await pagina.locator(`[data-no-cofre][data-area="${alvo}"]`).count(),
+    daOutra: await pagina.locator(`[data-no-cofre][data-area="${outraArea}"]`).count(),
+    transversal: await pagina.locator('[data-no-cofre][data-area="transversal"]').count(),
+    pontes: await pagina.locator('[data-aresta-cofre][data-ponte="true"]').count(),
+    cotos: await pagina.locator('[data-ponte-coto]').count(),
+  }
+  // O contrato é "clicar numa área ESCONDE O RESTO", não "some com a área
+  // clicada". As duas metades são medidas: o que fica E o que sai.
+  ok('a área clicada continua inteira', depois.daArea === antes.daArea,
+    `${antes.daArea} -> ${depois.daArea}`)
+  ok('e o resto do mapa some', depois.daOutra === 0 && depois.nos < antes.nos,
+    `${outraArea}=${depois.daOutra} nós ${antes.nos} -> ${depois.nos}`)
+  ok('transversal NUNCA é filtrada', depois.transversal > 0, `transversais=${depois.transversal}`)
+  ok('a PONTE continua visível com a área do outro lado escondida',
+    depois.pontes > 0 && depois.cotos > 0,
+    `pontes=${depois.pontes} cotos=${depois.cotos}`)
+  await pagina.screenshot({ path: `${PROVAS}/cofre-${MARCA}-filtro-ponte.png`, fullPage: true })
+
+  // E REPROVA o caso errado: ligação interna de uma área ESCONDIDA não pode
+  // sobreviver ao filtro. Sem esta metade, "a ponte continua" seria só "nada
+  // some", que é o oposto do pedido.
+  const internaDeQuemSaiu = await pagina.evaluate((area) => {
+    const arestas = [...document.querySelectorAll('[data-aresta-cofre]')]
+    return arestas.filter((a) => a.getAttribute('data-de-area') === area
+      && a.getAttribute('data-para-area') === area).length
+  }, outraArea)
+  ok('e a ligação interna de quem saiu NÃO sobrevive', internaDeQuemSaiu === 0,
+    `sobreviveram=${internaDeQuemSaiu}`)
+
+  // ‼️ A PONTE COM AS DUAS PONTAS ESCONDIDAS. Este é o caso que o roteiro era
+  // CEGO pra ver: na massa antiga toda ponte tocava `transversal`, que nunca é
+  // filtrada, então `de || para` era sempre verdade e a condição errada passava.
+  // A massa agora tem uma ponte entre duas áreas comuns, e o filtro numa
+  // terceira área esconde as duas pontas dela.
+  // AS DUAS METADES DA REGRA, medidas uma a uma. Sem a segunda, "preserva
+  // ponte" viraria "nada some", que é o oposto de filtrar.
+  const pontesDoFoco = COFRE45.arestas.filter(
+    (e) => e.ponte && (areaPorNo.get(e.de) === alvo || areaPorNo.get(e.para) === alvo))
+  const pontesDeFora = COFRE45.arestas.filter(
+    (e) => e.ponte && areaPorNo.get(e.de) !== alvo && areaPorNo.get(e.para) !== alvo)
+  ok('a massa tem ponte tocando o foco E ponte fora dele, pra medir as duas',
+    pontesDoFoco.length > 0 && pontesDeFora.length > 0,
+    `foco=${pontesDoFoco.length} fora=${pontesDeFora.length}`)
+  const noMapa = async (e) => await pagina.locator(
+    `[data-aresta-cofre][data-de="${e.de}"][data-para="${e.para}"]`).count() === 1
+  const focoDesenhadas = []
+  for (const e of pontesDoFoco) focoDesenhadas.push(await noMapa(e))
+  const foraDesenhadas = []
+  for (const e of pontesDeFora) foraDesenhadas.push(await noMapa(e))
+  ok('TODA ponte que toca a área em foco continua desenhada',
+    focoDesenhadas.every(Boolean), `${focoDesenhadas.filter(Boolean).length}/${focoDesenhadas.length}`)
+  ok('e nenhuma ponte de fora do foco sobra no mapa',
+    !foraDesenhadas.some(Boolean), `${foraDesenhadas.filter(Boolean).length} sobraram de ${foraDesenhadas.length}`)
+  ok('a ponta de fora vira coto', depois.cotos > 0, `cotos=${depois.cotos}`)
+
+  // ‼️ RÓTULO POR CIMA DO COTO. O detector de sobreposição só olhava `text`
+  // contra `text`, então 6 rótulos em cima de anéis vazados passavam limpos.
+  const contraCoto = await pagina.evaluate(() => {
+    const svg = document.querySelector('[data-grafo-cofre]')
+    const caixas = (sel) => [...svg.querySelectorAll(sel)].map((e) => e.getBoundingClientRect())
+    const cruza = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+    const rotulos = caixas('text')
+    const cotos = caixas('[data-ponte-coto]')
+    let pares = 0
+    for (const r of rotulos) for (const c of cotos) if (cruza(r, c)) pares += 1
+    return { rotulos: rotulos.length, cotos: cotos.length, pares }
+  })
+  ok('e nenhum rótulo cai por cima de um coto', contraCoto.pares === 0, JSON.stringify(contraCoto))
+
+  await pagina.locator(`[data-filtro-area][data-area="${alvo}"]`).click()
+  await pagina.waitForTimeout(300)
+  const voltou = await pagina.locator('[data-no-cofre]').count()
+  ok('e o filtro solta o mapa quando se clica na mesma área de novo', voltou === antes.nos,
+    `${voltou} vs ${antes.nos}`)
+})
+
+console.log('\n4. SHIFT+CLIQUE MOSTRA O CAMINHO MAIS CURTO')
+await secao('caminho', async () => {
+  // O par não pode ser escolhido a dedo: `no-00` e `no-06` estão ligados
+  // DIRETO na massa, e exigir dois saltos de um caminho de um salto reprovava a
+  // tela por defeito do teste. O par sai medido do próprio dado.
+  const [a, b] = (() => {
+    const vizinhos = new Map()
+    const ligar = (x, y) => vizinhos.set(x, [...(vizinhos.get(x) ?? []), y])
+    for (const e of COFRE45.arestas) { ligar(e.de, e.para); ligar(e.para, e.de) }
+    const distancias = (origem) => {
+      const d = new Map([[origem, 0]])
+      const fila = [origem]
+      while (fila.length) {
+        const at = fila.shift()
+        for (const v of vizinhos.get(at) ?? []) if (!d.has(v)) { d.set(v, d.get(at) + 1); fila.push(v) }
+      }
+      return d
+    }
+    const area = new Map(COFRE45.nos.map((n) => [n.id, n.area]))
+    for (const n of COFRE45.nos) {
+      for (const [outro, salto] of distancias(n.id)) {
+        if (salto >= 3 && area.get(outro) !== area.get(n.id)) return [n.id, outro]
+      }
+    }
+    throw new Error('a massa sintética não tem par distante o bastante')
+  })()
+  console.log(`  (par medido: ${a} -> ${b})`)
+  await pagina.locator(`[data-no-cofre][data-id="${a}"]`).click()
+  await pagina.locator(`[data-no-cofre][data-id="${b}"]`).click({ modifiers: ['Shift'] })
+  await pagina.waitForTimeout(350)
+  const caminho = pagina.locator('[data-caminho-cofre]')
+  ok('a ficha mostra o caminho entre os dois', await caminho.count() === 1)
+  const saltos = await pagina.locator('[data-caminho-salto]').count()
+  const destacadas = await pagina.locator('[data-aresta-cofre][data-no-caminho="true"]').count()
+  ok('e o caminho tem os saltos que o dado tem', saltos >= 3, `saltos=${saltos}`)
+  ok('e as arestas do caminho ficam marcadas no mapa', destacadas >= 1, `marcadas=${destacadas}`)
+  // ‼️ ERA `includes('porque')`, e `porque:` é RÓTULO do JSX: a asserção media
+  // o texto que descreve o evento, não o evento. O QA provou servindo a massa
+  // com todo `porque` vazio e ela continuou verde. Agora o que se procura é a
+  // frase que está no DADO, salto a salto.
+  const texto = await caminho.innerText()
+  const idsDoCaminho = await pagina.$$eval('[data-aresta-cofre][data-no-caminho="true"]',
+    (ls) => ls.map((l) => l.getAttribute('key') ?? ''))
+  const razoesDoDado = COFRE45.arestas
+    .filter((e) => texto.includes(e.porque))
+    .map((e) => e.porque)
+  ok('o caminho mostra o PORQUÊ que está escrito na fonte, e não só o rótulo',
+    razoesDoDado.length >= saltos && saltos > 0,
+    `razões achadas=${razoesDoDado.length} saltos=${saltos} · ${texto.slice(0, 100)}`)
+  void idsDoCaminho
+  await pagina.screenshot({ path: `${PROVAS}/cofre-${MARCA}-caminho.png`, fullPage: true })
+
+  const desenhados = await pagina.evaluate(() => document.querySelectorAll('[data-no-cofre]').length)
+  ok('o mapa continua inteiro depois do caminho', desenhados === 45, `nós=${desenhados}`)
+  // ‼️ O RAMO "NÃO HÁ CAMINHO" AGORA É MEDIDO AQUI. Antes o roteiro dizia por
+  // escrito que a massa era conexa e por isso não dava pra testar; o QA mediu e
+  // a massa tinha DOIS componentes. A afirmação era falsa e a cobertura que ela
+  // justificava não existia. A massa passou a ter um nó declaradamente solto.
+  const solto = COFRE45.nos.find((n) => n.grau === 0)
+  ok('a massa tem um nó sem ligação nenhuma, pra este ramo poder ser medido',
+    Boolean(solto), `solto=${solto?.id}`)
+  await pagina.locator(`[data-no-cofre][data-id="${a}"]`).click()
+  await pagina.locator(`[data-no-cofre][data-id="${solto.id}"]`).click({ modifiers: ['Shift'] })
+  await pagina.waitForTimeout(300)
+  const semCaminho = (await pagina.locator('[data-caminho-cofre]').innerText()).toLowerCase()
+  ok('sem ligação declarada, a tela DIZ que não há caminho em vez de inventar um',
+    semCaminho.includes('não há ligação declarada'), semCaminho.slice(0, 120))
+  ok('e nenhuma aresta fica marcada como caminho',
+    await pagina.locator('[data-aresta-cofre][data-no-caminho="true"]').count() === 0)
+})
+
+console.log('\n5. A FICHA MOSTRA O QUE O DADO TEM')
+await secao('ficha', async () => {
+  await pagina.locator('[data-no-cofre]').first().click()
+  await pagina.waitForTimeout(250)
+  const ficha = await pagina.locator('[data-ficha-cofre]').innerText()
+  const baixo = ficha.toLowerCase()
+  for (const [nome, presente] of [
+    ['autor', await pagina.locator('[data-ficha-autor]').count() === 1],
+    ['espécie', await pagina.locator('[data-ficha-especie]').count() === 1],
+    ['área', await pagina.locator('[data-ficha-area]').count() === 1],
+    ['família', await pagina.locator('[data-ficha-familia]').count() === 1],
+    ['quando', await pagina.locator('[data-ficha-quando]').count() === 1],
+    ['peso', await pagina.locator('[data-ficha-peso]').count() === 1],
+    ['corpo', await pagina.locator('[data-ficha-corpo]').count() === 1],
+    ['caso', await pagina.locator('[data-ficha-caso]').count() === 1],
+  ]) ok(`a ficha desenha ${nome}`, presente)
+  ok('a ficha não fala mais em "assunto"', !baixo.includes('assunto'), ficha.slice(0, 120))
+  ok('e não promete que conteúdo não vai ao navegador',
+    !baixo.includes('conteúdo não é enviado'), ficha.slice(-200))
+})
+
+console.log('\n6. TÍTULO E KPI DESCREVEM APRENDIZADO, NÃO ESTANTE')
+await secao('título e kpi', async () => {
+  const corpo = await pagina.evaluate(() => document.body.innerText)
+  const baixo = corpo.toLowerCase()
+  ok('o título não diz mais "memória compartilhada"', !baixo.includes('memória compartilhada'))
+  ok('nem "referência explícita"', !baixo.includes('referência explícita'))
+  const kpis = await pagina.locator('[data-kpi]').allInnerTexts()
+  const rotulos = kpis.map((k) => k.split('\n')[0].toLowerCase().trim())
+  ok('o KPI "arquivos" saiu', !rotulos.includes('arquivos'), rotulos.join(' | '))
+  ok('e o grau médio entrou', rotulos.some((r) => r.includes('grau')), rotulos.join(' | '))
+})
+
+console.log('\n5B. VOLUME ACIMA DO QUE A TELA COMPORTA')
+await secao('volume acima do limite', async () => {
+  // A fronteira medida é 135 nós na mesa. Acima dela o desenho encavala, e o
+  // que se exige é que a TELA DIGA. Mapa apertado calado é a mesma família do
+  // rótulo escondido sem aviso, e é o que o QA cobrou.
+  const muitos = JSON.parse(JSON.stringify(COFRE45))
+  const base = muitos.nos[0]
+  for (let i = 0; i < 200; i += 1) {
+    muitos.nos.push({ ...base, id: `extra-${i}`, rotulo: `Aprendizado extra ${i}`, grau: 0 })
+  }
+  await pagina.unroute('**/api/estado')
+  await pagina.route('**/api/estado', (r) => r.fulfill({
+    status: 200, contentType: 'application/json; charset=utf-8',
+    body: JSON.stringify({ ...estadoBase, cofre: muitos }),
+  }))
+  await abrirCofre(muitos.nos.length)
+  ok('com 245 nós a tela AVISA que o tamanho não comporta',
+    await pagina.locator('[data-mapa-apertado]').count() === 1)
+  const aviso = await pagina.locator('[data-mapa-apertado]').innerText()
+  ok('e o aviso diz quantos e o que aconteceu', /\d+/.test(aviso) && aviso.toLowerCase().includes('encostam'),
+    aviso.slice(0, 110))
+
+  // CONTROLE: com o volume normal, o aviso NÃO pode aparecer, senão ele vira
+  // vermelho permanente e a casa aprende a ignorar o painel.
+  await pagina.unroute('**/api/estado')
+  await injetar45()
+  await abrirCofre(45)
+  ok('e com 45 nós o aviso não aparece', await pagina.locator('[data-mapa-apertado]').count() === 0)
+})
+
+console.log('\n6B. O NÓ VENCIDO E O COFRE QUE FALHOU')
+await secao('vencido e erro', async () => {
+  // Âncora que sumiu da fonte: o nó CONTINUA na lista, marcado. Cofre que
+  // encolhe sozinho é zero de ausência com cara de zero de erro.
+  const comVencido = JSON.parse(JSON.stringify(COFRE45))
+  comVencido.nos[3].vencido = true
+  comVencido.nos[3].arquivo = 'âncora não confere em SINTETICO.md:9'
+  comVencido.nos[3].linhas = 0
+  comVencido.vencidos = [comVencido.nos[3].id]
+  await pagina.unroute('**/api/estado')
+  await pagina.route('**/api/estado', (r) => r.fulfill({
+    status: 200, contentType: 'application/json; charset=utf-8',
+    body: JSON.stringify({ ...estadoBase, cofre: comVencido }),
+  }))
+  await abrirCofre(45)
+  ok('o vencido é anunciado na tela', await pagina.locator('[data-cofre-vencidos]').count() === 1)
+  await pagina.locator(`[data-no-cofre][data-id="${comVencido.nos[3].id}"]`).click()
+  await pagina.waitForTimeout(250)
+  const ficha = (await pagina.locator('[data-ficha-cofre]').innerText()).toLowerCase()
+  ok('e a ficha dele diz que a âncora venceu', ficha.includes('âncora vencida'), ficha.slice(0, 120))
+
+  // Cofre que falhou NÃO pode virar tela vazia com cara de "não aprendemos
+  // nada": tem que dizer que não conseguiu medir, e por quê.
+  await pagina.unroute('**/api/estado')
+  await pagina.route('**/api/estado', (r) => r.fulfill({
+    status: 200, contentType: 'application/json; charset=utf-8',
+    body: JSON.stringify({
+      ...estadoBase,
+      cofre: { ...COFRE45, erro: 'trava de nome de cliente indisponível', nos: [], arestas: [], conexoes: null },
+    }),
+  }))
+  await pagina.goto(`${BASE}/#/cofre`, { waitUntil: 'networkidle' })
+  await pagina.reload({ waitUntil: 'networkidle' })
+  await pagina.waitForTimeout(900)
+  const texto = (await pagina.locator('main').innerText()).toLowerCase()
+  ok('cofre com erro diz que NÃO CONSEGUIU MEDIR, e mostra o motivo',
+    texto.includes('não consegui medir o cofre') && texto.includes('trava de nome de cliente'),
+    texto.slice(0, 160))
+  ok('e não desenha KPI nenhum nesse estado',
+    await pagina.locator('[data-kpi]').count() === 0)
+  await pagina.unroute('**/api/estado')
+  await injetar45()
+})
+
+console.log('\n6D. O ALVO DE TOQUE NO DOM')
+await secao('alvo de toque', async () => {
+  await pagina.setViewportSize(CELULAR)
+  await abrirCofre(45)
+  // ‼️ O QUE INTERESSA É O MENOR CÍRCULO, não o primeiro do DOM. A primeira
+  // versão media `querySelector('[data-no-cofre]')`, que é o hub: 17,7px de
+  // desenho contra 20,6 de alvo, e a asserção reprovou um conserto que estava
+  // certo. O alvo pequeno é o do nó de grau baixo, que é o caso que o QA mediu.
+  const medida = await pagina.evaluate(() => {
+    const nos = [...document.querySelectorAll('[data-no-cofre]')].map((g) => ({
+      desenho: g.querySelector('[data-corpo-no]').getBoundingClientRect().width,
+      alvo: g.querySelector('[data-alvo-toque]').getBoundingClientRect().width,
+    }))
+    return nos.sort((a, b) => a.desenho - b.desenho)[0]
+  })
+  ok('no celular o alvo clicável do MENOR nó é bem maior que o desenho dele',
+    medida.alvo > medida.desenho * 2.5,
+    `alvo=${medida.alvo.toFixed(1)}px desenho=${medida.desenho.toFixed(1)}px`)
+  console.log(`  (alvo ${medida.alvo.toFixed(1)}px CSS contra desenho de ${medida.desenho.toFixed(1)}px)`)
+  // E ele TEM que continuar clicando no nó certo: alvo maior que não acerta é
+  // pior que alvo pequeno.
+  const antes = await pagina.locator('[data-ficha-cofre] h2').innerText()
+  await pagina.locator('[data-no-cofre]').nth(3).click()
+  await pagina.waitForTimeout(250)
+  ok('e clicar por ele troca a ficha', await pagina.locator('[data-ficha-cofre] h2').innerText() !== antes)
+  await pagina.setViewportSize(MESA)
+})
+
+console.log('\n6C. TECLADO')
+await secao('teclado', async () => {
+  await abrirCofre(45)
+  const primeiro = pagina.locator('[data-no-cofre]').first()
+  const outro = pagina.locator('[data-no-cofre]').nth(4)
+  await primeiro.focus()
+  await pagina.keyboard.press('Enter')
+  await pagina.waitForTimeout(200)
+  const escolhidoPorTeclado = await pagina.locator('[data-ficha-cofre] h2').innerText()
+  ok('Enter no nó escolhe pelo teclado', escolhidoPorTeclado.length > 0, escolhidoPorTeclado)
+  await outro.focus()
+  await pagina.keyboard.press('Shift+Enter')
+  await pagina.waitForTimeout(300)
+  ok('Shift+Enter faz o mesmo que Shift+clique',
+    await pagina.locator('[data-caminho-cofre]').count() === 1)
+})
+
+console.log('\n7. CELULAR 390x844')
+await pagina.setViewportSize(CELULAR)
+await abrirCofre()
+{
+  const medida = await pagina.evaluate(MEDIR_ESTOURO)
+  ok('o Cofre com 45 nós não estoura no celular', medida.doc <= 0 && medida.body <= 0,
+    `doc=${medida.doc} body=${medida.body}`)
+  const rotulos = await pagina.evaluate(MEDIR_ROTULOS)
+  ok('e os rótulos continuam sem se sobrepor no celular', rotulos.sobrepostos === 0,
+    `${rotulos.sobrepostos} pares: ${rotulos.exemplos.join(' | ')}`)
+  ok('a ficha continua alcançável', await pagina.locator('[data-ficha-cofre]').isVisible())
+  ok('e a barra de filtro também', await pagina.locator('[data-filtro-area]').first().isVisible())
+  await pagina.screenshot({ path: `${PROVAS}/cofre-${MARCA}-45-390.png`, fullPage: true })
+}
+
+await pararInjecao()
+await pagina.setViewportSize(CELULAR)
+await abrirCofre()
+{
+  const medida = await pagina.evaluate(MEDIR_ESTOURO)
+  ok('e o dado real também não estoura no celular', medida.doc <= 0 && medida.body <= 0,
+    `doc=${medida.doc} body=${medida.body}`)
+  await pagina.screenshot({ path: `${PROVAS}/cofre-${MARCA}-real-390.png`, fullPage: true })
+}
+
+ok('nenhuma exceção de JS na página', excecoes.length === 0, excecoes.slice(0, 2).join(' | '))
+
+await navegador.close()
+console.log(`\n${passou} passaram, ${falhou} falharam.`)
+process.exit(falhou ? 1 : 0)

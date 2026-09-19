@@ -1,0 +1,960 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Teste do coletor: a negacao de nome de cliente e a leitura do verificador.
+
+    python3 /opt/gastaomatos/luana/painel_os/coletor/coletor.teste.py
+
+Metade dos casos existe pra REPROVAR: trava que so foi vista aprovando nao
+distingue "esta certo" de "parei de olhar". Se um caso "x " passar a sair
+limpo, e porque a trava morreu numa edicao, e o teste tem que gritar.
+"""
+
+import importlib
+import datetime
+import io
+import json
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import coletar_estado as c  # noqa: E402
+
+falhas = 0
+
+
+def conferir(nome, obtido, esperado):
+    global falhas
+    ok = obtido == esperado
+    if not ok:
+        falhas += 1
+    print(f"{'ok  ' if ok else 'FALHOU'} {nome}\n       obtido={obtido!r}\n       esperado={esperado!r}")
+
+
+def sem_nome(nome, comando):
+    """O rotulo pode ser qualquer coisa, menos conter nome de cliente."""
+    global falhas
+    rotulo = c.rotulo_do_job(comando)
+    sujo = c.achou_nome_de_cliente(rotulo)
+    if sujo:
+        falhas += 1
+    print(f"{'ok  ' if not sujo else 'FALHOU'} {nome}\n       rotulo={rotulo!r}"
+          + (f"  <-- VAZOU {[s[2] for s in sujo]}" if sujo else ""))
+    return rotulo
+
+
+print(f"lista carregada de {c.NEGACAO['arquivo']}: {c.NEGACAO['nomes']} nomes\n")
+assert c.NEGACAO["carregada"], "sem a lista o teste nao mede nada"
+
+print("--- os tres jobs reais que vazavam (medidos no crontab de 08/09/2026)")
+sem_nome("comentario com o nome ANTES do parentese",
+         "/opt/gastaomatos/hermes/lembretes/run-lembretes.sh  # lembrete consulta 24h Dr. Lucas (hermes2_drlucas)")
+sem_nome("comentario com o nome no formato de id",
+         "/opt/gastaomatos/hermes/crm-sync/run.sh # CRM kanban reconcile dr-lucas [minuto deslocado 30/08]")
+sem_nome("comentario com o nome no meio da frase",
+         "/opt/gastaomatos/hermes/agendamentos-sync/run.sh  # agendamentos do bot Dr. Lucas -> painel (drlucas.agendamentos)")
+
+print("\n--- o ramo do NOME DE SCRIPT, que antes nao passava por trava nenhuma")
+sem_nome("nome de cliente dentro do nome do script",
+         "/usr/bin/python3 /opt/gastaomatos/hermes/backup_isabella_franklin.py")
+sem_nome("nome colado, sem separador", "/opt/x/exporta_drlucas.sh")
+# redigir e guloso de proposito e come o nome do script junto com o e-mail.
+# O que este caso prova e que ele PASSA a correr neste ramo: antes o basename
+# saia cru, com o endereco inteiro na tela.
+conferir("e-mail no ramo do script some (redigir corre aqui agora)",
+         "@" in c.rotulo_do_job("/opt/x/envia_para_contato@cliente.com.br.sh"),
+         False)
+conferir("e telefone longo no ramo do script tambem",
+         c.rotulo_do_job("/opt/x/dispara_5547999887766.sh"),
+         "dispara_[num:af1f].sh")
+
+print("\n--- variacoes de escrita do MESMO nome")
+for variante in ["Dr. Lucas", "dr-lucas", "drlucas", "DR_LUCAS", "dr lucas", "Dr Lucas"]:
+    sem_nome(f"variante {variante!r}", f"/opt/x/roda.sh # sincroniza {variante} com o painel")
+
+print("\n--- CONTROLE: texto correto NAO pode ser bloqueado")
+conferir("rotulo limpo passa inteiro",
+         c.rotulo_do_job("/opt/x/run.sh # mantem front atualizado"),
+         "mantem front atualizado")
+conferir("Gramado e produto da casa, continua aparecendo",
+         c.rotulo_do_job("/opt/gastaomatos/hermes/reservas-sync/run.sh  # reservas do Gramado -> painel"),
+         "reservas do Gramado -> painel")
+conferir("Nina e bot da casa, continua aparecendo",
+         c.rotulo_do_job("/opt/x/run_nina.sh # CRM kanban reconcile AutonomIA"),
+         "CRM kanban reconcile AutonomIA")
+conferir("sem comentario, o nome do script continua sendo o rotulo",
+         c.rotulo_do_job("/usr/bin/python3 /opt/gastaomatos/luana/verificar_frota.py"),
+         "verificar_frota.py")
+
+print("\n--- NUMERO DE PESSOA contra NUMERO DE MAQUINA (a regua tem dois lados)")
+# A regex antiga era `\d{6,}`: so corrida CONTIGUA. Telefone escrito do jeito
+# que gente escreve passava inteiro, e a trava tinha cara de trava. Metade
+# destes casos existe pra provar que ela REPROVA; a outra metade existe porque
+# trava que pune o certo e a que faz todo mundo desligar a trava.
+
+
+def mascara(nome, cru):
+    """Tem que morrer: nenhum digito do numero sobrevive na tela."""
+    global falhas
+    saida = c.redigir(cru)
+    ok = "[num:" in saida and not any(p in saida for p in _pedacos(cru))
+    if not ok:
+        falhas += 1
+    print(f"{'ok  ' if ok else 'FALHOU'} {nome}\n       {cru!r} -> {saida!r}")
+
+
+def _pedacos(cru):
+    """Corridas de 4+ digitos do original: se alguma sobreviver, vazou."""
+    import re as _re
+    return [p for p in _re.findall(r"\d{4,}", cru)]
+
+
+def intacto(nome, cru):
+    """Tem que passar inteiro: nao e gente, e a tela precisa do numero."""
+    conferir(nome, c.redigir(cru), cru)
+
+
+print("  telefone, CPF e CNPJ: todo formato que a casa escreve")
+mascara("colado com pais", "cliente 5547999887766 confirmou")
+mascara("colado sem pais", "cliente 47999887766 confirmou")
+mascara("parenteses e hifen", "ligar (47) 99988-7766 hoje")
+mascara("parenteses colado", "ligar (11)98888-7777 hoje")
+mascara("tudo separado por espaco", "numero 55 47 99988 7766 ok")
+mascara("+55 com nono digito solto", "numero +55 47 9 8888 7777 ok")
+mascara("+55 colado", "numero +5547999887766 ok")
+mascara("ddd, espaco e hifen", "numero 47 99988-7766 ok")
+mascara("separado por ponto", "numero 47.99988.7766 ok")
+mascara("celular sem ddd", "recado no 99988-7766 ok")
+mascara("fixo sem ddd", "recado no 3333-4444 ok")
+mascara("fixo com ddd", "recado no (11) 3333-4444 ok")
+mascara("CPF pontuado", "doc 123.456.789-00 ok")
+mascara("CPF colado", "doc 12345678900 ok")
+mascara("CNPJ pontuado", "doc 12.345.678/0001-99 ok")
+mascara("CNPJ colado", "doc 12345678000199 ok")
+
+print("  CONTROLE: numero de maquina tem que passar INTEIRO")
+intacto("data ISO", "medido em 2026-09-10 pelo QA")
+intacto("carimbo ISO", "criado 2026-09-10T14:07:00 no cron")
+intacto("data brasileira", "medido em 10/09/2026 de novo")
+intacto("data curta", "o post de 10/09 saiu")
+intacto("hora", "roda as 14:07 todo dia")
+intacto("hora com h", "roda as 08h07 e 20h07")
+intacto("dinheiro", "gastou R$ 1.234,56 no mes")
+intacto("dinheiro sem milhar", "gastou R$ 671,22 no mes")
+intacto("id tecnico de 18 digitos", "o anuncio 120247981563040686 ficou ativo")
+intacto("id de conta de anuncio", "conta act_1429173142386128 aprovada")
+intacto("md5", "md5 d41d8cd98f00b204e9800998ecf8427e confere")
+intacto("sha1", "sha1 da3f5c1e9b7a2d4f6081c3e5a7b9d1f3054682ae confere")
+intacto("numero de linha", "README.md:1234 tem a regra")
+intacto("intervalo de ano", "a serie de 2020-2024 mostra")
+intacto("nome de arquivo com numero", "provas/v5-390-cofre.png conferido")
+intacto("percentual", "cobertura de 95,5% dos nos")
+intacto("contagem", "9 de 9 pecas no piso de 7s")
+
+print("  o DISCRIMINADOR: mascarar nao pode fundir duas pessoas numa so")
+# Esta casa ja concluiu que duas clientes DIFERENTES eram a mesma pessoa porque
+# a mascara apagou o que as distinguia. `[num]` puro fabricava esse incidente.
+conferir("o MESMO numero em quatro escritas da o mesmo apelido",
+         len({c.redigir(t) for t in ["5547999887766", "(47) 99988-7766",
+                                     "47 99988-7766", "+55 47 9 9988 7766"]}), 1)
+conferir("dois numeros que diferem num digito NAO se fundem",
+         c.redigir("47999887766") == c.redigir("47999887767"), False)
+conferir("e o apelido e estavel entre coletas, nao aleatorio",
+         c.redigir("47999887766"), "[num:af1f]")
+
+print("  o TRACO QUE NAO E TRACO: telefone colado de WhatsApp e de Word")
+# `47 99988‑7766` com hifen U+2011 saia SEM MASCARA NENHUMA. 20 dos 40 arquivos
+# de memoria/ e diario/ ja tem traco ou espaco fora do ASCII.
+mascara("hifen unicode U+2011", "ligar 47 99988‑7766 hoje")
+mascara("figure dash U+2012", "ligar 47 99988‒7766 hoje")
+mascara("en dash U+2013", "ligar 47 99988–7766 hoje")
+mascara("em dash U+2014", "ligar 47 99988—7766 hoje")
+mascara("sinal de menos U+2212", "ligar 47 99988−7766 hoje")
+mascara("espaco duro U+00A0", "ligar 47 99988-7766 hoje")
+mascara("espaco fino U+202F", "ligar 47 99988-7766 hoje")
+mascara("largura zero U+200B partindo o numero", "ligar 4799988​7766 hoje")
+# ‼️ E o discriminador de novo: a ESCRITA do separador nao pode mudar quem e a
+# pessoa. Antes, o largura-zero dava um apelido diferente do mesmo numero.
+conferir("o mesmo numero em seis separadores da UM apelido so",
+         len({c.redigir(t) for t in ["47 99988-7766", "47 99988‑7766",
+                                     "47 99988–7766", "4799988​7766",
+                                     "(47) 99988-7766", "5547999887766"]}), 1)
+# CONTROLE: normalizar e pra MEDIR, nao pra reescrever o texto do autor.
+conferir("travessao de prosa sai como foi escrito",
+         c.redigir("a casa nao usa travessao — mas a memoria tem"),
+         "a casa nao usa travessao — mas a memoria tem")
+conferir("intervalo de ano com en dash tambem",
+         c.redigir("a serie de 2020–2024 mostra"), "a serie de 2020–2024 mostra")
+# ‼️ O QUE FICA DE FORA, declarado: separador que ninguem usa pra telefone, e
+# documento separado so por espaco. Sem estes casos escritos, o proximo agente
+# le a lista de cima e conclui que a casa pega tudo.
+for rotulo, texto in [("ponto medio", "47·99988·7766"),
+                      ("barra", "47/99988/7766"),
+                      ("underscore", "47_99988_7766"),
+                      ("fixo separado por espaco", "recado no 3333 4444 aqui"),
+                      ("CPF separado por espaco", "doc 123 456 789 00 aqui")]:
+    conferir(f"{rotulo}: passa inteiro (limite declarado)", c.redigir(texto), texto)
+
+print("  MISTURA: forma segura e telefone no mesmo texto, em toda posicao")
+# `redigir` deixou de ser um `sub` e virou costura manual (regex na chave
+# normalizada, saida montada do texto original). Estes casos existem porque foi
+# exatamente isso que a reescrita podia quebrar: o trecho seguro entre dois
+# mascarados, e o mascarado na primeira e na ultima posicao.
+conferir("seguro antes e depois do telefone",
+         c.redigir("em 2026-09-10 as 14:07 o cliente (47) 99988-7766 ligou, gastou R$ 1.234,56"),
+         "em 2026-09-10 as 14:07 o cliente [num:af1f] ligou, gastou R$ 1.234,56")
+conferir("id tecnico sobrevive ao lado de telefone",
+         c.redigir("anuncio 120247981563040686 e telefone 47 99988-7766 no mesmo texto"),
+         "anuncio 120247981563040686 e telefone [num:af1f] no mesmo texto")
+conferir("telefone na PRIMEIRA posicao, seguro na ultima",
+         c.redigir("47 99988-7766 no comeco e 2026-09-10 no fim"),
+         "[num:af1f] no comeco e 2026-09-10 no fim")
+conferir("dois telefones DIFERENTES nao se fundem no mesmo texto",
+         c.redigir("dois telefones: (11) 98888-7777 e (47) 99988-7766"),
+         "dois telefones: [num:d2eb] e [num:af1f]")
+conferir("texto sem numero nenhum sai identico", c.redigir("nada de numero aqui"),
+         "nada de numero aqui")
+conferir("texto vazio nao estoura", c.redigir(""), "")
+
+print("\n--- a PESSOA fora do negrito: tratamento e linha de contato")
+# Um QA achou duas de verdade em 10/09/2026: `Dr. Wagner` dentro do parenteses
+# (que o corte joga fora) e `Willian` na terceira coluna ("Contato: Willian").
+tmp_cli = Path(tempfile.mkdtemp()) / "clientes.md"
+tmp_cli.write_text(
+    "| cliente | conta | nota |\n|---|---|---|\n"
+    "| **Escritorio Teste** (Dr. Anselmo, trabalhista, Cuiabá) | act_1 | nada |\n"
+    "| **Pousada Teste** (recepcao, reservas) | proprio | Contato: Belarmino |\n",
+    encoding="utf-8")
+pad_cli, diag_cli = c.carregar_nomes_de_cliente(tmp_cli)
+achados_cli = {n for n, _ in pad_cli}
+conferir("o nome do tratamento entra na lista", "Anselmo" in achados_cli, True)
+conferir("o nome da linha de contato entra na lista", "Belarmino" in achados_cli, True)
+# CONTROLE, e e o que impede a lista de virar lixeira: ramo, cidade e funcao
+# moram no MESMO parenteses e NAO podem entrar. Trava que nega "reservas"
+# apaga meia tela.
+for palavra in ("trabalhista", "Cuiabá", "recepcao", "reservas", "Dr", "Dra"):
+    conferir(f"{palavra!r} NAO vira nome negado", palavra in achados_cli, False)
+shutil.rmtree(tmp_cli.parent, ignore_errors=True)
+
+# ‼️ LIMITE DECLARADO, e ele e da familia que esta casa ja apanhou: GRAFIA.
+# `Willian` esta em clientes.md e entra; `Wilian` com um L so, que o CLAUDE.md
+# usa, NAO casa com o padrao e passa inteiro. A lista mede o PISO. O instrumento
+# que resolve a classe e por FORMA de nome mais lista de excecao, como o
+# `_RE_NOME_CAND` do verificar_frota.py, nao por enumeracao.
+conferir("grafia diferente do mesmo nome passa (a lista mede o PISO)",
+         bool(c.achou_nome_de_cliente("avisa o Wilian por favor")), False)
+conferir("mas a grafia que esta no arquivo e negada",
+         bool(c.achou_nome_de_cliente("avisa o Willian por favor")), True)
+
+print("\n--- cliente NOVO fica protegido so por entrar em clientes.md")
+tmp = Path(tempfile.mkdtemp()) / "clientes.md"
+tmp.write_text("| cliente | conta |\n|---|---|\n| **Padaria Zilda Nogueira** (teste) | act_1 |\n", encoding="utf-8")
+guarda = (c.NOMES_CLIENTE, c.NEGACAO)
+c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(tmp)
+sem_nome("nome que so existe no arquivo de teste",
+         "/opt/x/run.sh # fecha o mes da Padaria Zilda Nogueira")
+conferir("e o do arquivo de verdade NAO esta mais na lista (prova que trocou)",
+         c.achou_nome_de_cliente("Dr. Lucas") == [], True)
+
+print("\n--- SEM a lista, nada de texto livre sai (falha FECHADA)")
+c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(Path("/nao/existe/clientes.md"))
+conferir("negacao nao carregou", c.NEGACAO["carregada"], False)
+conferir("rotulo limpo tambem e omitido",
+         c.rotulo_do_job("/opt/x/run.sh # mantem front atualizado"),
+         "[rótulo omitido: sem lista de clientes]")
+conferir("nome de script tambem e omitido",
+         c.rotulo_do_job("/usr/bin/python3 /opt/gastaomatos/luana/verificar_frota.py"),
+         "[rótulo omitido: sem lista de clientes]")
+c.NOMES_CLIENTE, c.NEGACAO = guarda
+
+print("\n--- cofre: aprendizado conferido contra a fonte, e ligação só se declarada")
+tmp_cofre = Path(tempfile.mkdtemp())
+(tmp_cofre / "FONTE.md").write_text(
+    "# fonte de mentira\n"
+    "‼️ **A TRAVA MORA NA PORTA**, e quem chama nao decide nada.\n"
+    "Segunda linha do mesmo bloco.\n"
+    "**É a mesma família do zero calado.**\n"
+    "\n"
+    "‼️ **OUTRO BLOCO** que nao entra na medida do primeiro.\n",
+    encoding="utf-8")
+
+
+AREAS_TESTE = [{"id": "bots", "nome": "Bots"}, {"id": "trafego", "nome": "Tráfego"},
+               {"id": "transversal", "nome": "Transversal", "sempre_visivel": True}]
+FAMILIAS_TESTE = [{"id": "zero-calado", "nome": "O zero calado"},
+                  {"id": "onde-a-regra-mora", "nome": "Onde a regra mora"}]
+
+
+def _cofre_de_teste(registros, pasta=tmp_cofre, areas=AREAS_TESTE, familias=FAMILIAS_TESTE):
+    alvo = pasta / "cofre.json"
+    alvo.write_text(json.dumps({"versao": 1, "areas": areas, "familias": familias,
+                                "registros": registros}, ensure_ascii=False), encoding="utf-8")
+    return c.ler_cofre(alvo, pasta)
+
+
+BOM = {"id": "trava-mora-na-porta", "especie": "trava", "area": "bots",
+       "familia": "onde-a-regra-mora", "titulo": "A trava mora na porta",
+       "corpo": "Regra que mora onde alguem decide, a proxima edicao apaga.",
+       "caso": "A trava vivia no meio do main de um arquivo editado toda semana.",
+       "autor": "dev", "quando": "2026-09-07", "fonte": "FONTE.md", "linha": 2,
+       "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada", "peso": 5,
+       "conecta": []}
+HUB = {"id": "padrao-zero-calado", "especie": "padrao", "area": "transversal",
+       "familia": "zero-calado", "titulo": "O zero calado",
+       "corpo": "Valor que pode nascer de falha carrega a falha junto.",
+       "caso": "Apareceu em quatro sistemas no mesmo dia.",
+       "autor": "Renato", "quando": "2026-09-08", "fonte": "FONTE.md", "linha": 5,
+       "ancora": "É a mesma família do zero calado", "peso": 5, "conecta": []}
+
+cofre = _cofre_de_teste([BOM, HUB])
+conferir("âncora presente vira nó vivo", cofre["vencidos"], [])
+conferir("o endereço sai da ÂNCORA, não da linha que o registro declarou",
+         cofre["nos"][0]["arquivo"], "FONTE.md:2")
+conferir("o bloco é medido até o próximo marcador, não até o teto",
+         cofre["nos"][0]["linhas"], 3)
+conferir("espécie e autor chegam na tela",
+         (cofre["nos"][0]["especie"], cofre["nos"][0]["autor"]), ("trava", "dev"))
+
+# ‼️ o caso que PRECISA reprovar: âncora que sumiu da fonte.
+cofre = _cofre_de_teste([{**BOM, "ancora": "frase que nunca existiu neste arquivo"}])
+conferir("âncora ausente marca o nó como vencido, e ele NÃO some calado",
+         (cofre["vencidos"], len(cofre["nos"])), (["trava-mora-na-porta"], 1))
+conferir("nó vencido não finge endereço",
+         cofre["nos"][0]["arquivo"].startswith("âncora não confere"), True)
+
+# ligação declarada na fonte entra; ligação que alguém achou parecida, não.
+cofre = _cofre_de_teste([{**BOM, "conecta": [
+    {"para": "padrao-zero-calado", "porque": "É a mesma família do zero calado"}]}, HUB])
+conferir("ligação escrita na fonte vira aresta", cofre["conexoes"], 1)
+conferir("aresta que troca de área é marcada como PONTE, e o filtro não pode escondê-la",
+         cofre["arestas"][0]["ponte"], True)
+conferir("o grau conta os dois sentidos: quem só recebe é tão central quanto quem emite",
+         {n["id"]: n["grau"] for n in cofre["nos"]},
+         {"trava-mora-na-porta": 1, "padrao-zero-calado": 1})
+conferir("a barra lateral só lista área que tem registro, nunca cluster vazio",
+         [(a["id"], a["total"]) for a in cofre["areas"]],
+         [("bots", 1), ("transversal", 1)])
+# área fora do catálogo não passa: cluster novo se cadastra num lugar só.
+recusa = _cofre_de_teste([{**BOM, "area": "inventada"}])
+conferir("área fora do catálogo é recusada", (len(recusa["nos"]), len(recusa["recusados"])), (0, 1))
+cofre = _cofre_de_teste([{**BOM, "conecta": [
+    {"para": "padrao-zero-calado", "porque": "os dois falam de coisa parecida"}]}, HUB])
+conferir("ligação que não está escrita na fonte é RECUSADA", cofre["conexoes"], 0)
+conferir("e a recusa aparece, não some", len(cofre["arestas_recusadas"]), 1)
+
+# a porta: nome de cliente no texto derruba o registro inteiro.
+guarda = (c.NOMES_CLIENTE, c.NEGACAO)
+c.NOMES_CLIENTE = [("Fulano da Silva", c._padrao_do_nome("Fulano da Silva"))]
+c.NEGACAO = {"carregada": True, "nomes": 1, "erro": None, "arquivo": "teste"}
+cofre = _cofre_de_teste([{**BOM, "caso": "O Fulano da Silva pediu isso por telefone."}])
+conferir("nome de cliente no caso não vira nó com o nome",
+         "Fulano" in json.dumps(cofre, ensure_ascii=False), False)
+# sem a lista de nomes, o Cofre NÃO sai vazio: ele diz que não conseguiu conferir.
+c.NEGACAO = {"carregada": False, "nomes": 0, "erro": "lista ausente", "arquivo": "teste"}
+cofre = _cofre_de_teste([BOM])
+conferir("sem lista de nomes o Cofre falha ALTO, não devolve zero", cofre["erro"] is not None, True)
+c.NOMES_CLIENTE, c.NEGACAO = guarda
+
+# fonte fora da raiz não é lida.
+cofre = _cofre_de_teste([{**BOM, "fonte": "../../../etc/hosts"}])
+conferir("fonte que escapa da raiz é recusada", (len(cofre["nos"]), len(cofre["recusados"])), (0, 1))
+
+# ---------------------------------------------------------------------------
+# AS TRÊS PORTAS QUE O CofRE DEIXAVA ABERTAS (medidas pelo QA em 10/09/2026)
+#
+# As três tinham a mesma forma: campo que NINGUÉM revisou indo pro JSON
+# servido. A razão da ligação é citação literal de arquivo sob `luana/`, e
+# `memoria/` casa o padrão de fonte aceito; as listas de recusa carregam o
+# valor cru de quem falhou na validação. Hoje as duas estão limpas: era risco
+# armado, não incidente, e é por isso que estes casos existem.
+# ---------------------------------------------------------------------------
+print("\n--- cofre: a RAZÃO da ligação e as listas de RECUSA também são saída")
+(tmp_cofre / "FONTE-SUJA.md").write_text(
+    "# fonte com gente dentro\n"
+    "‼️ **A TRAVA MORA NA PORTA**, e quem chama nao decide nada.\n"
+    "Fulano da Silva ligou do 47999887766 e escreveu de fulano@cliente.com.br\n"
+    "\n"
+    "‼️ **OUTRO BLOCO** que fecha o de cima.\n",
+    encoding="utf-8")
+
+RAZAO_LITERAL = "Fulano da Silva ligou do 47999887766 e escreveu de fulano@cliente.com.br"
+SUJO = "Fulano da Silva 47999887766 fulano@cliente.com.br"
+
+
+def sem_pessoa(nome, texto):
+    """Nem nome, nem telefone, nem e-mail. E a marca certa no lugar."""
+    global falhas
+    vazou = [p for p in ("Fulano", "Silva", "47999887766", "999887766",
+                         "@cliente.com.br") if p in texto]
+    if vazou:
+        falhas += 1
+    print(f"{'ok  ' if not vazou else 'FALHOU'} {nome}\n       {texto!r}"
+          + (f"  <-- VAZOU {vazou}" if vazou else ""))
+
+
+guarda = (c.NOMES_CLIENTE, c.NEGACAO)
+c.NOMES_CLIENTE = [("Fulano da Silva", c._padrao_do_nome("Fulano da Silva"))]
+c.NEGACAO = {"carregada": True, "nomes": 1, "erro": None, "arquivo": "teste"}
+
+cofre = _cofre_de_teste([
+    {**BOM, "fonte": "FONTE-SUJA.md",
+     "conecta": [{"para": "padrao-zero-calado", "porque": RAZAO_LITERAL}]},
+    HUB])
+# ‼️ O caso que separa o conserto certo do errado. Mascarar ANTES de conferir
+# contra a fonte faria `[cliente]` nunca casar com o arquivo, e a aresta seria
+# RECUSADA: o vazamento viraria um zero calado. A prova roda no texto cru, a
+# máscara roda depois, e por isso a ligação continua existindo.
+conferir("a ligação continua nascendo, mesmo com nome de cliente na razão",
+         cofre["conexoes"], 1)
+sem_pessoa("e a razão chega na tela mascarada", cofre["arestas"][0]["porque"])
+conferir("com as três marcas no lugar do que foi tirado",
+         all(m in cofre["arestas"][0]["porque"] for m in ("[cliente]", "[num:", "[e-mail]")),
+         True)
+sem_pessoa("e nada sobrou no JSON inteiro", json.dumps(cofre, ensure_ascii=False))
+# o ramo de falha da máscara também precisa de um caso que o dispare pelo nome,
+# senão metade da trava pode ter morrido numa edição e o teste continua verde.
+conferir("razão que a máscara não consegue limpar vira marca, e não texto cru",
+         c._cofre_razao("... ... ..."),
+         "[razão omitida: não passou na trava de nome de cliente]")
+
+# 3. as listas de recusa: o registro que ninguém revisou é justamente este.
+recusa = _cofre_de_teste([{**BOM, "especie": SUJO}])
+conferir("registro inválido continua sendo recusado e contado",
+         (len(recusa["nos"]), len(recusa["recusados"])), (0, 1))
+sem_pessoa("e o motivo da recusa sai sem a pessoa", recusa["recusados"][0])
+recusa = _cofre_de_teste([{**BOM, "conecta": [
+    {"para": SUJO, "porque": "É a mesma família do zero calado"}]}])
+conferir("aresta com destino inexistente continua recusada",
+         len(recusa["arestas_recusadas"]), 1)
+sem_pessoa("e o destino cru não viaja no motivo", recusa["arestas_recusadas"][0])
+# CONTROLE: sanear não pode virar apagar. O motivo tem que continuar servindo
+# pra alguém consertar o registro.
+recusa = _cofre_de_teste([{**BOM, "area": "inventada"}])
+conferir("motivo limpo continua legível, com o valor que reprovou",
+         "área fora do catálogo" in recusa["recusados"][0] and "inventada" in recusa["recusados"][0],
+         True)
+c.NOMES_CLIENTE, c.NEGACAO = guarda
+
+shutil.rmtree(tmp_cofre, ignore_errors=True)
+
+# e o registro DE VERDADE, contra as fontes de verdade.
+vivo = c.ler_cofre()
+conferir("o Cofre da casa lê sem erro", vivo["erro"], None)
+conferir("nenhum registro da casa está com âncora vencida", vivo["vencidos"], [])
+conferir("nenhum registro da casa foi recusado na porta", vivo["recusados"], [])
+
+print("\n--- ferramentas: estados separados e saída sem segredo")
+ferramentas = c.ler_ferramentas()
+conferir("inventário tem itens", ferramentas["medidos"] > 0, True)
+conferir("as três classes estão contadas", set(ferramentas["contagem"]), {"disponível", "fallback", "ausente"})
+conferir("Meta é fallback, não disponibilidade completa", next(x for x in ferramentas["itens"] if x["nome"] == "Meta Ads")["estado"], "fallback")
+conferir("inventário é maior que os três MCPs", ferramentas["medidos"] > ferramentas["por_tipo"]["MCP"], True)
+conferir("cada item declara proveniência", all(x["proveniencias"] for x in ferramentas["itens"]), True)
+serializado = str(ferramentas).lower()
+conferir("não serializa chave, token ou caminho privado", not any(x in serializado for x in ["21st_sk_", "/home/", "/opt/"]), True)
+
+pasta_cfg = Path(tempfile.mkdtemp())
+codex_cfg = pasta_cfg / "codex.toml"
+claude_cfg = pasta_cfg / "claude.json"
+runtime_cfg = pasta_cfg / "runtime"
+runtime_cfg.mkdir()
+codex_cfg.write_text('[mcp_servers.teste]\nurl = "https://example.invalid/mcp"\n', encoding="utf-8")
+claude_cfg.write_text(json.dumps({"mcpServers": {"teste": {"url": "https://example.invalid/mcp"}, "segundo": {"url": "https://example.invalid/outro"}}}), encoding="utf-8")
+(runtime_cfg / "catalogo.json").write_text(json.dumps({"schema_version": 4, "tools": [{"server_name": "runtime_extra", "tool_name": "ler"}, {"server_name": "runtime_extra", "tool_name": "buscar"}]}), encoding="utf-8")
+somente_codex = c.ler_ferramentas(configs_codex=(codex_cfg,), configs_claude=(), mcp_runtime_tools=pasta_cfg / "runtime-ausente", plugins_codex=pasta_cfg / "plugins", plugins_claude=pasta_cfg / "plugins.json")
+somente_claude = c.ler_ferramentas(configs_codex=(), configs_claude=(claude_cfg,), mcp_runtime_tools=pasta_cfg / "runtime-ausente", plugins_codex=pasta_cfg / "plugins", plugins_claude=pasta_cfg / "plugins.json")
+com_runtime = c.ler_ferramentas(configs_codex=(codex_cfg,), configs_claude=(claude_cfg,), mcp_runtime_tools=runtime_cfg, plugins_codex=pasta_cfg / "plugins", plugins_claude=pasta_cfg / "plugins.json")
+ids_codex = {x["id"] for x in somente_codex["itens"] if x["tipo"] != "MCP"}
+ids_claude = {x["id"] for x in somente_claude["itens"] if x["tipo"] != "MCP"}
+conferir("catálogo operacional não muda com a LLM", ids_codex, ids_claude)
+conferir("MCP equivalente é normalizado no mesmo id", {x["id"] for x in somente_codex["itens"] if x["tipo"] == "MCP"}, {"mcp-teste"})
+conferir("inventário MCP cresce pelas fontes, sem lista fixa de três", {x["id"] for x in com_runtime["itens"] if x["tipo"] == "MCP"}, {"mcp-teste", "mcp-segundo", "mcp-runtime-extra"})
+shutil.rmtree(pasta_cfg, ignore_errors=True)
+
+print("\n--- SOPs: só fontes e relações existentes")
+sops = c.ler_sops()
+conferir("catálogo real fica pronto", sops["status"], "pronto")
+conferir("um item por playbook declarado", sops["total"], len(c.SOPS_DECLARADOS))
+conferir("todo SOP tem fonte rastreável", all(x["fontes"] and x["fontes"][0].startswith("skill:") for x in sops["itens"]), True)
+conferir("toda aresta carrega evidência", all(x["evidencia"] for x in sops["arestas"]), True)
+conferir("frequência só aparece quando declarada", [(x["id"], x["frequencia"]) for x in sops["itens"] if x["frequencia"]], [("dashboard", "sincronização automática às 8h, 12h e 20h de São Paulo")])
+tmp_sops = Path(tempfile.mkdtemp())
+falha_sops = c.ler_sops(pasta_skills=tmp_sops)
+conferir("playbook ausente fecha o catálogo", (falha_sops["status"], falha_sops["total"], falha_sops["itens"], falha_sops["arestas"]), ("erro", None, [], []))
+shutil.rmtree(tmp_sops, ignore_errors=True)
+
+print("\n--- estado público: trava global recursiva")
+conferir("rótulos técnicos e basename preservam rastreabilidade",
+         c.auditar_estado_publico({"arquivo": "agente:global/dev.md", "fonte": "posts.json"}), [])
+conferir("caminho absoluto reprova em qualquer profundidade",
+         bool(c.auditar_estado_publico({"novo": [{"campo": "/opt/segredo/arquivo.txt"}]})), True)
+conferir("home abreviado também reprova",
+         bool(c.auditar_estado_publico({"campo": "ler ~/.config/privado"})), True)
+conferir("e-mail reprova em qualquer campo",
+         bool(c.auditar_estado_publico({"novo": {"texto": "pessoa@exemplo.com"}})), True)
+conferir("valor com formato de token reprova",
+         bool(c.auditar_estado_publico({"campo": "Bearer segredo123456789"})), True)
+conferir("chave nova de credencial reprova mesmo com valor mascarado",
+         bool(c.auditar_estado_publico({"integracao": {"api_key": "mascarada"}})), True)
+
+print("  a porta FINAL e o numero de pessoa: campo NOVO com telefone cru")
+# Esta porta reprovava e-mail, caminho e segredo, e APROVAVA telefone, CPF e
+# CNPJ. Era o mesmo buraco da regua velha (`\d{6,}`), uma camada acima: campo
+# novo que nascesse com telefone ia pro `estado.json` servido sem reprovar.
+
+
+def porta_reprova(nome, texto):
+    conferir(nome, bool(c.auditar_estado_publico({"campo_novo": texto})), True)
+
+
+def porta_aprova(nome, texto):
+    conferir(nome, c.auditar_estado_publico({"campo_novo": texto}), [])
+
+
+porta_reprova("telefone com parenteses e hifen", "ligar (47) 99988-7766 hoje")
+porta_reprova("telefone com parenteses colado", "ligar (11)98888-7777 hoje")
+porta_reprova("telefone separado por espaco", "numero 55 47 99988 7766 aqui")
+porta_reprova("telefone com +55 e nono digito solto", "numero +55 47 9 8888 7777 aqui")
+porta_reprova("telefone com +55 colado", "numero +5547999887766 aqui")
+porta_reprova("telefone separado por ponto", "numero 47.99988.7766 aqui")
+porta_reprova("telefone com DDD e hifen", "numero 47 99988-7766 aqui")
+porta_reprova("celular sem DDD", "recado no 99988-7766 aqui")
+porta_reprova("fixo com DDD", "recado no (11) 3333-4444 aqui")
+porta_reprova("fixo com DDD separado por espaco", "me liga no 47 3333-4444 quando terminar")
+porta_reprova("CPF pontuado", "doc 123.456.789-00 aqui")
+porta_reprova("CNPJ pontuado", "doc 12.345.678/0001-99 aqui")
+
+# ‼️ AS DUAS PORTAS TEM QUE ENXERGAR A MESMA COISA. Por dez minutos em 10/09 a
+# normalizacao de separador estava so no `redigir`: o telefone com hifen unicode
+# era mascarado la e APROVADO aqui. Regua que existe em duas versoes so precisa
+# de uma edicao pra divergir, e a frouxa e sempre a que grava.
+for rotulo, texto in [("hifen U+2011", "ligar 47 99988‑7766 hoje"),
+                      ("en dash U+2013", "ligar 47 99988–7766 hoje"),
+                      ("largura zero U+200B", "ligar 4799988​7766 hoje")]:
+    conferir(f"{rotulo}: redigir mascara E a porta reprova",
+             (c.redigir(texto) != texto,
+              bool(c.auditar_estado_publico({"campo_novo": texto}))),
+             (True, True))
+
+print("  e a MESMA regua na CHAVE do objeto, nao so no valor")
+# Agregar por cliente, por lead ou por telefone poe o dado na CHAVE, e ali so
+# o nome de credencial era conferido. Medido: 0 das 364 chaves vivas reprovam.
+for rotulo, chave in [("telefone como chave", "(47) 99988-7766"),
+                      ("e-mail como chave", "contato@cliente.com.br"),
+                      ("CPF como chave", "123.456.789-00"),
+                      ("caminho de maquina como chave", "/opt/gastaomatos/luana/memoria/x.md"),
+                      ("segredo como chave", "Bearer abcdefgh12345678")]:
+    conferir(rotulo, bool(c.auditar_estado_publico({"agregado": {chave: 3}})), True)
+
+print("  CONTROLE: a porta nao pode punir o certo, senao alguem desliga a porta")
+porta_aprova("data ISO", "medido em 2026-09-10 pelo QA")
+porta_aprova("carimbo ISO com microssegundo", "gerado 2026-09-10T16:14:17.611431+00:00")
+porta_aprova("data brasileira", "medido em 10/09/2026 de novo")
+porta_aprova("hora", "roda as 14:07 e as 08h07")
+porta_aprova("dinheiro", "gastou R$ 1.234,56 no mes")
+porta_aprova("id tecnico de 18 digitos", "o anuncio 120247981563040686 ficou ativo")
+porta_aprova("id de conta de anuncio", "conta act_1429173142386128 aprovada")
+porta_aprova("md5", "md5 d41d8cd98f00b204e9800998ecf8427e confere")
+porta_aprova("numero de linha", "README.md:1234 tem a regra")
+porta_aprova("expressao de cron", "roda 1-56/5 * * * * no servidor")
+porta_aprova("id hexadecimal de 12 da biblioteca", "item 189371dfc9f6 catalogado")
+
+print("  as TRES bombas que a primeira versao desta porta armou (QA, 10/09/2026)")
+# A primeira regua reprovava tambem corrida NUA e faixa `NNNN-NNNN`. Isso nao
+# vazava nada: PARAVA O COLETOR, sem gente no meio pra desfazer. Cada caso aqui
+# e um estado que ja existe na casa, nao um cenario inventado.
+porta_aprova("id da biblioteca que sorteou 55+DDD (9 em 400.000 por item)",
+             "554749789013")
+porta_aprova("outro sorteio do mesmo formato", "553391943739")
+porta_aprova("faixa de verba, que o dono escreve no Telegram",
+             "Subir a verba do cliente de 3000-4000 por mes")
+porta_aprova("outra faixa de verba", "Testar orcamento 2500-3500 nesta semana")
+porta_aprova("epoch em segundos", "ancora 1787766056 no followup")
+porta_aprova("id de conta do Google Ads", "Google Ads, conta 6907685124")
+porta_aprova("id de campanha do Google Ads", "orcamento compartilhado 7709375454")
+
+# ‼️ E o outro lado, que so vale escrito: essas quatro formas NAO reprovam aqui
+# de propósito, e continuam morrendo em `redigir`. Sem este par de casos, a
+# proxima pessoa le a lista de cima e conclui que a casa nao mascara telefone.
+for rotulo, texto in [("telefone colado com pais", "cliente 5547999887766 ligou"),
+                      ("telefone colado sem pais", "cliente 47999887766 ligou"),
+                      ("CPF colado", "doc 12345678900 aqui"),
+                      ("fixo sem DDD", "recado no 3333-4444 aqui")]:
+    conferir(f"{rotulo}: passa na porta E morre em redigir",
+             (c.auditar_estado_publico({"campo_novo": texto}), c.redigir(texto) != texto),
+             ([], True))
+
+# ‼️ A PROVA QUE VALE MAIS QUE AS DE CIMA: o payload REAL tem que continuar
+# passando. Trava que reprova o estado de hoje nao e trava, e um coletor
+# parado, porque `main()` LEVANTA quando esta funcao acha problema.
+servido = Path("/opt/gastaomatos/luana/painel_os/web/src/dados/estado.json")
+if servido.is_file():
+    conferir("o estado.json SERVIDO passa inteiro na porta apertada",
+             c.auditar_estado_publico(json.loads(servido.read_text(encoding="utf-8")))[:5], [])
+else:
+    print(f"AVISO  estado servido ausente em {servido.name}: a prova de regressao NAO rodou")
+
+# ‼️ E o CORPUS REAL DA CASA, que foi quem derrubou a primeira regua: a porta
+# nao pode parar a coleta por causa de texto que ja esta escrito em `memoria/`
+# e `diario/`. Medido em 10/09/2026: a regua larga parava em 8 linhas, cinco
+# delas id de conta do Google Ads; esta para em 1, e essa 1 e um telefone DE
+# VERDADE escrito no diario, ou seja acerto, nao falso positivo.
+casa = [p for pasta in ("memoria", "diario")
+        for p in sorted((Path("/opt/gastaomatos/luana") / pasta).glob("*.md"))]
+if casa:
+    param = [(p.name, ln.strip()[:60]) for p in casa
+             for ln in p.read_text(encoding="utf-8", errors="replace").splitlines()
+             if ln.strip() and c.numero_de_pessoa(ln)]
+    # 1 linha e o telefone real do diario de 31/08. Mais que isso e regressao.
+    conferir(f"corpus da casa ({len(casa)} arquivos): no maximo 1 linha para a coleta",
+             len(param) <= 1, True)
+    if param:
+        print(f"       (a que para: {param[0][0]} -> {param[0][1]!r})")
+else:
+    print("AVISO  corpus da casa nao encontrado: a prova de regressao NAO rodou")
+
+# E o outro lado do limite: `redigir` erra pra MASCARAR, e come digito de id
+# hexadecimal curto. Nenhum caminho vivo manda esses ids por ela (medido em
+# 10/09/2026: os 248 ids de `biblioteca.itens` chegam inteiros no servido), mas
+# o dia em que alguem mandar, o id sai corrompido, e nao calado.
+conferir("redigir mascara digito dentro de hex de 12 (limite conhecido)",
+         c.redigir("189371dfc9f6"), "[num:14f5]dfc9f6")
+
+print("\n--- sessões Codex: dono, retorno real e privacidade")
+tmp_codex = Path(tempfile.mkdtemp())
+
+
+def linha_codex(tipo, payload, timestamp):
+    return json.dumps({"timestamp": timestamp, "type": tipo, "payload": payload}) + "\n"
+
+
+raiz_id = "01a00000-0000-7000-8000-000000000001"
+pai_id = "01a00000-0000-7000-8000-000000000002"
+filho_id = "01a00000-0000-7000-8000-000000000003"
+(tmp_codex / f"rollout-{raiz_id}.jsonl").write_text(
+    linha_codex("session_meta", {"id": raiz_id}, "2026-09-09T10:00:00Z")
+    + linha_codex("response_item", {
+        "type": "function_call", "namespace": "collaboration", "name": "spawn_agent",
+        "call_id": "chamada-pai", "arguments": json.dumps({"task_name": "pai"}),
+    }, "2026-09-09T10:00:10Z"),
+    encoding="utf-8",
+)
+(tmp_codex / f"rollout-{pai_id}.jsonl").write_text(
+    linha_codex("session_meta", {
+        "id": pai_id, "agent_path": "/root/pai", "agent_nickname": "Curie",
+    }, "2026-09-09T10:01:00Z")
+    + linha_codex("session_meta", {"id": raiz_id}, "2026-09-09T10:01:00Z")
+    + linha_codex("response_item", {
+        "type": "function_call", "namespace": "collaboration", "name": "spawn_agent",
+        "call_id": "chamada-filho", "arguments": json.dumps({"task_name": "filho"}),
+    }, "2026-09-09T10:01:10Z")
+    + linha_codex("event_msg", {
+        "type": "task_complete", "completed_at": 1788948090,
+    }, "2026-09-09T10:01:30Z"),
+    encoding="utf-8",
+)
+(tmp_codex / f"rollout-{filho_id}.jsonl").write_text(
+    linha_codex("session_meta", {
+        "id": filho_id, "agent_path": "/root/pai/filho", "agent_nickname": "Galileo",
+    }, "2026-09-09T10:02:00Z")
+    + linha_codex("session_meta", {
+        "id": pai_id, "agent_path": "/root/pai", "agent_nickname": "Curie",
+    }, "2026-09-09T10:02:00Z")
+    + linha_codex("session_meta", {"id": raiz_id}, "2026-09-09T10:02:00Z")
+    # O fork herdou a conclusão do pai e redatou a linha. completed_at continua
+    # anterior ao nascimento do filho, portanto NÃO é retorno do filho.
+    + linha_codex("event_msg", {
+        "type": "task_complete", "completed_at": 1788948090,
+    }, "2026-09-09T10:02:00Z"),
+    encoding="utf-8",
+)
+codex = c._ler_convocacoes_codex(tmp_codex)
+conferir("o primeiro session_meta identifica o filho, não o pai herdado",
+         set(codex["chamadas"]), {"Curie", "Galileo"})
+conferir("task_complete herdado não fabrica retorno de agente ainda ativo",
+         (codex["retornos"].get("Curie"), codex["retornos"].get("Galileo")), (1, 0))
+conferir("a aresta do segundo nível sai do dono verdadeiro do rollout",
+         codex["arestas"].get(("Curie", "agente", "Galileo")), 1)
+conferir("caminhos internos dos agentes não chegam ao estado público",
+         "/root/" in str(codex), False)
+shutil.rmtree(tmp_codex, ignore_errors=True)
+
+print("\n--- retorno de agente: o que conta é o RELATÓRIO, não o lançamento")
+# ‼️ O CASO QUE ESTE BLOCO EXISTE PRA REPROVAR é o primeiro: até 10/09/2026 o
+# coletor contava como retorno QUALQUER tool_result da chamada, e 936 dos 1.020
+# resultados medidos eram o recibo `Async agent launched successfully`. A tela
+# escrevia 99,7% de retorno medindo LANÇAMENTO. Se o primeiro caso voltar a
+# passar, a régua morreu de novo e este teste tem que gritar.
+tmp_claude = Path(tempfile.mkdtemp())
+tmp_sem_codex = Path(tempfile.mkdtemp())
+projeto_teste = tmp_claude / "-projeto-de-teste"
+projeto_teste.mkdir()
+
+
+def chamada(ident, alvo, quando="2026-09-10T10:00:00Z"):
+    return json.dumps({
+        "timestamp": quando, "type": "assistant",
+        "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": ident, "name": "Agent",
+             "input": {"subagent_type": alvo, "description": "x"}},
+        ]},
+    }) + "\n"
+
+
+def resultado(ident, texto, erro=False):
+    return json.dumps({
+        "timestamp": "2026-09-10T10:00:01Z", "type": "user",
+        "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": ident, "is_error": erro,
+             "content": texto},
+        ]},
+    }) + "\n"
+
+
+def notificacao(ident, status="completed", de_agente=True):
+    usa = "<usage><subagent_tokens>900</subagent_tokens></usage>" if de_agente else ""
+    corpo = (
+        "<task-notification>"
+        + (f"<tool-use-id>{ident}</tool-use-id>" if ident else "")
+        + f"<status>{status}</status><summary>x</summary><result>relatório</result>"
+        + usa + "</task-notification>"
+    )
+    return json.dumps({
+        "timestamp": "2026-09-10T10:30:00Z", "type": "user",
+        "message": {"role": "user", "content": [{"type": "text", "text": corpo}]},
+    }) + "\n"
+
+
+RECIBO = (
+    "Async agent launched successfully. (This tool result is internal metadata)\n"
+    "agentId: abc123def456 (internal ID)\n"
+)
+(projeto_teste / "sessao.jsonl").write_text(
+    # 1. lançou e NUNCA voltou: é o caso que o instrumento antigo contava
+    chamada("toolu_soLancou", "so-lancou") + resultado("toolu_soLancou", RECIBO)
+    # 2. lançou e o relatório chegou depois, por notificação
+    + chamada("toolu_voltou", "voltou") + resultado("toolu_voltou", RECIBO)
+    + notificacao("toolu_voltou")
+    # 3. agente síncrono: o relatório chega no próprio tool_result, e essa linha
+    #    não cita subagent_type nem agentId. Sem a quarta porta do prefiltro ela
+    #    nem seria aberta, e este retorno de verdade sumiria.
+    + chamada("toolu_sincrono", "sincrono")
+    + resultado("toolu_sincrono", "Análise completa. Segue o relatório para operação.")
+    # 4. a chamada falhou na largada: resultado existe e é erro, não é retorno
+    + chamada("toolu_erro", "com-erro")
+    + resultado("toolu_erro", "Agent failed to start", erro=True)
+    # 5. o agente foi morto: a notificação existe e o status não é completed
+    + chamada("toolu_morto", "morto") + resultado("toolu_morto", RECIBO)
+    + notificacao("toolu_morto", status="killed")
+    # 6. comando de fundo que terminou: notificação sem subagent_tokens. Ela cita
+    #    o id de uma chamada de agente e mesmo assim não pode virar retorno.
+    + chamada("toolu_bash", "com-bash") + resultado("toolu_bash", RECIBO)
+    + notificacao("toolu_bash", de_agente=False)
+    # 7. notificação de agente SEM id de chamada: não casa com ninguém e vira o
+    #    tamanho declarado do buraco, nunca um retorno atribuído a chute
+    + notificacao(None),
+    encoding="utf-8",
+)
+conv = c.ler_convocacoes(projetos=tmp_claude, sessoes_codex=tmp_sem_codex)
+ret = conv["retornos_por_agente"]
+conferir("‼️ recibo de lançamento NÃO é retorno", ret.get("so-lancou", 0), 0)
+conferir("notificação de agente concluído É retorno", ret.get("voltou"), 1)
+conferir("relatório de agente síncrono É retorno", ret.get("sincrono"), 1)
+conferir("resultado com is_error NÃO é retorno", ret.get("com-erro", 0), 0)
+conferir("agente morto NÃO é retorno", ret.get("morto", 0), 0)
+conferir("notificação de comando de fundo NÃO é retorno", ret.get("com-bash", 0), 0)
+conferir("notificação sem id vira buraco declarado, não retorno",
+         (conv["retornos_sem_par"], sum(ret.values())), (1, 2))
+conferir("as sete chamadas continuam contadas como convocação",
+         conv["por_agente"], {"so-lancou": 1, "voltou": 1, "sincrono": 1,
+                              "com-erro": 1, "morto": 1, "com-bash": 1})
+shutil.rmtree(tmp_claude, ignore_errors=True)
+shutil.rmtree(tmp_sem_codex, ignore_errors=True)
+
+print("\n--- cobranças: agrega e descarta identificação")
+amostra_cobrancas = lambda: {"overdueInvoices": [{"id": "inv-secreta", "clientName": "Pessoa Teste", "phone": "5511999999999", "amount": "100.50", "currency": "BRL", "dueDate": "2026-09-01"}, {"id": "inv-2", "clientName": "Outra Pessoa", "amount": 20, "currency": "BRL", "dueDate": "2026-08-01"}], "overdueClients": [{"name": "Pessoa Teste"}, {"name": "Outra Pessoa"}]}
+cobrancas = c.ler_cobrancas(amostra_cobrancas)
+conferir("conta faturas e clientes", (cobrancas["faturas_atrasadas"], cobrancas["clientes_atrasados"]), (2, 2))
+conferir("soma somente o total agregado", cobrancas["por_moeda"][0]["total"], 120.5)
+saida_cobrancas = str(cobrancas)
+conferir("não leva nome, telefone ou id para o estado", not any(x in saida_cobrancas for x in ["Pessoa Teste", "Outra Pessoa", "5511999999999", "inv-secreta"]), True)
+falha_cobrancas = c.ler_cobrancas(lambda: (_ for _ in ()).throw(TimeoutError()))
+conferir("falha de acesso não vira zero", (falha_cobrancas["status"], falha_cobrancas["faturas_atrasadas"]), ("erro", None))
+
+print("\n--- follow-up: estado interno não se disfarça de entrega")
+tmp_followup = Path(tempfile.mkdtemp())
+estado_followup = tmp_followup / "estado.json"
+log_followup = tmp_followup / "followup.log"
+estado_followup.write_text(json.dumps({
+    "5511999999999": {"enviados": ["30min", "3h", "fora_da_janela_24h"], "recusou": "sim"},
+    "5511888888888": {"enviados": ["30min", "carimbado_corte_25_08"], "despediu": "sim"},
+    "_ritmo": {"ultimo_envio": 1},
+}), encoding="utf-8")
+log_followup.write_text(
+    "2026-09-08T10:00:00 5511*****9999: toque 30min enviado (morno)\n"
+    "2026-09-08T10:01:00 5511*****8888: toque 30min barrado\n",
+    encoding="utf-8",
+)
+followup = c.ler_followup(estado_followup, log_followup)
+conferir("conta contatos sem publicar identificadores", followup["contatos_no_estado"], 2)
+conferir("separa etapa consumida de envio confirmado no log", (followup["etapas_consumidas"], followup["envios_registrados_no_log"]), (3, 1))
+conferir("resume recusas e despedidas", (followup["recusas_registradas"], followup["despedidas_registradas"]), (1, 1))
+conferir("nenhum telefone chega ao estado", "5511" in str(followup), False)
+falha_followup = c.ler_followup(tmp_followup / "ausente", log_followup)
+conferir("falha de leitura não vira zero", (falha_followup["status"], falha_followup["contatos_no_estado"]), ("erro", None))
+shutil.rmtree(tmp_followup, ignore_errors=True)
+shutil.rmtree(tmp.parent, ignore_errors=True)
+
+print("\n--- e a trava tem que REPROVAR de verdade: caso de controle negativo")
+c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(Path("/nao/existe/clientes.md"))
+c.NEGACAO["carregada"] = True  # lista vazia fingindo estar carregada
+vazou = c.rotulo_do_job("/opt/x/run.sh # lembrete consulta 24h Dr. Lucas")
+conferir("com a lista VAZIA o nome passa (e por isso a lista nao pode falhar calada)",
+         vazou, "lembrete consulta 24h Dr. Lucas")
+c.NOMES_CLIENTE, c.NEGACAO = guarda
+
+
+# ---------------------------------------------------------------------------
+# LEITURA DO VERIFICADOR
+# O parse era UM regex so: faltar INDETERMINADAS, trocar a ordem, escrever
+# "VALIDO ATE" com acento ou a hora em BRT apagava os tres numeros de uma vez,
+# em silencio, e a Topbar pintava a ausencia de verde.
+# ---------------------------------------------------------------------------
+print("\n--- leitura do verificador")
+
+MOLDE = """VERIFICADOR - ultimo resultado
+RODADA .....: 08/09/2026 10:46:10 UTC
+VALIDO ATE .: {ate}
+{resumo}
+
+REPROVADAS (e ha quanto tempo):
+  x nenhum post saiu mais de 15min fora da hora agendada
+      desde 07/09/2026 18:02 (0.7 dia(s), 21 rodada(s))
+"""
+
+
+def ler(nome, resumo="CHECAGENS ..: 51   REPROVADAS: 6   INDETERMINADAS: 0",
+        ate="08/09/2026 15:07 UTC", corpo=None):
+    arq = Path(tempfile.mkdtemp()) / "ULTIMO.txt"
+    arq.write_text(MOLDE.format(resumo=resumo, ate=ate) if corpo is None else corpo,
+                   encoding="utf-8")
+    v = c.ler_verificador(arq)
+    print(f"       [{nome}] checagens={v['checagens']} reprovadas={v['reprovadas']} "
+          f"indet={v['indeterminadas']} vencido={v['vencido']} erro={v['erro_leitura']!r}")
+    shutil.rmtree(arq.parent, ignore_errors=True)
+    return v
+
+v = ler("formato de hoje")
+conferir("formato de hoje: os tres numeros", (v["checagens"], v["reprovadas"], v["indeterminadas"]), (51, 6, 0))
+conferir("formato de hoje: sem erro de leitura", v["erro_leitura"], None)
+conferir("formato de hoje: a falha veio com o texto", len(v["falhas"]), 1)
+
+v = ler("VALIDO ATE acentuado", ate="08/09/2026 15:07 UTC".replace("08", "08"))
+v = ler("acentuado", corpo=MOLDE.format(resumo="CHECAGENS ..: 51   REPROVADAS: 6   INDETERMINADAS: 0",
+                                        ate="09/09/2026 15:07 UTC").replace("VALIDO ATE", "VÁLIDO ATÉ"))
+conferir("VÁLIDO ATÉ acentuado ainda e lido", v["valido_ate"], "09/09/2026 15:07 UTC")
+conferir("e os numeros continuam de pe", v["checagens"], 51)
+
+v = ler("ordem trocada", resumo="REPROVADAS: 6   INDETERMINADAS: 0   CHECAGENS ..: 51")
+conferir("ordem trocada: os tres numeros", (v["checagens"], v["reprovadas"], v["indeterminadas"]), (51, 6, 0))
+
+v = ler("sem INDETERMINADAS", resumo="CHECAGENS ..: 51   REPROVADAS: 6")
+conferir("sem INDETERMINADAS os outros dois sobrevivem", (v["checagens"], v["reprovadas"]), (51, 6))
+conferir("e o motivo sai escrito", "INDETERMINADAS" in (v["erro_leitura"] or ""), True)
+
+# BRT tem que DECIDIR diferente de UTC, senao o teste passa por empate.
+# O instante e sempre "daqui a 2h", entao a resposta nao depende do relogio:
+# lido como BRT (-03) ainda nao venceu; lido como UTC, venceu ha 1h.
+daqui_2h = c.agora_utc() + datetime.timedelta(hours=2)
+em_brt = (daqui_2h - datetime.timedelta(hours=3)).strftime("%d/%m/%Y %H:%M")
+conferir("hora em BRT nao venceu", ler("BRT", ate=f"{em_brt} BRT")["vencido"], False)
+conferir("a MESMA hora lida como UTC teria vencido (a regua distingue)",
+         ler("mesmo numero, marcado UTC", ate=f"{em_brt} UTC")["vencido"], True)
+
+v = ler("fuso desconhecido", ate="08/09/2026 15:07 XPTO")
+conferir("fuso que eu nao conheco nao vira UTC por conta propria", v["vencido"], None)
+conferir("e diz por que", "fuso" in (v["erro_leitura"] or ""), True)
+
+v = ler("arquivo em branco", corpo="")
+conferir("arquivo vazio: numero nenhum", (v["checagens"], v["reprovadas"], v["indeterminadas"]), (None, None, None))
+conferir("arquivo vazio: e o motivo NAO e None", bool(v["erro_leitura"]), True)
+
+v = c.ler_verificador(Path("/nao/existe/ULTIMO.txt"))
+conferir("arquivo que nao existe diz que nao existe", bool(v["erro_leitura"]), True)
+conferir("e nao inventa numero", v["checagens"], None)
+
+print("\n--- API de tarefas: agregado e falha alta")
+class RespostaFake:
+    def __init__(self, corpo): self.corpo = corpo
+    def __enter__(self): return io.StringIO(json.dumps(self.corpo))
+    def __exit__(self, *args): return False
+
+guarda_env, guarda_urlopen = c._ler_env, c.urllib.request.urlopen
+c._ler_env = lambda *_: "segredo-de-teste"
+def urlopen_ok(req, timeout):
+    status = req.full_url.split("status=")[1].split("&")[0]
+    tarefas = [{"id": "1", "status": "todo", "priority": "p1", "projectSlug": "pessoal", "dueDate": None, "updatedAt": c.agora_utc().isoformat()}] if status == "todo" else []
+    return RespostaFake({"ok": True, "data": {"tasks": tarefas}})
+c.urllib.request.urlopen = urlopen_ok
+t = c.ler_tarefas()
+conferir("sucesso conta a tarefa", t["total_abertas"], 1)
+conferir("campo legado acompanha o total aberto para bundles em cache", t["total"], t["total_abertas"])
+conferir("o total diz explicitamente que é carteira aberta", (t["escopo"], t["total_abertas"], t["status_excluidos"]), ("abertas", 1, ["done"]))
+conferir("JSON agregado não carrega título, nota nem id", any(k in json.dumps(t) for k in ['title', 'notes', 'segredo-de-teste']), False)
+
+def urlopen_falha(req, timeout):
+    if "status=doing" in req.full_url: raise c.urllib.error.URLError("fora")
+    return urlopen_ok(req, timeout)
+c.urllib.request.urlopen = urlopen_falha
+t = c.ler_tarefas()
+conferir("falha parcial torna totais indisponíveis, não zero", (t["total"], t["total_abertas"]), (None, None))
+conferir("e o erro viaja explícito", bool(t["erro"]), True)
+c._ler_env, c.urllib.request.urlopen = guarda_env, guarda_urlopen
+
+print("\n--- fila persistente de aprovações")
+pasta_ap = Path(tempfile.mkdtemp())
+fila_ap = pasta_ap / "aprovacoes.json"
+fila_ap.write_text('{"versao":1,"itens":[]}', encoding="utf-8")
+ap = c.ler_aprovacoes(fila_ap)
+conferir("vazio real tem total zero e sem erro", (ap["total"], ap["erro"]), (0, None))
+fila_ap.write_text(json.dumps({"versao": 1, "itens": [{"id": "teste_isolado_1", "estado": "aguardando", "tipo": "conteudo", "criado_em": "2026-09-08T22:00:00Z", "origem": "teste"}]}), encoding="utf-8")
+ap = c.ler_aprovacoes(fila_ap)
+conferir("item isolado entra aguardando, sem mudar estado", (ap["total"], ap["por_estado"].get("aguardando"), ap["itens"][0]["estado"]), (1, 1, "aguardando"))
+fila_ap.write_text('{"versao":1,"itens":[{"id":"curto","estado":"inventado"}]}', encoding="utf-8")
+ap = c.ler_aprovacoes(fila_ap)
+conferir("contrato inválido falha fechado, sem zero", (ap["total"], bool(ap["erro"]), ap["itens"]), (None, True, []))
+shutil.rmtree(pasta_ap)
+
+print("\n--- contrato analítico isolado por marca")
+an = c.agregar_analitica([
+    {"marca": "gastaomatos", "status": "postado", "formato": "reel", "canais": ["instagram"], "links_publicados": {"instagram": "https://exemplo/1"}},
+    {"marca": "cliente-a", "status": "postado", "formato": "imagem", "canais": ["instagram"], "links_publicados": {"instagram": "https://exemplo/2"}},
+    {"status": "postado", "formato": "carrossel", "canais": ["linkedin"]},
+])
+conferir("só a marca própria entra", (an["total"], an["por_formato"]), (1, {"reel": 1}))
+conferir("link é cobertura, não insight inventado", (an["links_publicados"]["instagram"], an["meta"]["metricas"]), (1, None))
+conferir("Meta sem conector falha fechado", an["meta"]["estado"], "bloqueado")
+
+print("\n--- diretiva: fonte canônica e falha fechada")
+from diretiva import carregar as carregar_diretiva, gravar_atomico
+pasta_di = Path(tempfile.mkdtemp())
+arquivo_di = pasta_di / "diretiva.json"
+diretiva_teste = {"versao": 1, "status": "ativa", "objetivo": "Concluir o painel", "prazo": "2026-09-09", "criada_em": "2026-09-08T22:11:23Z", "atualizada_em": "2026-09-08T22:11:23Z", "origem": {"canal": "telegram", "mensagem_id": "9412"}}
+gravar_atomico(arquivo_di, diretiva_teste)
+di = carregar_diretiva(arquivo_di)
+conferir("diretiva válida preserva objetivo, prazo e origem", (di["objetivo"], di["prazo"], di["origem"]["mensagem_id"]), ("Concluir o painel", "2026-09-09", "9412"))
+antes = arquivo_di.read_text(encoding="utf-8")
+try:
+    gravar_atomico(arquivo_di, {**diretiva_teste, "status": "qualquer"})
+except ValueError:
+    pass
+conferir("atualização inválida não toca na diretiva anterior", arquivo_di.read_text(encoding="utf-8"), antes)
+arquivo_di.write_text('{"versao":1,"status":"qualquer"}', encoding="utf-8")
+di = carregar_diretiva(arquivo_di)
+conferir("diretiva inválida falha fechado", (di["status"], di["objetivo"], bool(di["erro"])), ("erro", None, True))
+shutil.rmtree(pasta_di)
+
+print("\n" + ("TODOS PASSARAM" if falhas == 0 else f"{falhas} FALHA(S)"))
+sys.exit(0 if falhas == 0 else 1)
