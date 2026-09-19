@@ -61,7 +61,26 @@ export default function App() {
   // fechar, a pessoa volta exatamente ao departamento que estava examinando.
   const [departamento, setDepartamento] = useState<'todos' | Agente['squad']>('todos')
   const [menuAberto, setMenuAberto] = useState(false)
+  const [sidebarRecolhida, setSidebarRecolhida] = useState(() => {
+    try {
+      return localStorage.getItem('painel_os:sidebar_recolhida') === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  const alternarSidebar = () => {
+    setSidebarRecolhida((prev) => {
+      const prox = !prev
+      try {
+        localStorage.setItem('painel_os:sidebar_recolhida', String(prox))
+      } catch {}
+      return prox
+    })
+  }
+
   const hora = agora.toLocaleTimeString('pt-BR', { hour12: false, timeZone: 'America/Sao_Paulo' })
+  const sidebarWidth = sidebarRecolhida ? 64 : 268
 
   // Trocar de tela fecha a gaveta: no celular ela cobre a tela inteira e
   // ficaria por cima do que a pessoa acabou de pedir pra ver.
@@ -127,7 +146,10 @@ export default function App() {
                 aoIr={ir}
               />
             </div>
-            <div className="lg:fixed lg:top-11 lg:right-0 lg:bottom-0 lg:left-[268px] lg:z-40">
+            <div
+              className="lg:fixed lg:top-11 lg:right-0 lg:bottom-0 lg:z-40 transition-all duration-300"
+              style={{ left: `${sidebarWidth}px` }}
+            >
               <button
                 type="button"
                 aria-label="fechar a ficha e voltar para a rede"
@@ -139,7 +161,8 @@ export default function App() {
                 aria-modal="true"
                 aria-label="ficha do agente"
                 data-ficha-drawer
-                className="bg-fundo lg:absolute lg:inset-y-0 lg:right-0 lg:w-[min(720px,calc(100vw-268px))] lg:overflow-y-auto lg:border-l lg:border-linha lg:shadow-[-24px_0_70px_rgba(0,0,0,.42)]"
+                style={{ width: `min(720px, calc(100vw - ${sidebarWidth}px))` }}
+                className="bg-fundo lg:absolute lg:inset-y-0 lg:right-0 lg:overflow-y-auto lg:border-l lg:border-linha lg:shadow-[-24px_0_70px_rgba(0,0,0,.42)] transition-all duration-300"
               >
                 <Diretor {...comum} quem={rota.quem} aoIr={ir} compacto />
               </aside>
@@ -187,8 +210,20 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <aside className="hidden w-[268px] shrink-0 flex-col overflow-y-auto border-r border-linha bg-fundo-2/70 lg:flex">
-        <Sidebar hora={hora} estado={estado} atual={rota.vista} aoIr={ir} />
+      <aside
+        className={
+          'hidden shrink-0 flex-col overflow-y-auto border-r border-linha bg-fundo-2/70 transition-all duration-300 ease-in-out lg:flex ' +
+          (sidebarRecolhida ? 'w-[64px]' : 'w-[268px]')
+        }
+      >
+        <Sidebar
+          hora={hora}
+          estado={estado}
+          atual={rota.vista}
+          aoIr={ir}
+          recolhido={sidebarRecolhida}
+          aoAlternarRecolher={alternarSidebar}
+        />
       </aside>
 
       {/* A gaveta do celular. `fixed`, entao ela nao entra na largura do
