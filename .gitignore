@@ -25,17 +25,13 @@ servidor/.https-ativo
 # 19/09/2026: cofre.json é a base real de aprendizados internos (não
 # sintética); os demais .json de data/ são estado operacional real (prazos,
 # URLs de Drive, contagens). dados/chamadas-inbox recebe inbox real.
-dados/
-data/
+/dados/
+/data/
 
-# --- estado.json: snapshot REAL da operação, não é fixture sintético ---
-# Confirmado em 19/09/2026: contém nome de cliente real (AutonomIA), métricas
-# reais e narrativas reais de incidente. É citado em validar.teste.ts como "o
-# estado.json de verdade" e importado estaticamente por web/src/dados/estado.ts
-# (bundlado no build). Excluído por conter dado real; isso QUEBRA `npm run
-# build` e o teste validar.teste.ts até alguém criar um estado.json sintético
-# com o mesmo formato (recomendado: tarefa pro dev, não pro deploy).
-web/src/dados/estado.json
+# --- estado.json sintético com zero PII criado para build e testes ---
+# O snapshot real de produção com PII vive fora do repo em /opt/gastaomatos/luana/...
+# e nunca é commitado. O arquivo aqui presente é a fixture sintética segura.
+
 
 # --- variáveis de ambiente e segredos (defensivo — nenhum encontrado hoje) ---
 .env

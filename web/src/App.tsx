@@ -25,6 +25,7 @@ const Cofre = lazy(() => import('./telas/Cofre').then((m) => ({ default: m.Cofre
 const Estudio = lazy(() => import('./telas/Estudio').then((m) => ({ default: m.Estudio })))
 const Aprovacoes = lazy(() => import('./telas/Aprovacoes').then((m) => ({ default: m.Aprovacoes })))
 const Cobrancas = lazy(() => import('./telas/Cobrancas').then((m) => ({ default: m.Cobrancas })))
+const OQueFalta = lazy(() => import('./telas/OQueFalta').then((m) => ({ default: m.OQueFalta })))
 
 function CarregandoTela() {
   return (
@@ -60,7 +61,7 @@ export default function App() {
   // fechar, a pessoa volta exatamente ao departamento que estava examinando.
   const [departamento, setDepartamento] = useState<'todos' | Agente['squad']>('todos')
   const [menuAberto, setMenuAberto] = useState(false)
-  const hora = agora.toLocaleTimeString('pt-BR', { hour12: false })
+  const hora = agora.toLocaleTimeString('pt-BR', { hour12: false, timeZone: 'America/Sao_Paulo' })
 
   // Trocar de tela fecha a gaveta: no celular ela cobre a tela inteira e
   // ficaria por cima do que a pessoa acabou de pedir pra ver.
@@ -179,6 +180,8 @@ export default function App() {
         return <Aprovacoes {...comum} />
       case 'cobrancas':
         return <Cobrancas {...comum} />
+      case 'falta':
+        return <OQueFalta {...comum} />
     }
   }
 

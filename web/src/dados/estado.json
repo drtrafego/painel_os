@@ -1,0 +1,439 @@
+{
+  "gerado_em": "2026-09-18T22:00:00.000Z",
+  "calculo_ms": 142,
+  "fonte": {
+    "origem": "snapshot operacional"
+  },
+  "verificadores": {
+    "luana": {
+      "reprovadas": 0,
+      "total": 12,
+      "vencido": false,
+      "arquivo": "luana/verificar_frota_ULTIMO.txt",
+      "falhas": []
+    },
+    "renato": {
+      "reprovadas": 0,
+      "total": 8,
+      "vencido": false,
+      "arquivo": "renato/verificar_bots_ULTIMO.txt",
+      "falhas": []
+    }
+  },
+  "resumo": {
+    "agentes_casa": 31,
+    "agentes_sessao": 2,
+    "convocacoes_total": 1342,
+    "convocacoes_casa": 1280,
+    "convocacoes_por_motor": {
+      "codex": 820,
+      "claude": 522
+    },
+    "transcripts_lidos": 412,
+    "cron_ativo": 65
+  },
+  "squads": {
+    "global": {
+      "nome": "Liderança",
+      "descricao": "Coordenação geral e diretoria estratégica"
+    },
+    "conteudo": {
+      "nome": "Estúdio de Conteúdo",
+      "descricao": "Pesquisa, roteiro, renderização e acervo"
+    },
+    "pipeline-luana": {
+      "nome": "Comercial & Vendas",
+      "descricao": "CRM, contatos, follow-ups e propostas"
+    }
+  },
+  "sessao": [
+    {
+      "id": "luana",
+      "nome": "Luana",
+      "papel": "CEO Operacional",
+      "camada": "Coordenação",
+      "cor": "lima",
+      "resumo": "Coordena a frota de especialistas e o pipeline operacional",
+      "verificador": {
+        "checagens": 12,
+        "reprovadas": 0,
+        "indeterminadas": 0,
+        "vencido": false,
+        "falhas": [],
+        "arquivo": "luana/verificar_frota_ULTIMO.txt"
+      },
+      "motores": {
+        "situacao": "um_ativo",
+        "motor": "Codex",
+        "ativos": ["luana.service"],
+        "servicos": [
+          {
+            "service": "luana.service",
+            "ativo": true,
+            "existe": true,
+            "estado": "active",
+            "sub": "running",
+            "motor": "Codex",
+            "motor_fonte": "processo"
+          }
+        ]
+      },
+      "memoria": { "linhas": 312, "arquivos": 4 },
+      "diario": { "arquivos": 7 },
+      "cron_linhas": 15
+    },
+    {
+      "id": "renato",
+      "nome": "Renato",
+      "papel": "CRO Comercial",
+      "camada": "Vendas",
+      "cor": "ciano",
+      "resumo": "Atendimento, pipeline comercial e gestão de faturas",
+      "verificador": {
+        "checagens": 8,
+        "reprovadas": 0,
+        "indeterminadas": 0,
+        "vencido": false,
+        "falhas": [],
+        "arquivo": "renato/verificar_bots_ULTIMO.txt"
+      },
+      "motores": {
+        "situacao": "um_ativo",
+        "motor": "Claude Code",
+        "ativos": ["renato.service"],
+        "servicos": [
+          {
+            "service": "renato.service",
+            "ativo": true,
+            "existe": true,
+            "estado": "active",
+            "sub": "running",
+            "motor": "Claude Code",
+            "motor_fonte": "processo"
+          }
+        ]
+      },
+      "memoria": { "linhas": 190, "arquivos": 3 },
+      "diario": { "arquivos": 5 },
+      "cron_linhas": 10
+    }
+  ],
+  "agentes": [
+    {
+      "id": "dev",
+      "nome": "Dev Engenheiro",
+      "squad": "global",
+      "modelo": "Claude 3.5 Sonnet",
+      "descricao": "Desenvolvimento full-stack, automações e servidores",
+      "linhas": 240,
+      "bytes": 8400,
+      "modificado": "2026-09-18T18:00:00Z",
+      "arquivo": "agentes/dev.md",
+      "convocacoes": 420,
+      "convocacoes_24h": 32,
+      "convocacoes_7d": 180,
+      "ultima_convocacao": "2026-09-18T21:00:00Z",
+      "ferramentas": ["bash", "edit_file", "view_file"],
+      "origem": "agente:global/dev.md"
+    },
+    {
+      "id": "qa",
+      "nome": "QA Verificador",
+      "squad": "global",
+      "modelo": "Claude 3.5 Sonnet",
+      "descricao": "Testes de ponta a ponta, validação de contratos e auditoria",
+      "linhas": 180,
+      "bytes": 6200,
+      "modificado": "2026-09-18T15:00:00Z",
+      "arquivo": "agentes/qa.md",
+      "convocacoes": 210,
+      "convocacoes_24h": 15,
+      "convocacoes_7d": 95,
+      "ultima_convocacao": "2026-09-18T20:30:00Z",
+      "ferramentas": ["playwright", "bash"],
+      "origem": "agente:global/qa.md"
+    },
+    {
+      "id": "copy",
+      "nome": "Copywriter Sênior",
+      "squad": "conteudo",
+      "modelo": "GPT-4o",
+      "descricao": "Roteiros, posts, copys de carrossel e chamadas",
+      "linhas": 210,
+      "bytes": 7100,
+      "modificado": "2026-09-17T12:00:00Z",
+      "arquivo": "agentes/copy.md",
+      "convocacoes": 310,
+      "convocacoes_24h": 22,
+      "convocacoes_7d": 140,
+      "ultima_convocacao": "2026-09-18T19:00:00Z",
+      "ferramentas": ["pesquisa_mercado"],
+      "origem": "agente:conteudo/copy.md"
+    },
+    {
+      "id": "closer",
+      "nome": "Closer de Vendas",
+      "squad": "pipeline-luana",
+      "modelo": "GPT-4o",
+      "descricao": "Qualificação avançada e fechamento de novos projetos",
+      "linhas": 195,
+      "bytes": 6800,
+      "modificado": "2026-09-16T10:00:00Z",
+      "arquivo": "agentes/closer.md",
+      "convocacoes": 150,
+      "convocacoes_24h": 8,
+      "convocacoes_7d": 65,
+      "ultima_convocacao": "2026-09-18T16:00:00Z",
+      "ferramentas": ["crm_api"],
+      "origem": "agente:pipeline-luana/closer.md"
+    }
+  ],
+  "arestas": [
+    { "de": "luana", "para": "dev", "vezes": 140, "de_tipo": "sessao" },
+    { "de": "luana", "para": "qa", "vezes": 85, "de_tipo": "sessao" },
+    { "de": "luana", "para": "copy", "vezes": 110, "de_tipo": "sessao" },
+    { "de": "renato", "para": "closer", "vezes": 75, "de_tipo": "sessao" },
+    { "de": "dev", "para": "qa", "vezes": 45, "de_tipo": "agente" }
+  ],
+  "convocacoes_fora_da_casa": {},
+  "sops": {
+    "status": "pronto",
+    "itens": [
+      {
+        "id": "sop-conteudo",
+        "nome": "Ciclo Diário de Conteúdo",
+        "objetivo": "Produção, revisão e agendamento de posts do estúdio",
+        "autonomia": "assistida",
+        "ferramentas": ["editor_video", "copia_segura"],
+        "agentes": ["copy", "designer", "qa"],
+        "entradas": ["pauta"],
+        "saidas": ["video_mp4", "capa_jpg"],
+        "gatilho": "08:00 BRT",
+        "frequencia": "diária",
+        "fontes": [],
+        "responsavel": "Luana"
+      }
+    ]
+  },
+  "cofre": {
+    "nos": [
+      {
+        "id": "trava-nome-cliente",
+        "area": "transversal",
+        "rotulo": "Trava de dados de clientes em telas públicas",
+        "grau": 3,
+        "peso": 5,
+        "autor": "Dev",
+        "quando": "2026-09-10",
+        "especie": "trava",
+        "corpo": "Nenhum dado pessoal de cliente (nome, email, telefone) pode aparecer em telas do dashboard.",
+        "caso": "Auditoria de segurança antes da publicação do painel.",
+        "arquivo": "memoria/regras.md",
+        "vencido": false,
+        "familia": "seguranca",
+        "linhas": 24
+      },
+      {
+        "id": "auditoria-transcripts",
+        "area": "engenharia",
+        "rotulo": "Auditoria incremental de transcripts",
+        "grau": 2,
+        "peso": 4,
+        "autor": "Dev",
+        "quando": "2026-09-10",
+        "especie": "medicao",
+        "corpo": "Transcripts não devem ser lidos integralmente em tempo real devido ao alto custo de I/O.",
+        "caso": "Crescimento da pasta para 3,8 GB causando lentidão no coletor.",
+        "arquivo": "memoria/performance.md",
+        "vencido": false,
+        "familia": "performance",
+        "linhas": 30
+      }
+    ],
+    "arestas": [
+      {
+        "de": "trava-nome-cliente",
+        "para": "auditoria-transcripts",
+        "ponte": true,
+        "porque": "Transcripts contêm conversas que exigem filtro antes de qualquer agregação"
+      }
+    ],
+    "conexoes": 1,
+    "cobertura": 100.0,
+    "familias": [
+      { "id": "seguranca", "nome": "Segurança" },
+      { "id": "performance", "nome": "Performance" }
+    ],
+    "areas": [
+      { "id": "transversal", "nome": "Transversal", "sempre_visivel": true, "total": 1 },
+      { "id": "engenharia", "nome": "Engenharia", "total": 1 }
+    ],
+    "truncados": [],
+    "vencidos": [],
+    "recusados": [],
+    "arestas_recusadas": [],
+    "arquivos": 2,
+    "grau_medio": 1.0
+  },
+  "cron": {
+    "fuso": "America/Sao_Paulo (UTC-3)",
+    "total": 65,
+    "jobs": [
+      {
+        "expressao": "*/15 * * * *",
+        "rotulo": "Verificação periódica dos verificadores de bots",
+        "dono": "luana"
+      },
+      {
+        "expressao": "0 8-20 * * *",
+        "rotulo": "Varredura do pipeline comercial e novos leads",
+        "dono": "renato"
+      }
+    ]
+  },
+  "pecas": {
+    "lista": [
+      {
+        "n": 240,
+        "titulo": "Estrutura do Painel OS para Gestão Autônoma",
+        "status": "pronto",
+        "formato": "video_vertical",
+        "tem_capa": true,
+        "capa_url": "/capas/240.jpg",
+        "tem_video": true,
+        "agendado_para": "2026-09-20 18:00 instagram",
+        "data": "2026-09-20",
+        "canais": ["instagram", "linkedin"],
+        "artefato_disponivel": true,
+        "aprovacao_disponivel": true
+      }
+    ],
+    "atualizado_em": "2026-09-18T22:00:00Z",
+    "com_capa": 84,
+    "com_video": 60,
+    "capas_servidas": 84,
+    "pastas_sem_capa": 0,
+    "pastas_em_disco": 131,
+    "pastas_ausentes": 0,
+    "acoes_habilitadas": true,
+    "acoes_bloqueio": null,
+    "total": 131
+  },
+  "tarefas": {
+    "total_abertas": 169,
+    "por_status": {
+      "doing": 12,
+      "todo": 140,
+      "waiting": 17
+    },
+    "por_prazo": {
+      "sem_prazo": 40,
+      "hoje": 5
+    },
+    "por_movimento": {
+      "paradas_7d": 8
+    },
+    "por_projeto": [
+      { "projeto": "conteudo", "total": 45 },
+      { "projeto": "clientes", "total": 62 }
+    ]
+  },
+  "aprovacoes": {
+    "total": 0,
+    "itens": [],
+    "decisoes_habilitadas": true
+  },
+  "cobrancas": {
+    "status": "pronto",
+    "atualizado_em": "2026-09-18T21:00:00Z",
+    "faturas_atrasadas": 0,
+    "clientes_atrasados": 0,
+    "por_faixa": [],
+    "por_moeda": []
+  },
+  "chamadas": {
+    "status": "vazia",
+    "total": 0,
+    "atualizado_em": "2026-09-18T20:00:00Z",
+    "nos": [],
+    "arestas": [],
+    "registros": []
+  },
+  "pipeline": {
+    "total": 6563,
+    "organizacoes": 19,
+    "etapas": [
+      { "etapa": "lead_inicial", "total": 4120 },
+      { "etapa": "qualificado", "total": 1840 },
+      { "etapa": "proposta", "total": 603 }
+    ],
+    "coletado_em": "2026-09-18T21:00:00Z"
+  },
+  "followup": {
+    "status": "pronto",
+    "envios_registrados_no_log": 63,
+    "contatos_no_estado": 120
+  },
+  "diretiva": {
+    "status": "ativa",
+    "objetivo": "Manter todas as esteiras autônomas de conteúdo e validação ativas sem regressão.",
+    "prazo": "2026-09-30",
+    "origem": {
+      "canal": "telegram",
+      "mensagem_id": "452"
+    },
+    "criada_em": "2026-09-10T12:00:00Z",
+    "atualizada_em": "2026-09-10T12:00:00Z"
+  },
+  "calendario": {
+    "vencido": false,
+    "totais": {
+      "eventos_agendados": 14,
+      "eventos_futuros_na_coleta": 6
+    },
+    "janela": {
+      "inicio": "2026-09-18T00:00:00Z",
+      "fim": "2026-09-25T00:00:00Z"
+    },
+    "dias": [
+      {
+        "data": "2026-09-19",
+        "eventos_agendados": 3,
+        "minutos_agendados": 120,
+        "futuros_na_coleta": 3
+      }
+    ]
+  },
+  "ferramentas": {
+    "medidos": 27,
+    "itens": [
+      {
+        "id": "playwright",
+        "nome": "Playwright Browser Automation",
+        "tipo": "MCP",
+        "evidencia": "executando local",
+        "proveniencias": ["luana/.mcp.json"],
+        "estado": "disponível"
+      }
+    ],
+    "contagem": {
+      "disponível": 26,
+      "fallback": 1,
+      "ausente": 0
+    },
+    "por_tipo": {
+      "MCP": 15,
+      "Plugin": 12
+    }
+  },
+  "biblioteca": {
+    "total": 248,
+    "atalhos_quebrados": 0,
+    "rotulos_mascarados": 35,
+    "por_origem": {
+      "acervo": 200,
+      "pronto": 48
+    },
+    "itens": []
+  }
+}

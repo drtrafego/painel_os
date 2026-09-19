@@ -16,6 +16,7 @@ import {
   porSquad,
   temCargo,
 } from '../dados/estado'
+import { useAgentesVivos } from '../dados/useAgentesVivos'
 import type { Origem } from '../dados/useEstado'
 import type { VistaId, Vista } from '../nav/rotas'
 import type { Agente, Estado, Sop } from '../dados/tipos'
@@ -128,6 +129,8 @@ export function Diretores({
 }) {
   const [noSelecionado, setNoSelecionado] = useState<string | null>(null)
   const acoes = montarAcoes(estado, agora)
+  const { dados: vivos } = useAgentesVivos()
+  const mapaVivos = new Map((vivos?.agentes ?? []).map((a) => [a.id, a]))
 
   const idsEncostados = new Set(encostados(estado, agora.getTime()).map((a) => a.id))
   const idsHoje = new Set(
@@ -141,6 +144,8 @@ export function Diretores({
     return lista
   }
 
+  const ativosAgora = (vivos?.contagem?.trabalhando ?? 0)
+
   return (
     <div className="mx-auto max-w-[1180px] px-4 py-5 sm:px-6">
       {origem === 'coletor-falhou' && <AvisoColetor erro={erro} medidoEm={medidoEm} agora={agora} />}
@@ -150,6 +155,11 @@ export function Diretores({
         direita={
           <>
             <Marcador origem={origem} medidoEm={medidoEm} ms={estado.calculo_ms} />
+            {vivos?.ok && ativosAgora > 0 && (
+              <span className="rotulo !text-verde font-bold animate-pulse">
+                ● {ativosAgora} ao vivo
+              </span>
+            )}
             <span className="rotulo">{estado.resumo.agentes_casa} agentes</span>
           </>
         }
@@ -238,6 +248,7 @@ export function Diretores({
                   cor={CORES_AGENTE[squadId]}
                   agora={agora.getTime()}
                   aoAbrir={() => aoIr('diretores', a.id)}
+                  aoVivo={mapaVivos.get(a.id)}
                 />
               ))}
             </div>

@@ -42,6 +42,7 @@ export type VistaId =
   | 'biblioteca'
   | 'ferramentas'
   | 'cofre'
+  | 'falta'
 
 /** De onde a vista tira o que mostra. */
 export type Dado =
@@ -247,6 +248,16 @@ export const VISTAS: readonly Vista[] = [
         'declarado não existe aqui, e ligação achada por semelhança nunca vira aresta. ' +
         'Cobertura mede quantos aprendizados estão amarrados a algum outro, não quanto a ' +
         'operação aprendeu',
+    },
+  },
+  {
+    id: 'falta',
+    nome: 'O que falta',
+    pergunta: 'o que falta para a operação rodar com autonomia e sem pontos cegos',
+    icone: 'radar',
+    dado: {
+      tipo: 'medido',
+      fonte: 'auditoria cruzada do estado: fontes sem conexão, nós soltos no cofre, checagens reprovadas e agentes encostados',
     },
   },
 ]

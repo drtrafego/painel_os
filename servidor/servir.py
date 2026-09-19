@@ -137,7 +137,7 @@ def ler_credencial() -> tuple[bytes, bytes]:
         )
     if not stat_mod.S_ISREG(info.st_mode):
         raise CredencialQuebrada(f"{CREDENCIAL}: não é arquivo comum")
-    if info.st_mode & 0o077:
+    if os.name != "nt" and (info.st_mode & 0o077):
         raise CredencialQuebrada(
             f"{CREDENCIAL}: legível por grupo ou outros "
             f"(modo {info.st_mode & 0o777:o}). Conserto: chmod 600 {CREDENCIAL}"
@@ -206,6 +206,16 @@ def _ler_estado() -> dict:
     return dados
 
 
+def _sanitizar_erro_publico(texto: str) -> str:
+    """Remove caminhos absolutos e detalhes privados do sistema antes de expor ao navegador."""
+    if not texto:
+        return ""
+    limpo = re.sub(r"(/[a-zA-Z0-9_.-]+)+/[a-zA-Z0-9_.-]+\.py", "[arquivo.py]", texto)
+    limpo = re.sub(r"(/opt|/home|/etc|/var|/usr|/tmp|~)[^\s'\":]+", "[caminho-omitido]", limpo)
+    limpo = re.sub(r"[a-zA-Z]:\\[^\s'\":]+", "[caminho-omitido]", limpo)
+    return limpo.strip()
+
+
 def _medir_estado() -> bytes:
     """Executa uma medição. Chamada somente pelo worker único."""
     inicio = time.monotonic()
@@ -216,15 +226,16 @@ def _medir_estado() -> bytes:
             capture_output=True, text=True, timeout=120,
         )
         if r.returncode != 0:
-            erro = (r.stderr or "coletor falhou sem mensagem").strip()[:400]
+            erro_bruto = (r.stderr or "coletor falhou sem mensagem").strip()[:400]
+            erro = _sanitizar_erro_publico(erro_bruto)
     except (OSError, subprocess.SubprocessError) as e:
-        erro = f"{type(e).__name__}: {e}"[:400]
+        erro = _sanitizar_erro_publico(f"{type(e).__name__}: {e}"[:400])
 
     try:
         dados = _ler_estado()
     except (OSError, ValueError) as e:
         return json.dumps(
-            {"erro": f"não consegui ler o estado: {e}"}, ensure_ascii=False
+            {"erro": f"não consegui ler o estado: {_sanitizar_erro_publico(str(e))}"}, ensure_ascii=False
         ).encode("utf-8")
 
     # A hora vai COLADA no dado: número sem hora de coleta não entra.
@@ -298,6 +309,36 @@ def coletar(limite_espera: float = LIMITE_ESPERA_COLETA) -> bytes:
 def _invalidar_cache() -> None:
     with _coleta_pronta:
         _cache.update(quando=0.0, corpo=b"")
+
+
+_cache_vivos = {"quando": 0.0, "corpo": b""}
+_trava_vivos = threading.Lock()
+
+
+def obter_agentes_vivos() -> bytes:
+    """Sonda os agentes ao vivo usando agentes_vivos.py com cache isolado de 15s."""
+    global _cache_vivos
+    agora = time.monotonic()
+    if _cache_vivos["corpo"] and (agora - float(_cache_vivos["quando"])) < 15.0:
+        return _cache_vivos["corpo"]
+    with _trava_vivos:
+        agora = time.monotonic()
+        if _cache_vivos["corpo"] and (agora - float(_cache_vivos["quando"])) < 15.0:
+            return _cache_vivos["corpo"]
+        try:
+            import agentes_vivos
+            dados = agentes_vivos.ler_agentes()
+        except Exception as e:
+            dados = {
+                "ok": False,
+                "motivo": f"erro_sonda: {type(e).__name__}",
+                "contagem": {"trabalhando": 0, "silencioso": 0, "parado": 0, "vivos": 0, "total": 0, "indeterminados": 0},
+                "agentes": [],
+                "avisos": [str(e)],
+            }
+        corpo = json.dumps(dados, ensure_ascii=False).encode("utf-8")
+        _cache_vivos.update(quando=time.monotonic(), corpo=corpo)
+        return corpo
 
 
 class ErroDecisao(RuntimeError):
@@ -385,13 +426,15 @@ def _gravar_atomico(caminho: Path, dados: dict) -> None:
             f.write("\n")
             f.flush()
             os.fsync(f.fileno())
-        os.chmod(temporario, 0o600)
+        if os.name != "nt":
+            os.chmod(temporario, 0o600)
         os.replace(temporario, caminho)
-        dirfd = os.open(caminho.parent, os.O_DIRECTORY)
-        try:
-            os.fsync(dirfd)
-        finally:
-            os.close(dirfd)
+        if hasattr(os, "O_DIRECTORY"):
+            dirfd = os.open(caminho.parent, os.O_DIRECTORY)
+            try:
+                os.fsync(dirfd)
+            finally:
+                os.close(dirfd)
     finally:
         if os.path.exists(temporario):
             os.unlink(temporario)
@@ -589,6 +632,22 @@ class Manipulador(SimpleHTTPRequestHandler):
                 self.send_response(500)
             else:
                 self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(corpo)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(corpo)
+            return
+        if rota.path == "/api/agentes-vivos":
+            try:
+                corpo = obter_agentes_vivos()
+                self.send_response(200)
+            except Exception as e:
+                corpo = json.dumps(
+                    {"ok": False, "motivo": f"{type(e).__name__}: {e}", "agentes": []},
+                    ensure_ascii=False,
+                ).encode("utf-8")
+                self.send_response(500)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(corpo)))
             self.send_header("Cache-Control", "no-store")

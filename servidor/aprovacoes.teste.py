@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory() as pasta:
     ok("resposta afirma que não publicou", resposta["publicado"] is False)
     ok("auditoria mínima sem conteúdo nem PII", set(salvo["auditoria"][0]) == {"chave", "item_id", "de", "para", "em", "ator"})
     ok("chave bruta não é persistida", pedido["chave_idempotencia"] not in arq.read_text())
-    ok("arquivo final fica 600 e não sobra temporário", (arq.stat().st_mode & 0o777) == 0o600 and not list(Path(pasta).glob("*.tmp")))
+    ok("arquivo final fica 600 e não sobra temporário", (os.name == "nt" or (arq.stat().st_mode & 0o777) == 0o600) and not list(Path(pasta).glob("*.tmp")))
     codigo2, resposta2 = s.decidir_aprovacao(pedido, arq)
     ok("repetição idempotente não duplica auditoria", codigo2 == 200 and resposta2["idempotente"] and len(json.loads(arq.read_text())["auditoria"]) == 1)
     conflito = {**pedido, "decisao": "reprovado"}

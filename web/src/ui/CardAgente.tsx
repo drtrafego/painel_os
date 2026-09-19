@@ -19,8 +19,15 @@ const TOM_ATIVIDADE: Record<string, Tom> = {
 }
 
 export function CardAgente({
-  agente, teto, cor, agora, aoAbrir,
-}: { agente: Agente; teto: number; cor: string; agora: number; aoAbrir?: () => void }) {
+  agente, teto, cor, agora, aoAbrir, aoVivo,
+}: {
+  agente: Agente
+  teto: number
+  cor: string
+  agora: number
+  aoAbrir?: () => void
+  aoVivo?: { estado: 'trabalhando' | 'silencioso' | 'parado'; etapa?: string }
+}) {
   const at = atividade(agente, agora)
   const dias = diasParado(agente, agora)
   const fracao = agente.convocacoes === null ? null : teto > 0 ? agente.convocacoes / teto : 0
@@ -54,7 +61,15 @@ export function CardAgente({
         >
           <Icone nome={ICONE_POR_ID[agente.id] ?? 'bot'} tamanho={14} />
         </span>
-        <Pilula tom={TOM_ATIVIDADE[at.nivel]}>{at.texto}</Pilula>
+        <div className="flex items-center gap-1.5">
+          {aoVivo?.estado === 'trabalhando' && (
+            <span className="flex items-center gap-1 rounded-full border border-verde/30 bg-verde/10 px-2 py-0.5 font-mono text-[9px] text-verde animate-pulse" title={aoVivo.etapa ?? 'executando tarefa'}>
+              <span className="size-1.5 rounded-full bg-verde" />
+              ao vivo
+            </span>
+          )}
+          <Pilula tom={TOM_ATIVIDADE[at.nivel]}>{at.texto}</Pilula>
+        </div>
       </div>
 
       <h3 className="font-serif text-[19px] leading-tight text-tinta">{agente.nome}</h3>

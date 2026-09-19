@@ -467,7 +467,12 @@ def ler_tarefas():
         "por_prazo": por_prazo,
         "por_movimento": por_movimento,
         "por_projeto": [
-            {"projeto": nome, "total": total}
+            {
+                "projeto": nome if nome in TAREFAS_PROJETOS_PUBLICOS else (
+                    rotulo_seguro(nome, limite=40)[0] if rotulo_seguro(nome, limite=40) else "outros projetos"
+                ),
+                "total": total,
+            }
             for nome, total in sorted(projetos.items(), key=lambda x: (-x[1], x[0]))
         ],
         "truncado": truncado,
@@ -1542,6 +1547,9 @@ def _apelido_codex(caminho_agente: str | None, apelidos: dict[str, str]) -> str:
     return f"agente Codex {anonimo}"
 
 
+_CACHE_JSONL_CODEX = {}
+
+
 def _ler_convocacoes_codex(pasta: Path = SESSOES_CODEX):
     """Lê somente metadados estruturados de colaboração dos rollouts Codex.
 
@@ -1563,18 +1571,27 @@ def _ler_convocacoes_codex(pasta: Path = SESSOES_CODEX):
     concluidos = {}
     linhas_por_arquivo = {}
     for arq in arquivos:
-        linhas = []
         try:
-            with arq.open("r", encoding="utf-8", errors="replace") as fh:
-                for bruta in fh:
-                    try:
-                        linha = json.loads(bruta)
-                    except (ValueError, UnicodeDecodeError):
-                        continue
-                    if isinstance(linha, dict):
-                        linhas.append(linha)
+            st = arq.stat()
+            chave_cache = (str(arq), st.st_mtime_ns, st.st_size)
         except OSError:
             continue
+        if chave_cache in _CACHE_JSONL_CODEX:
+            linhas = _CACHE_JSONL_CODEX[chave_cache]
+        else:
+            linhas = []
+            try:
+                with arq.open("r", encoding="utf-8", errors="replace") as fh:
+                    for bruta in fh:
+                        try:
+                            linha = json.loads(bruta)
+                        except (ValueError, UnicodeDecodeError):
+                            continue
+                        if isinstance(linha, dict):
+                            linhas.append(linha)
+                _CACHE_JSONL_CODEX[chave_cache] = linhas
+            except OSError:
+                continue
         linhas_por_arquivo[arq] = linhas
         # Um rollout pode carregar session_meta herdado. O último que declara
         # agent_path é o dono do arquivo; sem agent_path, é a sessão Luana.
@@ -1682,6 +1699,9 @@ def _ler_convocacoes_codex(pasta: Path = SESSOES_CODEX):
     }
 
 
+_CACHE_JSONL_CLAUDE = {}
+
+
 def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_CODEX):
     """
     Le TODA convocacao de subagente e de onde ela partiu.
@@ -1753,6 +1773,36 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
     for jsonl in sorted(projetos.rglob("*.jsonl")) if projetos.is_dir() else []:
         arquivos += 1
         try:
+            st = jsonl.stat()
+            chave_cache = (str(jsonl), st.st_mtime_ns, st.st_size)
+        except OSError:
+            continue
+
+        if chave_cache in _CACHE_JSONL_CLAUDE:
+            reg = _CACHE_JSONL_CLAUDE[chave_cache]
+            for item in reg["chamadas"]:
+                ident, aid, alvo, proj, ts = item
+                if ident in chamadas:
+                    repetidas += 1
+                else:
+                    chamadas[ident] = (aid, alvo, proj, ts)
+            respondidas |= reg["respondidas"]
+            notificadas |= reg["notificadas"]
+            notificacoes_sem_par += reg["notificacoes_sem_par"]
+            for aid, tid in reg["nasceu"]:
+                nasceu.setdefault(aid, tid)
+            repetidas += reg["repetidas_locais"]
+            continue
+
+        chamadas_locais = []
+        respondidas_locais = set()
+        notificadas_locais = set()
+        nasceu_locais = []
+        notificacoes_sem_par_locais = 0
+        repetidas_locais = 0
+        ids_locais = set()
+
+        try:
             with jsonl.open("rb") as fh:
                 for bruta in fh:
                     tem_chamada = b"subagent_type" in bruta
@@ -1773,7 +1823,7 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
                         if b"tool_use_id" not in bruta:
                             continue
                         tem_resposta = any(
-                            achado.decode() in chamadas
+                            achado.decode() in ids_locais or achado.decode() in chamadas
                             for achado in RE_ID_DE_CHAMADA.findall(bruta)
                         )
                         if not tem_resposta:
@@ -1786,8 +1836,8 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
                         continue
                     if tem_notificacao:
                         ids, sem_par = _notificacoes_de_agente(linha)
-                        notificadas |= ids
-                        notificacoes_sem_par += sem_par
+                        notificadas_locais |= ids
+                        notificacoes_sem_par_locais += sem_par
                     projeto = jsonl.relative_to(projetos).parts[0]
                     for bloco in _blocos_de_ferramenta(linha):
                         if not isinstance(bloco, dict):
@@ -1799,15 +1849,17 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
                             ident = bloco.get("id")
                             if not alvo or not ident:
                                 continue
-                            if ident in chamadas:
-                                repetidas += 1
+                            if ident in ids_locais or ident in chamadas:
+                                repetidas_locais += 1
                                 continue
-                            chamadas[ident] = (
+                            ids_locais.add(ident)
+                            chamadas_locais.append((
+                                ident,
                                 linha.get("agentId"),
                                 alvo,
                                 projeto,
                                 linha.get("timestamp"),
-                            )
+                            ))
                         elif tipo == "tool_result":
                             texto = _texto_do_resultado(bloco)
                             if (
@@ -1815,12 +1867,33 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
                                 and not bloco.get("is_error")
                                 and not texto.startswith(RECIBO_DE_LANCAMENTO)
                             ):
-                                respondidas.add(bloco.get("tool_use_id"))
+                                respondidas_locais.add(bloco.get("tool_use_id"))
                             achado = RE_AGENT_ID.search(texto)
                             if achado:
-                                nasceu.setdefault(achado.group(1), bloco.get("tool_use_id"))
+                                nasceu_locais.append((achado.group(1), bloco.get("tool_use_id")))
         except OSError:
             continue
+
+        _CACHE_JSONL_CLAUDE[chave_cache] = {
+            "chamadas": chamadas_locais,
+            "respondidas": respondidas_locais,
+            "notificadas": notificadas_locais,
+            "nasceu": nasceu_locais,
+            "notificacoes_sem_par": notificacoes_sem_par_locais,
+            "repetidas_locais": repetidas_locais,
+        }
+        for item in chamadas_locais:
+            ident, aid, alvo, proj, ts = item
+            if ident in chamadas:
+                repetidas += 1
+            else:
+                chamadas[ident] = (aid, alvo, proj, ts)
+        respondidas |= respondidas_locais
+        notificadas |= notificadas_locais
+        notificacoes_sem_par += notificacoes_sem_par_locais
+        for aid, tid in nasceu_locais:
+            nasceu.setdefault(aid, tid)
+        repetidas += repetidas_locais
 
     # O agentId de um subagente vira CARGO pela chamada que o criou. Sem isso o
     # chamador seria um id hexadecimal, que nao diz nada a quem le a tela.
@@ -3031,6 +3104,9 @@ def main():
     followup = ler_followup()
     calendario = ler_calendario()
     diretiva = carregar_diretiva(DIRETIVA_JSON)
+    if isinstance(diretiva, dict) and diretiva.get("objetivo"):
+        limpo = rotulo_seguro(diretiva["objetivo"], limite=500)
+        diretiva["objetivo"] = limpo[0] if limpo else "[objetivo omitido: não passou na trava de nome de cliente]"
 
     for ag in agentes:
         ag["convocacoes"] = convocacoes.get(ag["id"])
@@ -3112,6 +3188,18 @@ def main():
             "transcripts_lidos": transcripts,
             "cron_ativo": cron["total"],
         },
+        "verificadores": {
+            s["id"]: {
+                "checagens": s["verificador"].get("checagens"),
+                "reprovadas": s["verificador"].get("reprovadas"),
+                "indeterminadas": s["verificador"].get("indeterminadas"),
+                "vencido": s["verificador"].get("vencido"),
+                "arquivo": s["verificador"].get("arquivo"),
+                "erro_leitura": s["verificador"].get("erro_leitura"),
+                "falhas": s["verificador"].get("falhas", []),
+            }
+            for s in sessao
+        },
         "cron": cron,
         "pecas": pecas,
         "tarefas": tarefas,
@@ -3143,7 +3231,21 @@ def main():
         )
 
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
-    SAIDA.write_text(json.dumps(estado, ensure_ascii=False, indent=2), encoding="utf-8")
+    import tempfile
+    fd, tmp_saida = tempfile.mkstemp(prefix=".estado-", suffix=".json", dir=str(SAIDA.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f_saida:
+            json.dump(estado, f_saida, ensure_ascii=False, indent=2)
+            f_saida.write("\n")
+            f_saida.flush()
+            os.fsync(f_saida.fileno())
+        os.replace(tmp_saida, SAIDA)
+    finally:
+        if os.path.exists(tmp_saida):
+            try:
+                os.unlink(tmp_saida)
+            except OSError:
+                pass
     print(f"escrito: {SAIDA}")
     print(
         f"  {len(agentes)} agentes da casa | {len(sessao)} de sessao | "

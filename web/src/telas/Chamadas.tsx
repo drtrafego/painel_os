@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Cabecalho, Kpi, TituloDaTela } from '../ui/primitivos'
+import { SemDado } from '../ui/SemDado'
 import type { PropsTela } from './Vazias'
 
 const TIPOS = [
@@ -46,13 +47,13 @@ export function Chamadas({ estado, vista }: PropsTela) {
         <div className="grid min-h-[430px] lg:grid-cols-[1fr_300px]">
           <div className="relative min-h-[360px] overflow-hidden border-b border-linha lg:border-r lg:border-b-0">
             <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'linear-gradient(var(--color-linha) 1px, transparent 1px), linear-gradient(90deg, var(--color-linha) 1px, transparent 1px)', backgroundSize: '34px 34px' }} />
-            {semFonte ? <div className="absolute inset-0 flex items-center justify-center p-6">
-              <div className="relative z-10 max-w-md rounded-xl border border-linha-forte bg-fundo-2/95 p-5 text-center shadow-2xl">
-                <div className="rotulo !text-ambar">esta tela não tem dado ainda</div>
-                <p className="mt-3 font-serif text-[21px] leading-tight text-tinta">O mapa só nasce quando cada padrão puder voltar à fala que o sustenta.</p>
-                <p className="mt-3 text-[12px] leading-relaxed text-tinta-2">{chamadas?.erro ?? 'A ingestão estruturada de transcrições ainda não foi ligada.'} Ausência de fonte não aparece como zero chamadas.</p>
+            {semFonte ? (
+              <div className="relative z-10 flex items-center justify-center p-6">
+                <SemDado dado={vista.dado} pergunta={vista.pergunta} />
               </div>
-            </div> : <Mapa chamadas={chamadas} selecionado={no?.id ?? null} aoSelecionar={setSelecionado} />}
+            ) : (
+              <Mapa chamadas={chamadas} selecionado={no?.id ?? null} aoSelecionar={setSelecionado} />
+            )}
           </div>
 
           <aside className="bg-black/10 p-4">

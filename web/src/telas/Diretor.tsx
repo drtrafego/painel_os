@@ -3,6 +3,7 @@ import { Barra, Cabecalho, Numero, Pilula, TEXTO_DO_TOM, TituloDaTela, type Tom 
 import { descreverServico, lerMotores, nomeMotor } from '../dados/motores'
 import { corDaSessao, corDoSquad } from '../ui/paleta'
 import { acharAgente, acharSessao, atividade, convocadores, convocados, diasParado } from '../dados/estado'
+import { useAgentesVivos } from '../dados/useAgentesVivos'
 import type { VistaId, Vista } from '../nav/rotas'
 import type { Agente, AgenteSessao, Estado, Sop } from '../dados/tipos'
 
@@ -80,6 +81,8 @@ export function Diretor({
   const saem = convocados(estado, quem)
   const chegam = convocadores(estado, quem)
   const sops = sopsLigados(estado, quem)
+  const { dados: aoVivo } = useAgentesVivos()
+  const aoVivoItem = aoVivo?.agentes?.find((a) => a.id === quem || a.id.includes(quem))
 
   return (
     <div className={`${compacto ? 'max-w-none px-5 py-5' : 'mx-auto max-w-[1240px] px-4 py-5 sm:px-6'}`}>
@@ -95,6 +98,17 @@ export function Diretor({
         <CabecalhoAgente agente={agente} cor={cor} agora={agora} />
       ) : (
         <CabecalhoSessao sessao={sessao!} cor={cor} />
+      )}
+
+      {aoVivoItem && (
+        <section className="mt-3 rounded-xl border border-verde/35 bg-verde/8 p-4" data-agente-ao-vivo>
+          <div className="flex items-center gap-2">
+            <span className="size-2 animate-pulse rounded-full bg-verde" />
+            <span className="rotulo !text-verde">agente em execução ao vivo</span>
+            <span className="ml-auto font-mono text-[10px] text-tinta-3">fase: {aoVivoItem.fase} · silêncio: {aoVivoItem.silencio_s}s</span>
+          </div>
+          <p className="mt-2 font-mono text-[12.5px] leading-relaxed text-tinta">{aoVivoItem.etapa}</p>
+        </section>
       )}
 
       <div className={`mt-3 grid gap-3 ${compacto ? 'grid-cols-1' : 'lg:grid-cols-2'}`}>

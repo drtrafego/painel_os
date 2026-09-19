@@ -143,8 +143,9 @@ def main() -> int:
     confere("arquivo ausente, COM a credencial que era certa",
             bate(porta, credencial=(USUARIO, SENHA)), 503)
 
-    escreve(f"{USUARIO}:{SENHA}\n", modo=0o644)
-    confere("permissão 644", bate(porta, credencial=(USUARIO, SENHA)), 503)
+    if os.name != "nt":
+        escreve(f"{USUARIO}:{SENHA}\n", modo=0o644)
+        confere("permissão 644", bate(porta, credencial=(USUARIO, SENHA)), 503)
 
     escreve("# só comentário\n\n")
     confere("nenhuma linha útil", bate(porta, credencial=(USUARIO, SENHA)), 503)

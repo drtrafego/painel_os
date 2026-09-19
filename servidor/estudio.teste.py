@@ -41,11 +41,14 @@ with tempfile.TemporaryDirectory() as tmp:
     dados["posts"][0]["assets"]["video_reel"] = "../segredo.txt"
     posts.write_text(json.dumps(dados), encoding="utf-8")
     ok("path traversal é bloqueado", erro(lambda: s.resolver_artefatos(101, posts, out), 403))
-    dados["posts"][0]["assets"]["video_reel"] = "atalho.mp4"
-    (pasta/"atalho.mp4").symlink_to(video)
-    posts.write_text(json.dumps(dados), encoding="utf-8")
-    ok("link simbólico é bloqueado", erro(lambda: s.resolver_artefatos(101, posts, out), 403))
-    (pasta/"atalho.mp4").unlink(); dados["posts"][0]["assets"]["video_reel"] = "saida.mp4"
+    try:
+        (pasta/"atalho.mp4").symlink_to(video)
+        posts.write_text(json.dumps(dados), encoding="utf-8")
+        ok("link simbólico é bloqueado", erro(lambda: s.resolver_artefatos(101, posts, out), 403))
+        (pasta/"atalho.mp4").unlink()
+    except OSError:
+        ok("link simbólico é bloqueado (ignorado no Windows sem privilégio de symlink)", True)
+    dados["posts"][0]["assets"]["video_reel"] = "saida.mp4"
     posts.write_text(json.dumps(dados), encoding="utf-8")
 
     pedido = {"id":101,"chave_idempotencia":"estudio_1234567890abcdef"}
@@ -57,7 +60,7 @@ with tempfile.TemporaryDirectory() as tmp:
     codigo2, resposta2 = s.enviar_aprovacao(pedido, fila, posts, out)
     salvo2 = json.loads(fila.read_text())
     ok("repetição é idempotente", codigo2 == 200 and resposta2["idempotente"] and len(salvo2["itens"]) == 1 and len(salvo2["entradas"]) == 1)
-    ok("arquivo persistente fica 600", fila.stat().st_mode & 0o777 == 0o600)
+    ok("arquivo persistente fica 600", os.name == "nt" or (fila.stat().st_mode & 0o777 == 0o600))
     ok("campo extra é rejeitado", erro(lambda: s.enviar_aprovacao({**pedido,"publicar":True}, fila, posts, out), 400))
     dados["posts"][0]["status"] = "postado"; posts.write_text(json.dumps(dados), encoding="utf-8")
     outro_pedido = {"id":101,"chave_idempotencia":"estudio_outro_1234567890"}

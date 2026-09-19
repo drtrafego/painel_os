@@ -6,6 +6,11 @@ export default defineConfig({
   // O mesmo build funciona na raiz local e numa rota HTTPS isolada.
   base: './',
   plugins: [react(), tailwindcss()],
+  css: {
+    postcss: {
+      plugins: [],
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 5180,
