@@ -1,5 +1,6 @@
 import { Icone } from './Icone'
 import { Pilula, type Tom } from './primitivos'
+import { SeletorDeData } from './SeletorDeData'
 import type { AgenteSessao, Estado } from '../dados/tipos'
 
 /**
@@ -66,7 +67,7 @@ export function Topbar({
   }
 
   return (
-    <header className="flex h-11 shrink-0 items-center gap-3 border-b border-linha bg-topo/70 px-3 sm:px-5">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-linha bg-topo/70 px-3 sm:px-5">
       <button
         type="button"
         onClick={aoAbrirMenu}
@@ -79,7 +80,11 @@ export function Topbar({
         gastao-os <span className="text-linha-forte">/</span>{' '}
         <span className="text-tinta-2">{vista}</span>
       </span>
+
       <div className="ml-auto flex shrink-0 items-center gap-3 sm:gap-4">
+        {/* Seletor de Datas Interativo */}
+        <SeletorDeData />
+
         <span className="rotulo hidden xl:inline">
           convocações de agente{' '}
           <span className="text-tinta-2">{estado.resumo.convocacoes_casa.toLocaleString('pt-BR')}</span>

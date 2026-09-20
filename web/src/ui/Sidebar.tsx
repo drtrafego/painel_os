@@ -35,27 +35,46 @@ export function Sidebar({
   estado,
   atual,
   aoIr,
+  recolhido = false,
+  aoAlternarRecolher,
 }: {
   hora: string
   estado: Estado
   atual: VistaId
   aoIr: (v: VistaId) => void
+  recolhido?: boolean
+  aoAlternarRecolher?: () => void
 }) {
   return (
     <>
-      <div className="flex items-center gap-2.5 px-4 py-4">
-        <span className="grid size-7 place-items-center rounded-[7px] border border-lima/30 bg-lima/12 text-lima">
-          <Icone nome="equipe" tamanho={14} />
-        </span>
-        <span className="min-w-0">
-          <span className="block font-mono text-[11px] font-medium tracking-[0.13em] text-tinta">
-            G4ST4OVIB3 OS
+      <div className={`flex items-center py-4 ${recolhido ? 'flex-col gap-2 px-2' : 'justify-between px-4'}`}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="grid size-7 shrink-0 place-items-center rounded-[7px] border border-lima/30 bg-lima/12 text-lima">
+            <Icone nome="equipe" tamanho={14} />
           </span>
-          <span className="rotulo block">operação gastão matos</span>
-        </span>
+          {!recolhido && (
+            <span className="min-w-0">
+              <span className="block font-mono text-[11px] font-medium tracking-[0.13em] text-tinta">
+                G4ST4OVIB3 OS
+              </span>
+              <span className="rotulo block truncate">operação gastão matos</span>
+            </span>
+          )}
+        </div>
+        {aoAlternarRecolher && (
+          <button
+            type="button"
+            onClick={aoAlternarRecolher}
+            title={recolhido ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            aria-label={recolhido ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            className="grid size-7 shrink-0 place-items-center rounded-md text-tinta-3 transition-colors hover:bg-white/5 hover:text-tinta"
+          >
+            <Icone nome={recolhido ? 'expandir' : 'recolher'} tamanho={14} />
+          </button>
+        )}
       </div>
 
-      <nav className="px-2.5" aria-label="telas do painel">
+      <nav className={recolhido ? 'px-2' : 'px-2.5'} aria-label="telas do painel">
         {VISTAS.map((v) => {
           const aqui = atual === v.id
           const sinal = SINAL[dadoDaVista(v, estado).tipo]
@@ -65,89 +84,151 @@ export function Sidebar({
               type="button"
               onClick={() => aoIr(v.id)}
               aria-current={aqui ? 'page' : undefined}
+              title={recolhido ? `${v.nome} (${sinal.titulo})` : undefined}
               className={
-                'group relative mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left transition-colors duration-200 ' +
+                'group relative mb-0.5 flex w-full items-center rounded-md text-left transition-colors duration-200 ' +
+                (recolhido ? 'justify-center p-2.5 ' : 'gap-2.5 px-2.5 py-[7px] ') +
                 (aqui ? 'bg-lima/10 text-lima' : 'text-tinta-2 hover:bg-white/4 hover:text-tinta')
               }
             >
               <Icone nome={v.icone} tamanho={14} />
-              <span className="truncate text-[12.5px]">{v.nome}</span>
+              {!recolhido && <span className="truncate text-[12.5px]">{v.nome}</span>}
               <span
-                className={`ml-auto size-[5px] shrink-0 rounded-full ${sinal.classe}`}
+                className={
+                  sinal.classe +
+                  (recolhido
+                    ? ' absolute top-1 right-1 size-[5px] shrink-0 rounded-full'
+                    : ' ml-auto size-[5px] shrink-0 rounded-full')
+                }
                 title={sinal.titulo}
               />
-              {aqui && <span className="absolute top-1.5 right-1 bottom-1.5 w-[2px] rounded-full bg-lima" />}
+              {aqui && (
+                <span
+                  className={
+                    'absolute bg-lima rounded-full ' +
+                    (recolhido ? 'left-0.5 top-2 bottom-2 w-[2px]' : 'top-1.5 right-1 bottom-1.5 w-[2px]')
+                  }
+                />
+              )}
             </button>
           )
         })}
       </nav>
 
-      <div className="mt-5 px-4">
-        <div className="mb-2.5 flex items-center justify-between">
-          <span className="rotulo">camada de comando</span>
-          <span className="rotulo">{estado.sessao.length}</span>
+      {!recolhido ? (
+        <div className="mt-5 px-4">
+          <div className="mb-2.5 flex items-center justify-between">
+            <span className="rotulo">camada de comando</span>
+            <span className="rotulo">{estado.sessao.length}</span>
+          </div>
+          {estado.sessao.map((s) => {
+            const v = s.verificador
+            // A mesma regra do card: indeterminada nao e aprovada, entao o ponto
+            // verde da barra lateral tambem nao pode acender com ela na conta.
+            const ok = v.reprovadas === 0 && v.vencido === false && v.indeterminadas === 0
+            // Ate 10/09 a pilula daqui misturava duas medidas: a COR vinha do
+            // verificador e o TEXTO vinha do service. Verificador reprovado
+            // pintava de ambar uma pilula escrita "active", e um service parado
+            // ficava verde se as checagens tivessem passado. Agora a pilula e so
+            // do motor, e o verificador tem sinal proprio ao lado.
+            const motor = lerMotores(s.motores)
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => aoIr('diretores')}
+                className="mb-1.5 block w-full rounded-md border border-linha bg-carta/60 px-2.5 py-2 text-left transition-colors hover:border-linha-forte"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="h-2.5 w-[2px] shrink-0 rounded-full"
+                    style={{ background: corDaSessao(s.id) }}
+                  />
+                  <span className="text-[12px] text-tinta">{s.nome}</span>
+                  {!ok && (
+                    <span
+                      className="text-[10px] leading-none text-ambar"
+                      title="o verificador deste agente tem checagem reprovada, vencida ou indeterminada"
+                    >
+                      ●
+                    </span>
+                  )}
+                  <span className="ml-auto" title={motor.detalhe}>
+                    <Pilula tom={motor.tom} ponto={false}>{motor.rotulo}</Pilula>
+                  </span>
+                </div>
+                <div className="rotulo mt-1 truncate">{s.camada}</div>
+              </button>
+            )
+          })}
         </div>
-        {estado.sessao.map((s) => {
-          const v = s.verificador
-          // A mesma regra do card: indeterminada nao e aprovada, entao o ponto
-          // verde da barra lateral tambem nao pode acender com ela na conta.
-          const ok = v.reprovadas === 0 && v.vencido === false && v.indeterminadas === 0
-          // Ate 10/09 a pilula daqui misturava duas medidas: a COR vinha do
-          // verificador e o TEXTO vinha do service. Verificador reprovado
-          // pintava de ambar uma pilula escrita "active", e um service parado
-          // ficava verde se as checagens tivessem passado. Agora a pilula e so
-          // do motor, e o verificador tem sinal proprio ao lado.
-          const motor = lerMotores(s.motores)
-          return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => aoIr('diretores')}
-              className="mb-1.5 block w-full rounded-md border border-linha bg-carta/60 px-2.5 py-2 text-left transition-colors hover:border-linha-forte"
-            >
-              <div className="flex items-center gap-1.5">
+      ) : (
+        <div className="mt-4 px-2">
+          <div className="mb-1 text-center font-mono text-[9px] tracking-wider text-tinta-3" title="Camada de comando">
+            CMD
+          </div>
+          {estado.sessao.map((s) => {
+            const v = s.verificador
+            const ok = v.reprovadas === 0 && v.vencido === false && v.indeterminadas === 0
+            const motor = lerMotores(s.motores)
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => aoIr('diretores')}
+                title={`${s.nome} (${s.camada}) - Motor: ${motor.rotulo}`}
+                className="relative mb-1 flex w-full items-center justify-center rounded-md border border-linha bg-carta/60 p-2 transition-colors hover:border-linha-forte"
+              >
                 <span
-                  className="h-2.5 w-[2px] shrink-0 rounded-full"
+                  className="h-3 w-[3px] rounded-full"
                   style={{ background: corDaSessao(s.id) }}
                 />
-                <span className="text-[12px] text-tinta">{s.nome}</span>
                 {!ok && (
-                  <span
-                    className="text-[10px] leading-none text-ambar"
-                    title="o verificador deste agente tem checagem reprovada, vencida ou indeterminada"
-                  >
-                    ●
-                  </span>
+                  <span className="absolute top-0.5 right-0.5 text-[8px] leading-none text-ambar">●</span>
                 )}
-                <span className="ml-auto" title={motor.detalhe}>
-                  <Pilula tom={motor.tom} ponto={false}>{motor.rotulo}</Pilula>
-                </span>
-              </div>
-              <div className="rotulo mt-1 truncate">{s.camada}</div>
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="mt-4 px-4">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="rotulo">especialistas</span>
-          <span className="rotulo">{estado.resumo.agentes_casa}</span>
+              </button>
+            )
+          })}
         </div>
-        {(Object.keys(estado.squads) as (keyof typeof estado.squads)[]).map((id) => (
-          <div key={id} className="mb-1 flex items-baseline gap-2">
-            <span className="truncate text-[11.5px] text-tinta-2">{estado.squads[id].nome}</span>
-            <span className="h-px flex-1 bg-linha" />
-            <span className="font-mono text-[10.5px] text-tinta-3">
-              {estado.agentes.filter((a) => a.squad === id).length}
-            </span>
-          </div>
-        ))}
-      </div>
+      )}
 
-      <div className="mt-auto flex items-center justify-between border-t border-linha px-4 py-3">
-        <span className="rotulo">{VISTAS.length} telas</span>
-        <span className="font-mono text-[10px] text-tinta-3">{hora}</span>
+      {!recolhido ? (
+        <div className="mt-4 px-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="rotulo">especialistas</span>
+            <span className="rotulo">{estado.resumo.agentes_casa}</span>
+          </div>
+          {(Object.keys(estado.squads) as (keyof typeof estado.squads)[]).map((id) => (
+            <div key={id} className="mb-1 flex items-baseline gap-2">
+              <span className="truncate text-[11.5px] text-tinta-2">{estado.squads[id].nome}</span>
+              <span className="h-px flex-1 bg-linha" />
+              <span className="font-mono text-[10.5px] text-tinta-3">
+                {estado.agentes.filter((a) => a.squad === id).length}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div
+          className="mt-4 flex flex-col items-center px-2 font-mono text-[10px] text-tinta-3"
+          title={`${estado.resumo.agentes_casa} especialistas em ${Object.keys(estado.squads).length} squads`}
+        >
+          <span className="text-[9px] uppercase tracking-wider text-tinta-3">AG</span>
+          <span className="font-semibold text-tinta">{estado.resumo.agentes_casa}</span>
+        </div>
+      )}
+
+      <div className={`mt-auto flex items-center border-t border-linha py-3 ${recolhido ? 'justify-center px-2' : 'justify-between px-4'}`}>
+        {!recolhido ? (
+          <>
+            <span className="rotulo">{VISTAS.length} telas</span>
+            <span className="font-mono text-[10px] text-tinta-3">{hora}</span>
+          </>
+        ) : (
+          <span className="font-mono text-[9.5px] text-tinta-3" title={`${VISTAS.length} telas | ${hora}`}>
+            {hora.slice(0, 5)}
+          </span>
+        )}
       </div>
     </>
   )

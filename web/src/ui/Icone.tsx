@@ -6,6 +6,7 @@ export type NomeIcone =
   | 'pipeline' | 'analitica' | 'biblioteca' | 'cofre'
   | 'coroa' | 'bot' | 'lupa' | 'pincel' | 'codigo' | 'escudo'
   | 'radar' | 'texto' | 'megafone' | 'grafico' | 'seta' | 'chat' | 'menu'
+  | 'recolher' | 'expandir'
 
 const TRACOS: Record<NomeIcone, React.ReactNode> = {
   comando: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
@@ -30,6 +31,8 @@ const TRACOS: Record<NomeIcone, React.ReactNode> = {
   seta: <><path d="M5 12h13M13 6l6 6-6 6" /></>,
   chat: <><path d="M20 15a2 2 0 0 1-2 2H8l-4 3V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" /><path d="M8.5 10h7M8.5 13h4" /></>,
   menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
+  recolher: <><path d="M15 18l-6-6 6-6" /></>,
+  expandir: <><path d="M9 18l6-6-6-6" /></>,
 }
 
 export function Icone({
