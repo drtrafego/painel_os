@@ -44,6 +44,31 @@ export function porModelo(estado: Estado): UsoDeModelo[] {
     .sort((a, b) => b.total - a.total || a.modelo.localeCompare(b.modelo))
 }
 
+/**
+ * Visão GERAL, ordem dele em 20/09: juntar Codex nessa mesma lista mesmo
+ * sem saber qual modelo específico rodou dentro dele. Codex entra como UMA
+ * categoria própria ("codex (motor inteiro)"), ao lado dos modelos Claude
+ * já discriminados. Não inventa modelo pro Codex: soma o total do motor
+ * (`convocacoes_por_motor.codex`) como um item a mais, com percentual
+ * recalculado sobre o novo total (Claude discriminado + Codex agregado).
+ */
+export function porModeloGeral(estado: Estado): UsoDeModelo[] {
+  const claude = porModelo(estado).map((item) => ({ ...item }))
+  const codex = estado.resumo.convocacoes_por_motor?.codex
+  const temCodex = typeof codex === 'number' && Number.isFinite(codex) && codex > 0
+
+  if (!temCodex) return claude
+
+  const somaClaude = claude.reduce((n, item) => n + item.total, 0)
+  const totalGeral = somaClaude + codex
+  if (totalGeral <= 0) return claude
+
+  const todos = [...claude, { modelo: 'codex (motor inteiro)', total: codex, percentual: 0 }]
+  return todos
+    .map((item) => ({ ...item, percentual: Math.round((item.total / totalGeral) * 1000) / 10 }))
+    .sort((a, b) => b.total - a.total || a.modelo.localeCompare(b.modelo))
+}
+
 /** Soma do array já ordenado, pra quem precisa só do piso medido. */
 export function totalMedidoPorModelo(estado: Estado): number {
   return porModelo(estado).reduce((n, item) => n + item.total, 0)

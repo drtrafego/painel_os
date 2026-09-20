@@ -6,7 +6,7 @@ import { dadoDaVista } from '../nav/rotulo'
 import { corDaSessao, corDoSquad, corPorIndice, IDENTIDADE } from '../ui/paleta'
 import { maisAntiga, reprovadas, situacaoDaDiretiva, type SituacaoDiretiva } from '../dados/estado'
 import { horaGastao, horaUtc, proximosDisparos } from '../dados/cron'
-import { porModelo } from '../dados/modelos'
+import { porModeloGeral } from '../dados/modelos'
 import type { Origem } from '../dados/useEstado'
 import type { AgenteSessao, Estado } from '../dados/tipos'
 
@@ -331,7 +331,7 @@ function DeOndeVieram({ estado }: { estado: Estado }) {
  * secao diz isso, em vez de deixar o Codex sumir sem explicacao.
  */
 function PorModelo({ estado }: { estado: Estado }) {
-  const usos = porModelo(estado)
+  const usos = porModeloGeral(estado)
   if (usos.length === 0) {
     return (
       <section className="rounded-xl border border-dashed border-linha-forte mt-3 p-4">
@@ -381,8 +381,9 @@ function PorModelo({ estado }: { estado: Estado }) {
 
       <p className="mt-3 border-t border-linha pt-2.5 text-[10.5px] leading-relaxed text-tinta-3">
         Custo não calculado: não existe preço por token confiável para este dado, e número
-        inventado é pior que número ausente. Só o motor Claude expõe o modelo resolvido; o Codex
-        não entra nesta contagem.{' '}
+        inventado é pior que número ausente. Só o motor Claude expõe QUAL modelo específico
+        rodou; o Codex entra como uma categoria só ("codex, motor inteiro"), sem discriminar
+        modelo interno, porque ele não manda esse dado.{' '}
         {piso && (
           <>
             É PISO: {medido.toLocaleString('pt-BR')} de {totalClaude?.toLocaleString('pt-BR')} convocações
