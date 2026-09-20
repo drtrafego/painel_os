@@ -589,7 +589,7 @@ for rotulo, texto in [("telefone colado com pais", "cliente 5547999887766 ligou"
 # ‼️ A PROVA QUE VALE MAIS QUE AS DE CIMA: o payload REAL tem que continuar
 # passando. Trava que reprova o estado de hoje nao e trava, e um coletor
 # parado, porque `main()` LEVANTA quando esta funcao acha problema.
-servido = Path("/opt/gastaomatos/luana/painel_os/web/src/dados/estado.json")
+servido = c.SAIDA
 if servido.is_file():
     conferir("o estado.json SERVIDO passa inteiro na porta apertada",
              c.auditar_estado_publico(json.loads(servido.read_text(encoding="utf-8")))[:5], [])

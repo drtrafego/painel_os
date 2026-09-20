@@ -73,7 +73,12 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 DIST = RAIZ / "web" / "dist"
 COLETOR = RAIZ / "coletor" / "coletar_estado.py"
-ESTADO = RAIZ / "web" / "src" / "dados" / "estado.json"
+# 20/09/2026: o snapshot REAL vive em `data/`, igual aprovacoes.json e
+# cofre.json (fora do git, permissao 700). NUNCA apontar de volta para
+# `web/src/dados/estado.json`: aquele arquivo e a fixture sintetica que o
+# build importa, e ficou sendo sobrescrita com dado real a cada request,
+# inclusive um commit que subiu essa versao suja para o GitHub publico.
+ESTADO = RAIZ / "data" / "estado.json"
 # Antes do HTTPS, mantém o acesso legado autenticado na porta pública. O
 # instalador TLS cria o marcador somente DEPOIS de certificado + nginx válidos;
 # a partir daí reinícios prendem o backend ao loopback.

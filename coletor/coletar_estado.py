@@ -7,7 +7,18 @@ O painel NAO gera nada: ele mostra o que este coletor deixou escrito.
 Rodar:
     python3 /opt/gastaomatos/luana/painel_os/coletor/coletar_estado.py
 
-Escreve: /opt/gastaomatos/luana/painel_os/web/src/dados/estado.json
+Escreve: /opt/gastaomatos/luana/painel_os/data/estado.json
+
+REGRA DE 20/09/2026, NAO REABRIR SEM LER ANTES: este arquivo de saida NAO
+pode voltar a apontar para dentro de `web/src/`. Ate 20/09 o SAIDA escrevia
+em cima de `web/src/dados/estado.json`, que e rastreado pelo git como a
+fixture SINTETICA do build (ver README, item 2 da divida tecnica). Como o
+servidor roda o coletor a cada request, o snapshot REAL (roster de agentes,
+cron, cofre de aprendizados internos, volume comercial) ficava sujando esse
+arquivo versionado, e um commit chegou a subir essa versao suja para o
+repositorio PUBLICO no GitHub (commit 97656dc, corrigido nesta mesma
+mudanca). `data/` ja e ignorado pelo git e tem permissao 700, igual
+aprovacoes.json e cofre.json: e o lugar certo para dado real de operacao.
 
 REGRA DESTE ARQUIVO: nada aqui inventa numero. Todo campo que nao pode ser
 medido no disco sai como None, e a tela mostra um traco. Se voce for
@@ -46,7 +57,7 @@ CONFIGS_CLAUDE = (RAIZ / "luana/.mcp.json", Path.home() / ".claude.json")
 MCP_RUNTIME_TOOLS = Path.home() / ".codex-luana/cache/codex_apps_tools"
 PLUGINS_CODEX = Path.home() / ".codex-luana/plugins/cache/openai-curated-remote"
 PLUGINS_CLAUDE = Path.home() / ".claude/plugins/installed_plugins.json"
-SAIDA = RAIZ / "luana/painel_os/web/src/dados/estado.json"
+SAIDA = RAIZ / "luana/painel_os/data/estado.json"
 TAREFAS_ENV = RAIZ / "luana/.env.tarefas"
 TAREFAS_BASE = "https://tarefas.casaldotrafego.com/api/v1"
 TAREFAS_STATUS = ("todo", "doing", "waiting", "backlog")
