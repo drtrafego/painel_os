@@ -7,6 +7,7 @@ import type { ArestaCofre, NoMemoria } from '../dados/tipos'
 import { Parcial } from '../ui/SemDado'
 import { Cabecalho, Kpi, Pilula, TituloDaTela } from '../ui/primitivos'
 import type { PropsTela } from './Vazias'
+import { Grafo3DCofre } from '../ui/Grafo3DCofre'
 
 /**
  * Hook para medir quadros por segundo (FPS) ao vivo via requestAnimationFrame.
@@ -605,9 +606,9 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
   // Modos de Visualização Futuristas (Estilo Kimi/JARVIS)
   const [modoComando, setModoComando] = useState(() => {
     try {
-      return localStorage.getItem('painel_os:cofre_modo_comando') === 'true'
+      return localStorage.getItem('painel_os:cofre_modo_comando') !== 'false'
     } catch {
-      return false
+      return true
     }
   })
   const [modoLayout, setModoLayout] = useState<ModoLayout>('multi-anel')
@@ -879,18 +880,35 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
           </div>
         </aside>
 
-        {/* Coluna Central: O Grafo Interativo com Fundo Sináptico */}
+        {/* Coluna Central: O Grafo Interativo 3D / 2D com Fundo Sináptico */}
         <section className={`carta overflow-hidden p-3 transition-colors ${modoComando ? 'bg-[#0B0F17]/90 border-sky-500/30' : ''}`}>
-          <Cabecalho cor="var(--color-lima)" meta={`${cofre.conexoes} ligações`}>
+          <Cabecalho cor="var(--color-lima)" meta={`${cofre.conexoes} ligações · ${modoComando ? '3D Force Graph' : '2D SVG'}`}>
             mapa dos aprendizados
           </Cabecalho>
-          <Mapa
-            nos={nos} arestas={cofre.arestas} caixa={estreito ? CAIXA_CELULAR : CAIXA_MESA}
-            ordemAreas={ordemAreas}
-            escolhido={atual.id} alvo={alvo} areaFoco={areaFoco} sempreVisiveis={sempreVisiveis}
-            caminho={caminho} modoLayout={modoLayout} animarSinal={animarSinal} modoComando={modoComando}
-            aoEscolher={escolher} aoLigar={ligar}
-          />
+          {modoComando ? (
+            <Grafo3DCofre
+              nos={nos}
+              arestas={cofre.arestas}
+              escolhido={atual.id}
+              alvo={alvo}
+              areaFoco={areaFoco}
+              sempreVisiveis={sempreVisiveis}
+              caminho={caminho}
+              modoLayout={modoLayout}
+              animarSinal={animarSinal}
+              modoComando={modoComando}
+              aoEscolher={escolher}
+              aoLigar={ligar}
+            />
+          ) : (
+            <Mapa
+              nos={nos} arestas={cofre.arestas} caixa={estreito ? CAIXA_CELULAR : CAIXA_MESA}
+              ordemAreas={ordemAreas}
+              escolhido={atual.id} alvo={alvo} areaFoco={areaFoco} sempreVisiveis={sempreVisiveis}
+              caminho={caminho} modoLayout={modoLayout} animarSinal={animarSinal} modoComando={modoComando}
+              aoEscolher={escolher} aoLigar={ligar}
+            />
+          )}
         </section>
 
         {/* Coluna Direita: Ficha do Aprendizado (Com Relações Dirigidas PRE & NEXT Clicáveis) */}

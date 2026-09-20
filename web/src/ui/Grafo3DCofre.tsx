@@ -1,0 +1,258 @@
+import { useEffect, useRef } from 'react'
+import ForceGraph3D from '3d-force-graph'
+import * as THREE from 'three'
+import { corDaArea, RAIO_MINIMO_CLICAVEL } from '../dados/cofre'
+import type { ArestaCofre, NoMemoria } from '../dados/tipos'
+
+type PropsGrafo3D = {
+  nos: NoMemoria[]
+  arestas: ArestaCofre[]
+  escolhido: string
+  alvo: string | null
+  areaFoco: string | null
+  sempreVisiveis: string[]
+  caminho: string[] | null
+  modoLayout: 'multi-anel' | 'orbita' | 'hierarquia'
+  animarSinal: boolean
+  modoComando: boolean
+  aoEscolher: (id: string) => void
+  aoLigar: (id: string) => void
+}
+
+export function Grafo3DCofre({
+  nos,
+  arestas,
+  escolhido,
+  alvo,
+  areaFoco,
+  sempreVisiveis,
+  caminho,
+  modoLayout,
+  animarSinal,
+  modoComando,
+  aoEscolher,
+  aoLigar,
+}: PropsGrafo3D) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const fgRef = useRef<any>(null)
+
+  // Conjuntos auxiliares de visibilidade e seleção
+  const noCaminho = new Set(caminho ?? [])
+  const area = new Map(nos.map((n) => [n.id, n.area]))
+  
+  const visivel = (id: string) =>
+    areaFoco === null ||
+    area.get(id) === areaFoco ||
+    sempreVisiveis.includes(area.get(id) ?? '') ||
+    noCaminho.has(id)
+
+  const arestasVisiveis = arestas.filter((a) => {
+    const deVis = visivel(a.de)
+    const paraVis = visivel(a.para)
+    if (deVis && paraVis) return true
+    if (noCaminho.has(a.de) && noCaminho.has(a.para)) return true
+    return a.ponte && (area.get(a.de) === areaFoco || area.get(a.para) === areaFoco)
+  })
+
+  // Converte nós e arestas para formato do 3d-force-graph
+  const graphData = {
+    nodes: nos.filter((n) => visivel(n.id)).map((n) => ({
+      id: n.id,
+      rotulo: n.rotulo,
+      especie: n.especie,
+      autor: n.autor,
+      area: n.area,
+      grau: n.grau,
+      peso: n.peso,
+      vencido: n.vencido,
+      val: Math.max(RAIO_MINIMO_CLICAVEL, 2 + Math.sqrt(n.grau) * 2.5),
+    })),
+    links: arestasVisiveis.map((a) => ({
+      source: a.de,
+      target: a.para,
+      porque: a.porque,
+      ponte: a.ponte,
+    })),
+  }
+
+  // Inicializa o ForceGraph3D
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const container = containerRef.current
+    const width = container.clientWidth || 800
+    const height = container.clientHeight || 550
+
+    const createGraph = (ForceGraph3D as any).default || ForceGraph3D
+    const Graph = createGraph()(container)
+      .width(width)
+      .height(height)
+      .backgroundColor(modoComando ? '#0B0F17' : '#FDFAF3')
+      .showNavInfo(false)
+      .nodeRelSize(4)
+      .nodeId('id')
+      .nodeVal('val')
+
+    // Estilo dos Nós (Objetos 3D customizados com Three.js)
+    Graph.nodeThreeObject((node: any) => {
+      const isChosen = node.id === escolhido
+      const isTarget = node.id === alvo
+      const isInPath = noCaminho.has(node.id)
+
+      const group = new THREE.Group()
+
+      // Esfera principal do nó
+      const radius = isChosen ? 7 : isTarget || isInPath ? 6 : Math.max(3, 2 + Math.sqrt(node.grau) * 1.5)
+      const geometry = new THREE.SphereGeometry(radius, 16, 16)
+      
+      const colorHex = corDaArea(node.area)
+      const material = new THREE.MeshLambertMaterial({
+        color: isChosen ? '#A3E635' : isTarget || isInPath ? '#EF4444' : colorHex,
+        transparent: true,
+        opacity: node.vencido ? 0.45 : isChosen ? 1 : 0.88,
+      })
+      const mesh = new THREE.Mesh(geometry, material)
+      group.add(mesh)
+
+      // Anel Neon Externo de Destaque quando selecionado ou no caminho
+      if (isChosen || isTarget || isInPath) {
+        const ringGeo = new THREE.RingGeometry(radius + 2, radius + 3.5, 32)
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: isChosen ? (modoComando ? '#A3E635' : '#7A4A0F') : '#EF4444',
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.85,
+        })
+        const ring = new THREE.Mesh(ringGeo, ringMat)
+        group.add(ring)
+      }
+
+      // Sprite de Texto de Rótulo (Renderização HD em Canvas)
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        canvas.width = 256
+        canvas.height = 64
+        ctx.font = isChosen ? 'bold 22px "JetBrains Mono", monospace' : '18px "JetBrains Mono", monospace'
+        ctx.fillStyle = isChosen
+          ? (modoComando ? '#FACC15' : '#1A1410')
+          : (modoComando ? '#94A3B8' : '#7A6A57')
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(node.rotulo.slice(0, 24), 128, 32)
+
+        const texture = new THREE.CanvasTexture(canvas)
+        const spriteMaterial = new THREE.SpriteMaterial({ map: texture, depthTest: false })
+        const sprite = new THREE.Sprite(spriteMaterial)
+        sprite.position.set(0, -radius - 8, 0)
+        sprite.scale.set(36, 9, 1)
+        group.add(sprite)
+      }
+
+      return group
+    })
+
+    // Estilo das Arestas Dirigidas 3D (Com setas e pulso de sinal neon)
+    Graph
+      .linkDirectionalParticles(animarSinal ? 2 : 0)
+      .linkDirectionalParticleSpeed(0.008)
+      .linkDirectionalParticleWidth(2.5)
+      .linkDirectionalParticleColor(() => (modoComando ? '#A3E635' : '#3E6E8E'))
+      .linkDirectionalArrowLength(4)
+      .linkDirectionalArrowRelPos(0.95)
+      .linkColor((link: any) => {
+        const isPath = noCaminho.has(link.source?.id) && noCaminho.has(link.target?.id)
+        if (isPath) return '#EF4444'
+        if (link.source?.id === escolhido || link.target?.id === escolhido) {
+          return modoComando ? '#A3E635' : '#7A4A0F'
+        }
+        return modoComando ? '#38BDF8' : '#E3D8C4'
+      })
+      .linkWidth((link: any) => {
+        const isPath = noCaminho.has(link.source?.id) && noCaminho.has(link.target?.id)
+        return isPath ? 2.5 : link.source?.id === escolhido || link.target?.id === escolhido ? 2.0 : 0.8
+      })
+
+    // Eventos de Clique nativo com suporte a toque (WCAG 2.5.8 adaptação 3D)
+    Graph.onNodeClick((node: any, event: MouseEvent) => {
+      if (event.shiftKey) {
+        aoLigar(node.id)
+      } else {
+        aoEscolher(node.id)
+      }
+    })
+
+    // Suporte a Redimensionamento da Janela
+    const handleResize = () => {
+      if (!containerRef.current) return
+      Graph.width(containerRef.current.clientWidth).height(containerRef.current.clientHeight)
+    }
+    window.addEventListener('resize', handleResize)
+
+    fgRef.current = Graph
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      if (containerRef.current) {
+        containerRef.current.innerHTML = ''
+      }
+    }
+  }, [modoComando])
+
+  // Atualiza Dados e Layouts sem recriar o canvas 3D
+  useEffect(() => {
+    if (!fgRef.current) return
+    const fg = fgRef.current
+
+    fg.graphData(graphData)
+
+    // Modos de Layout 3D (Atlas / Órbita Esférica / Camadas)
+    if (modoLayout === 'orbita') {
+      // Disposição em Esfera Radial Concêntrica por Grau
+      nos.forEach((n, i) => {
+        const node3d = fg.graphData().nodes.find((x: any) => x.id === n.id)
+        if (!node3d) return
+        const radius = 120 + (1 - n.grau / 10) * 160
+        const phi = Math.acos(-1 + (2 * i) / nos.length)
+        const theta = Math.sqrt(nos.length * Math.PI) * phi
+        node3d.fx = radius * Math.cos(theta) * Math.sin(phi)
+        node3d.fy = radius * Math.sin(theta) * Math.sin(phi)
+        node3d.fz = radius * Math.cos(phi)
+      })
+    } else if (modoLayout === 'hierarquia') {
+      // Disposição em Camadas / Tiers por Espécie
+      const especies = ['regra', 'dor', 'gancho', 'métrica', 'decisão', 'conceito', 'sinal', 'alerta', 'lead']
+      nos.forEach((n, i) => {
+        const node3d = fg.graphData().nodes.find((x: any) => x.id === n.id)
+        if (!node3d) return
+        const layerIdx = especies.indexOf(n.especie.toLowerCase())
+        node3d.fy = (layerIdx - 4) * 60
+        node3d.fx = ((i % 6) - 2.5) * 55
+        node3d.fz = (Math.floor(i / 6) - 2) * 40
+      })
+    } else {
+      // Free Force 3D Atlas
+      nos.forEach((n) => {
+        const node3d = fg.graphData().nodes.find((x: any) => x.id === n.id)
+        if (node3d) {
+          node3d.fx = undefined
+          node3d.fy = undefined
+          node3d.fz = undefined
+        }
+      })
+    }
+  }, [graphData, modoLayout])
+
+  return (
+    <div className="relative h-[550px] w-full overflow-hidden rounded-lg">
+      <div ref={containerRef} className="h-full w-full cursor-grab active:cursor-grabbing" />
+      
+      {/* Controles de Câmera e Dicas de Interação 3D (WCAG / Mobile) */}
+      <div className={`absolute bottom-3 left-3 z-10 rounded border px-2.5 py-1.5 font-mono text-[10px] backdrop-blur-md ${
+        modoComando ? 'border-sky-500/30 bg-[#0B0F17]/80 text-slate-300' : 'border-linha bg-carta/80 text-tinta-2'
+      }`}>
+        <span>🖱️ Arrasta pra <strong className="text-sky-400">ROTACIONAR 3D</strong> · Roda/Pinch p/ Zoom · <kbd className="rounded border border-slate-700 px-1">Shift</kbd>+Clique p/ caminho</span>
+      </div>
+    </div>
+  )
+}
