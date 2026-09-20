@@ -67,3 +67,15 @@ export function corDoSquad(squad: string): string {
 export function corDaSessao(id: string): string {
   return COR_DA_SESSAO[id] ?? IDENTIDADE.lima
 }
+
+/**
+ * Cor por POSIÇÃO, não por nome cadastrado. Usado onde a lista de chaves é
+ * medida do disco e pode ganhar um item novo a qualquer coleta (modelo de IA
+ * novo, por exemplo): um mapa fixo por nome deixaria o item novo cinza pra
+ * sempre até alguém lembrar de cadastrar. Cicla pela mesma paleta da marca.
+ */
+const CICLO_IDENTIDADE = [IDENTIDADE.lima, IDENTIDADE.ciano, IDENTIDADE.pervinca, IDENTIDADE.ambar]
+
+export function corPorIndice(indice: number): string {
+  return CICLO_IDENTIDADE[indice % CICLO_IDENTIDADE.length]
+}

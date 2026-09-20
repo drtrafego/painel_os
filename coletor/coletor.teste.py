@@ -773,6 +773,70 @@ conferir("as sete chamadas continuam contadas como convocação",
 shutil.rmtree(tmp_claude, ignore_errors=True)
 shutil.rmtree(tmp_sem_codex, ignore_errors=True)
 
+print("\n--- modelo resolvido: contagem por rótulo, e o piso quando falta")
+# `resolvedModel` mora no `toolUseResult` DA LINHA (nao dentro do bloco
+# tool_result), entao o teste escreve o campo no nivel certo, do jeito que o
+# harness de verdade escreve. Se este teste passasse com o campo no lugar
+# errado, ele nao provaria nada sobre o coletor real.
+tmp_modelo = Path(tempfile.mkdtemp())
+tmp_sem_codex_modelo = Path(tempfile.mkdtemp())
+projeto_modelo = tmp_modelo / "-projeto-modelo"
+projeto_modelo.mkdir()
+
+
+def resultado_agente(ident, texto, modelo=None, erro=False):
+    linha = {
+        "timestamp": "2026-09-19T10:00:01Z", "type": "user",
+        "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": ident, "is_error": erro, "content": texto},
+        ]},
+    }
+    if modelo is not None:
+        linha["toolUseResult"] = {"resolvedModel": modelo}
+    return json.dumps(linha) + "\n"
+
+
+(projeto_modelo / "sessao.jsonl").write_text(
+    # 1 e 2: dois modelos distintos não podem se misturar num rótulo só
+    chamada("toolu_m_sonnet", "com-sonnet")
+    + resultado_agente("toolu_m_sonnet", "ok", modelo="claude-sonnet-5")
+    + chamada("toolu_m_opus", "com-opus")
+    + resultado_agente("toolu_m_opus", "ok", modelo="claude-opus-5")
+    # 3: carimbo de data no id do modelo tem que cair na MESMA família de
+    #    quem não tem data, senão o snapshot do dia vira "modelo novo" sozinho
+    + chamada("toolu_m_haiku", "com-haiku")
+    + resultado_agente("toolu_m_haiku", "ok", modelo="claude-haiku-4-5-20251001")
+    # 4: resultado sem toolUseResult nenhum. Conta no total de convocações,
+    #    mas fica de fora do por_modelo: é o PISO que o docstring declara.
+    + chamada("toolu_m_sem_modelo", "sem-modelo")
+    + resultado("toolu_m_sem_modelo", "ok, sem toolUseResult.resolvedModel")
+    # 5: toolUseResult existe mas é de outra coisa (ex.: metadado de outra
+    #    ferramenta) — não pode virar rótulo "None" nem quebrar a coleta.
+    + chamada("toolu_m_invalido", "com-invalido")
+    + json.dumps({
+        "timestamp": "2026-09-19T10:00:01Z", "type": "user",
+        "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_m_invalido", "content": "ok"},
+        ]},
+        "toolUseResult": {"stdout": "isto não é resolvedModel"},
+    }) + "\n",
+    encoding="utf-8",
+)
+conv_modelo = c.ler_convocacoes(projetos=tmp_modelo, sessoes_codex=tmp_sem_codex_modelo)
+conferir("cada modelo simples vira o próprio rótulo, sem se misturar",
+         (conv_modelo["por_modelo"].get("sonnet-5"), conv_modelo["por_modelo"].get("opus-5")), (1, 1))
+conferir("carimbo de data some do rótulo (mesma família de modelo)",
+         conv_modelo["por_modelo"].get("haiku-4-5"), 1)
+conferir("chamada sem resolvedModel conta no total e fica de fora do por_modelo",
+         ("sem-modelo" in conv_modelo["por_agente"], conv_modelo["por_modelo"].get("sem-modelo")),
+         (True, None))
+conferir("toolUseResult de outra coisa não vira rótulo nenhum (só 3 rótulos reais)",
+         sum(conv_modelo["por_modelo"].values()), 3)
+conferir("_rotulo_modelo nunca esconde um id fora do formato esperado",
+         c._rotulo_modelo("gpt-5-mini"), "gpt-5-mini")
+shutil.rmtree(tmp_modelo, ignore_errors=True)
+shutil.rmtree(tmp_sem_codex_modelo, ignore_errors=True)
+
 print("\n--- cobranças: agrega e descarta identificação")
 amostra_cobrancas = lambda: {"overdueInvoices": [{"id": "inv-secreta", "clientName": "Pessoa Teste", "phone": "5511999999999", "amount": "100.50", "currency": "BRL", "dueDate": "2026-09-01"}, {"id": "inv-2", "clientName": "Outra Pessoa", "amount": 20, "currency": "BRL", "dueDate": "2026-08-01"}], "overdueClients": [{"name": "Pessoa Teste"}, {"name": "Outra Pessoa"}]}
 cobrancas = c.ler_cobrancas(amostra_cobrancas)

@@ -1536,6 +1536,39 @@ def _texto_do_resultado(bloco: dict) -> str:
     return ""
 
 
+# O harness escreve o MODELO DE VERDADE que rodou a convocação em
+# `toolUseResult.resolvedModel` da linha de resultado da ferramenta `Agent`,
+# nao no `tool_use` que pediu o despacho (pedido nao e resolucao: `model` pode
+# vir omitido no despacho e o harness escolhe o padrao). Medido em 19/09/2026
+# contra transcript real: os 840 casos de `resolvedModel` na sessao da Luana
+# vieram, sem excecao, de um `tool_result` cujo `tool_use_id` aponta pra um
+# `tool_use` com `name == "Agent"`. E' por isso que a extracao mora no MESMO
+# lugar que ja le `tool_result` (`respondidas_locais`, `nasceu_locais`), e nao
+# precisa checar o nome da ferramenta de novo: o campo so existe ali.
+#
+# RE_MODELO_SUFIXO_DATA tira o carimbo de data que alguns ids de modelo trazem
+# (ex.: "claude-haiku-4-5-20251001"), pra nao contar a mesma familia de modelo
+# como itens diferentes so porque o snapshot mudou de dia. O que sobra
+# ("claude-haiku-4-5") ainda diferencia versao maior/menor.
+RE_MODELO_SUFIXO_DATA = re.compile(r"-\d{8}$")
+
+
+def _rotulo_modelo(bruto: str) -> str:
+    """"claude-sonnet-5" -> "sonnet-5"; "claude-haiku-4-5-20251001" -> "haiku-4-5".
+
+    Nao existe lista de modelos conhecidos aqui de proposito: um modelo novo
+    tem que aparecer sozinho na tela, com o rotulo que sobra deste corte, e
+    nunca cair num "outro" que esconde qual foi. Se o valor nao bater no
+    formato esperado ("claude-" na frente), ele sai INTEIRO: rotulo que
+    esconde um id desconhecido e pior que rotulo feio.
+    """
+    if not isinstance(bruto, str) or not bruto.strip():
+        return "desconhecido"
+    sem_data = RE_MODELO_SUFIXO_DATA.sub("", bruto.strip())
+    sem_prefixo = sem_data.removeprefix("claude-")
+    return sem_prefixo or bruto
+
+
 def _apelido_codex(caminho_agente: str | None, apelidos: dict[str, str]) -> str:
     """Nome público estável sem publicar o caminho/tarefa, que pode citar cliente."""
     if not caminho_agente:
@@ -1756,11 +1789,17 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
     saida["por_motor"] = {"claude": 0, "codex": 0}
     saida["arquivos_por_motor"] = {"claude": 0, "codex": 0}
     saida["erros_por_motor"] = {"claude": None, "codex": None}
+    # Modelo especifico (sonnet-5, haiku, opus...) so existe pro motor Claude:
+    # `resolvedModel` e campo do harness Claude Code, o rollout Codex nao tem
+    # equivalente medido. Por isso este contador nunca soma com o de Codex, e
+    # a tela precisa dizer isso, nao inventar um "n/a" que parece zero.
+    saida["por_modelo"] = {}
     if not projetos.is_dir():
         saida["erros_por_motor"]["claude"] = "catálogo de transcrições Claude não encontrado"
 
     chamadas = {}   # id da chamada -> (agentId do chamador ou None, alvo, projeto, quando)
     nasceu = {}     # agentId do filho -> id da chamada que o criou
+    modelo_de = {}  # id da chamada -> resolvedModel bruto, so quando o resultado trouxe
     repetidas = 0
     arquivos = 0
     # `respondidas`: a chamada recebeu resultado DIRETO, e ele nao e o recibo de
@@ -1791,6 +1830,8 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
             notificacoes_sem_par += reg["notificacoes_sem_par"]
             for aid, tid in reg["nasceu"]:
                 nasceu.setdefault(aid, tid)
+            for ident, modelo in reg.get("modelos", []):
+                modelo_de.setdefault(ident, modelo)
             repetidas += reg["repetidas_locais"]
             continue
 
@@ -1798,6 +1839,7 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
         respondidas_locais = set()
         notificadas_locais = set()
         nasceu_locais = []
+        modelos_locais = []
         notificacoes_sem_par_locais = 0
         repetidas_locais = 0
         ids_locais = set()
@@ -1871,6 +1913,17 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
                             achado = RE_AGENT_ID.search(texto)
                             if achado:
                                 nasceu_locais.append((achado.group(1), bloco.get("tool_use_id")))
+                            # O modelo resolvido vem no toolUseResult DA LINHA,
+                            # nao dentro do bloco: ver o comentario de
+                            # _rotulo_modelo. So conta quando o resultado esta
+                            # amarrado a uma chamada (tool_use_id presente).
+                            resultado_bruto = linha.get("toolUseResult")
+                            modelo_bruto = (
+                                resultado_bruto.get("resolvedModel")
+                                if isinstance(resultado_bruto, dict) else None
+                            )
+                            if isinstance(modelo_bruto, str) and modelo_bruto and bloco.get("tool_use_id"):
+                                modelos_locais.append((bloco.get("tool_use_id"), modelo_bruto))
         except OSError:
             continue
 
@@ -1879,6 +1932,7 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
             "respondidas": respondidas_locais,
             "notificadas": notificadas_locais,
             "nasceu": nasceu_locais,
+            "modelos": modelos_locais,
             "notificacoes_sem_par": notificacoes_sem_par_locais,
             "repetidas_locais": repetidas_locais,
         }
@@ -1893,6 +1947,8 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
         notificacoes_sem_par += notificacoes_sem_par_locais
         for aid, tid in nasceu_locais:
             nasceu.setdefault(aid, tid)
+        for ident, modelo in modelos_locais:
+            modelo_de.setdefault(ident, modelo)
         repetidas += repetidas_locais
 
     # O agentId de um subagente vira CARGO pela chamada que o criou. Sem isso o
@@ -1954,6 +2010,17 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
             arestas.items(), key=lambda kv: (-kv[1], kv[0][0], kv[0][2])
         )
     ]
+    # So conta pra `por_modelo` o ident que sobreviveu a deduplicacao de
+    # `chamadas` (a mesma regra de "id da chamada, nao linha" usada no total).
+    # Chamada sem resultado ainda medido (agente async que nao voltou, erro
+    # antes do harness resolver o modelo) fica de fora, e por isso a soma de
+    # `por_modelo` pode ser MENOR que `por_motor.claude`: e' piso, nao total.
+    for ident, modelo_bruto in modelo_de.items():
+        if ident not in chamadas:
+            continue
+        rotulo = _rotulo_modelo(modelo_bruto)
+        saida["por_modelo"][rotulo] = saida["por_modelo"].get(rotulo, 0) + 1
+
     saida["por_motor"]["claude"] = len(chamadas)
     saida["arquivos_por_motor"]["claude"] = arquivos
     saida["retornos_sem_par"] = notificacoes_sem_par
@@ -3158,6 +3225,11 @@ def main():
                 f"chamada e não casam com ninguém. "
                 f"CONTADOR VIVO: muda enquanto a operação roda, então ele só vale com a hora ao lado"
             ),
+            "convocacoes_por_modelo": (
+                "resolvedModel do toolUseResult de cada chamada Agent nos transcripts Claude, "
+                "contado por id da chamada; existe só para o motor Claude (Codex não expõe este "
+                "campo) e é PISO, porque chamada sem resultado ainda medido fica de fora"
+            ),
             "verificadores": "verificar_frota_ULTIMO.txt e verificar_bots_ULTIMO.txt, lidos, não rodados",
             "pecas": (
                 f"produtor_conteudo/data/posts.json ({pecas['total']} registros) mais a "
@@ -3184,6 +3256,7 @@ def main():
             "convocacoes_por_subagente": conv["por_subagente"],
             "convocacoes_repetidas_descartadas": conv["repetidas_descartadas"],
             "convocacoes_por_motor": conv["por_motor"],
+            "convocacoes_por_modelo": conv["por_modelo"],
             "transcripts_por_motor": conv["arquivos_por_motor"],
             "transcripts_lidos": transcripts,
             "cron_ativo": cron["total"],

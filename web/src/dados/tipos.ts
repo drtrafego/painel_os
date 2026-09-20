@@ -276,6 +276,7 @@ export type Estado = {
     convocacoes_por_subagente?: number
     convocacoes_repetidas_descartadas?: number
     convocacoes_por_motor?: Record<string, number>
+    convocacoes_por_modelo?: Record<string, number>
     transcripts_por_motor?: Record<string, number>
     transcripts_lidos: number
     cron_ativo: number | null

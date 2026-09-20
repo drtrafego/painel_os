@@ -3,9 +3,10 @@ import { Parcial } from '../ui/SemDado'
 import { Icone } from '../ui/Icone'
 import { VISTAS, type VistaId, type Vista } from '../nav/rotas'
 import { dadoDaVista } from '../nav/rotulo'
-import { corDaSessao, corDoSquad, IDENTIDADE } from '../ui/paleta'
+import { corDaSessao, corDoSquad, corPorIndice, IDENTIDADE } from '../ui/paleta'
 import { maisAntiga, reprovadas, situacaoDaDiretiva, type SituacaoDiretiva } from '../dados/estado'
 import { horaGastao, horaUtc, proximosDisparos } from '../dados/cron'
+import { porModelo } from '../dados/modelos'
 import type { Origem } from '../dados/useEstado'
 import type { AgenteSessao, Estado } from '../dados/tipos'
 
@@ -137,6 +138,7 @@ export function Comando({
       </div>
 
       <DeOndeVieram estado={estado} />
+      <PorModelo estado={estado} />
 
       <section className="mt-3">
         <Cabecalho cor="var(--color-lima)" meta={`${VISTAS.length} telas`}>
@@ -308,6 +310,85 @@ function DeOndeVieram({ estado }: { estado: Estado }) {
         correspondem a uma especialidade permanente da casa. Os apelidos do Codex são preservados,
         mas briefing e conversa não atravessam para esta tela. A separação evita atribuir atividade
         recente a um cargo que existe apenas como especificação.
+      </p>
+    </section>
+  )
+}
+
+/**
+ * MODELOS DE IA EM USO.
+ *
+ * O mesmo padrao de barra empilhada de `DeOndeVieram`, agora por MODELO
+ * especifico (sonnet-5, opus-5, haiku-4-5...), medido no `resolvedModel` de
+ * cada chamada de subagente Claude (ver `porModelo` em `dados/modelos.ts`).
+ *
+ * ‼️ NAO MOSTRA CUSTO. Nao existe preco por token confiavel neste dado, e
+ * numero de custo inventado e pior que numero ausente: parece medido e nao
+ * e. O que se mede aqui e FREQUENCIA, e o rotulo diz isso explicitamente, em
+ * vez de deixar a ausencia de custo parecer esquecimento.
+ *
+ * E' exclusivo do motor Claude: o Codex nao expoe este campo no rollout, e a
+ * secao diz isso, em vez de deixar o Codex sumir sem explicacao.
+ */
+function PorModelo({ estado }: { estado: Estado }) {
+  const usos = porModelo(estado)
+  if (usos.length === 0) {
+    return (
+      <section className="rounded-xl border border-dashed border-linha-forte mt-3 p-4">
+        <Cabecalho meta="sem fonte">modelos de IA em uso</Cabecalho>
+        <p className="text-[12px] leading-[1.6] text-tinta-2">
+          Aqui ficaria o modelo especifico (sonnet, opus, haiku...) por trás de cada convocação.
+          Não tem dado ainda: nenhuma chamada medida trouxe o modelo resolvido no resultado.
+        </p>
+      </section>
+    )
+  }
+
+  const medido = usos.reduce((n, u) => n + u.total, 0)
+  const totalClaude = estado.resumo.convocacoes_por_motor?.claude ?? null
+  const piso = totalClaude !== null && medido < totalClaude
+
+  return (
+    <section className="carta mt-3 p-4">
+      <Cabecalho cor="var(--color-ciano)" meta="resolvedModel, por id de chamada">
+        modelos de IA em uso
+      </Cabecalho>
+
+      <div className="flex h-1.5 w-full overflow-hidden rounded-full">
+        {usos.map((u, i) => (
+          <span
+            key={u.modelo}
+            style={{ width: `${u.percentual}%`, background: corPorIndice(i) }}
+            title={`${u.modelo}: ${u.total} (${u.percentual}%)`}
+          />
+        ))}
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {usos.map((u, i) => (
+          <div key={u.modelo} className="flex items-start gap-2">
+            <span className="mt-0.5 h-7 w-[2px] shrink-0 rounded-full" style={{ background: corPorIndice(i) }} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[12px] text-tinta-2">{u.modelo}</span>
+              <span className="rotulo mt-0.5 block">{u.percentual}% do medido</span>
+            </span>
+            <span className="font-serif text-[21px] leading-none" style={{ color: corPorIndice(i) }}>
+              {u.total.toLocaleString('pt-BR')}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-3 border-t border-linha pt-2.5 text-[10.5px] leading-relaxed text-tinta-3">
+        Custo não calculado: não existe preço por token confiável para este dado, e número
+        inventado é pior que número ausente. Só o motor Claude expõe o modelo resolvido; o Codex
+        não entra nesta contagem.{' '}
+        {piso && (
+          <>
+            É PISO: {medido.toLocaleString('pt-BR')} de {totalClaude?.toLocaleString('pt-BR')} convocações
+            Claude já têm o modelo medido; o resto ainda não trouxe resultado ou não foi lido.
+          </>
+        )}
       </p>
     </section>
   )
