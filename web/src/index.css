@@ -154,6 +154,30 @@
   border-radius: 3px;
 }
 
+/* Efeitos Futuristas de Centro de Comando / Synapse Network */
+@keyframes pulso-itinerante {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@keyframes neon-glow-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.95; transform: scale(1.18); }
+}
+
+.aresta-pulsante {
+  stroke-dasharray: 6 6;
+  animation: pulso-itinerante 1s linear infinite;
+}
+
+.glow-no {
+  filter: drop-shadow(0 0 8px rgba(163, 230, 53, 0.75));
+}
+
+.glow-aresta {
+  filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.85));
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 1ms !important;
