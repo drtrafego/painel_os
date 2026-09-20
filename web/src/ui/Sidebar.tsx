@@ -123,41 +123,43 @@ export function Sidebar({
           </div>
           {estado.sessao.map((s) => {
             const v = s.verificador
-            // A mesma regra do card: indeterminada nao e aprovada, entao o ponto
-            // verde da barra lateral tambem nao pode acender com ela na conta.
             const ok = v.reprovadas === 0 && v.vencido === false && v.indeterminadas === 0
-            // Ate 10/09 a pilula daqui misturava duas medidas: a COR vinha do
-            // verificador e o TEXTO vinha do service. Verificador reprovado
-            // pintava de ambar uma pilula escrita "active", e um service parado
-            // ficava verde se as checagens tivessem passado. Agora a pilula e so
-            // do motor, e o verificador tem sinal proprio ao lado.
             const motor = lerMotores(s.motores)
             return (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => aoIr('diretores')}
-                className="mb-1.5 block w-full rounded-md border border-linha bg-carta/60 px-2.5 py-2 text-left transition-colors hover:border-linha-forte"
+                className="group relative mb-2 block w-full overflow-hidden rounded-lg border border-linha bg-carta/80 p-2.5 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-linha-forte hover:shadow-md"
               >
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="h-2.5 w-[2px] shrink-0 rounded-full"
-                    style={{ background: corDaSessao(s.id) }}
-                  />
-                  <span className="text-[12px] text-tinta">{s.nome}</span>
-                  {!ok && (
+                {/* Indicador Neon Lateral de Identidade */}
+                <div
+                  className="absolute inset-y-0 left-0 w-[3px] transition-all group-hover:w-[4px]"
+                  style={{ background: corDaSessao(s.id) }}
+                />
+                
+                <div className="flex items-center gap-2 pl-1.5">
+                  {/* Status Indicator com Pulso Animado (Agent Dock) */}
+                  <span className="relative flex size-2 shrink-0">
                     <span
-                      className="text-[10px] leading-none text-ambar"
-                      title="o verificador deste agente tem checagem reprovada, vencida ou indeterminada"
-                    >
-                      ●
-                    </span>
-                  )}
+                      className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${
+                        ok ? 'bg-verde' : 'bg-ambar'
+                      }`}
+                    />
+                    <span
+                      className={`relative inline-flex size-2 rounded-full ${
+                        ok ? 'bg-verde' : 'bg-ambar'
+                      }`}
+                    />
+                  </span>
+
+                  <span className="text-[12.5px] font-semibold text-tinta">{s.nome}</span>
+
                   <span className="ml-auto" title={motor.detalhe}>
                     <Pilula tom={motor.tom} ponto={false}>{motor.rotulo}</Pilula>
                   </span>
                 </div>
-                <div className="rotulo mt-1 truncate">{s.camada}</div>
+                <div className="rotulo mt-1 pl-1.5 truncate text-[9.5px] text-tinta-3">{s.camada}</div>
               </button>
             )
           })}

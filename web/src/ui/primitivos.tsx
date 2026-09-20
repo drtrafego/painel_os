@@ -131,7 +131,7 @@ export function TituloDaTela({
   )
 }
 
-/** Cartao de KPI: rotulo micro em cima, numero em serifa embaixo. */
+/** Cartão de KPI: rótulo micro em cima, número em serifa embaixo. Com efeito de profundidade 3D interativa. */
 export function Kpi({
   rotulo,
   valor,
@@ -146,17 +146,23 @@ export function Kpi({
   const vazio = valor === null || valor === undefined || valor === ''
   const texto = vazio ? '—' : typeof valor === 'number' ? valor.toLocaleString('pt-BR') : valor
   return (
-    <div data-kpi className="rounded-[9px] border border-linha bg-carta-alta p-3.5">
-      <div className="rotulo mb-2 truncate" title={rotulo}>
+    <div
+      data-kpi
+      className="group relative overflow-hidden rounded-[10px] border border-linha bg-carta-alta/80 p-3.5 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-linha-forte hover:shadow-lg hover:shadow-lima/10"
+    >
+      {/* Luz neon sutil de fundo ao passar o ponteiro */}
+      <div className="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-lima/5 opacity-0 blur-xl transition-opacity duration-300 group-hover:opacity-100" />
+      
+      <div className="rotulo relative z-10 mb-2 truncate" title={rotulo}>
         {rotulo}
       </div>
       <div
-        className={`font-serif text-[32px] leading-none ${vazio ? 'text-tinta-3' : cor}`}
+        className={`font-serif text-[32px] leading-none relative z-10 ${vazio ? 'text-tinta-3' : cor}`}
         title={vazio ? 'não há registro deste número' : undefined}
       >
         {texto}
       </div>
-      {nota && <div className="mt-2 font-mono text-[10px] leading-snug text-tinta-3">{nota}</div>}
+      {nota && <div className="relative z-10 mt-2 font-mono text-[10px] leading-snug text-tinta-3">{nota}</div>}
     </div>
   )
 }
