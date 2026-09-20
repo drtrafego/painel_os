@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { SeletorDeData } from './SeletorDeData'
 
 const TOM = {
   verde: { texto: 'text-verde', ponto: 'bg-verde', fundo: 'bg-verde/10', borda: 'border-verde/25' },
@@ -118,11 +119,14 @@ export function TituloDaTela({
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-end justify-between gap-x-5 gap-y-2">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <h1 className="titulo-pagina">{titulo}</h1>
         <p className="rotulo mt-1.5">{pergunta}</p>
       </div>
-      {direita && <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1">{direita}</div>}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2">
+        <SeletorDeData />
+        {direita}
+      </div>
     </div>
   )
 }
