@@ -605,9 +605,9 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
   // Modos de Visualização Futuristas (Estilo Kimi/JARVIS)
   const [modoComando, setModoComando] = useState(() => {
     try {
-      return localStorage.getItem('painel_os:cofre_modo_comando') !== 'false'
+      return localStorage.getItem('painel_os:cofre_modo_comando') === 'true'
     } catch {
-      return true
+      return false
     }
   })
   const [modoLayout, setModoLayout] = useState<ModoLayout>('multi-anel')
