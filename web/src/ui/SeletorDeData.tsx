@@ -222,27 +222,27 @@ export function SeletorDeData({
   const textoFaixaFormatada = `${formatarDataBr(faixaAtiva.inicio)} — ${formatarDataBr(faixaAtiva.fim)}`
 
   return (
-    <div ref={containerRef} className="relative inline-flex items-center text-slate-100 font-sans">
+    <div ref={containerRef} className="relative inline-flex items-center text-[var(--color-tinta)] font-sans">
       {/* BARRA DE NAVEGAÇÃO E SELETOR DE DATAS DA CABEÇA (Conforme Imagem 1) */}
       <div className="flex items-center gap-2">
         {/* Controles rápidos de mês: < Mês Ano > */}
-        <div className="flex items-center rounded-xl border border-slate-800 bg-[#12161A]/90 p-0.5 shadow-sm">
+        <div className="flex items-center rounded-xl border border-[var(--color-linha)] bg-[var(--color-carta)] p-0.5 shadow-sm">
           <button
             type="button"
             onClick={navegarMesAnterior}
             title="Mês anterior"
-            className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-white active:scale-95"
+            className="flex size-7 items-center justify-center rounded-lg text-[var(--color-tinta-2)] transition-colors hover:bg-[var(--color-fundo)] hover:text-[var(--color-tinta)] active:scale-95"
           >
             <span className="text-xs">‹</span>
           </button>
-          <span className="px-2.5 font-mono text-[12px] font-semibold text-slate-200">
+          <span className="px-2.5 font-mono text-[12px] font-semibold text-[var(--color-tinta)]">
             {nomeMesAnoAtivo}
           </span>
           <button
             type="button"
             onClick={navegarProximoMes}
             title="Próximo mês"
-            className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-white active:scale-95"
+            className="flex size-7 items-center justify-center rounded-lg text-[var(--color-tinta-2)] transition-colors hover:bg-[var(--color-fundo)] hover:text-[var(--color-tinta)] active:scale-95"
           >
             <span className="text-xs">›</span>
           </button>
@@ -253,7 +253,7 @@ export function SeletorDeData({
           type="button"
           onClick={() => setAberto((a) => !a)}
           aria-expanded={aberto}
-          className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-[#12161A]/90 px-3.5 py-1.5 font-mono text-[12px] font-medium text-slate-200 shadow-sm transition-all hover:border-slate-700 hover:bg-slate-800/80 active:scale-95"
+          className="flex items-center gap-2.5 rounded-xl border border-[var(--color-linha)] bg-[var(--color-carta)] px-3.5 py-1.5 font-mono text-[12px] font-medium text-[var(--color-tinta)] shadow-sm transition-all hover:border-[var(--color-linha-forte)] hover:bg-[var(--color-fundo)] active:scale-95"
         >
           <span className="opacity-80">📅</span>
           <span>{textoFaixaFormatada}</span>
@@ -262,9 +262,9 @@ export function SeletorDeData({
 
       {/* POPOVER MODAL COMPLETO (Conforme Imagem 2) */}
       {aberto && (
-        <div className="absolute right-0 top-full z-50 mt-2 flex w-[680px] max-w-[95vw] overflow-hidden rounded-2xl border border-slate-800 bg-[#12161A] shadow-2xl backdrop-blur-xl">
+        <div className="absolute right-0 top-full z-50 mt-2 flex w-[680px] max-w-[95vw] overflow-hidden rounded-2xl border border-[var(--color-linha)] bg-[var(--color-carta)] text-[var(--color-tinta)] shadow-2xl backdrop-blur-xl">
           {/* Coluna Esquerda: Presets */}
-          <div className="w-44 shrink-0 border-r border-slate-800/80 bg-[#0E1114] p-3 text-[13px] font-medium text-slate-300">
+          <div className="w-44 shrink-0 border-r border-[var(--color-linha)] bg-[var(--color-fundo)] p-3 text-[13px] font-medium text-[var(--color-tinta-2)]">
             <div className="space-y-1">
               {[
                 { key: 'hoje', label: 'Hoje' },
@@ -278,7 +278,7 @@ export function SeletorDeData({
                   key={p.key}
                   type="button"
                   onClick={() => aplicarPreset(p.key as any)}
-                  className="block w-full rounded-lg px-3 py-2 text-left transition-colors hover:bg-slate-800/70 hover:text-white active:scale-98"
+                  className="block w-full rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--color-carta)] hover:text-[var(--color-tinta)] active:scale-98"
                 >
                   {p.label}
                 </button>
@@ -289,22 +289,22 @@ export function SeletorDeData({
           {/* Painel Direito: Calendários Duplos */}
           <div className="flex flex-1 flex-col p-4">
             {/* Cabeçalho de Navegação dos Calendários */}
-            <div className="mb-4 flex items-center justify-between border-b border-slate-800/60 pb-3">
+            <div className="mb-4 flex items-center justify-between border-b border-[var(--color-linha)] pb-3">
               <button
                 type="button"
                 onClick={() => setMesVisivel(new Date(mesVisivel.getFullYear(), mesVisivel.getMonth() - 1, 1))}
-                className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="flex size-7 items-center justify-center rounded-lg text-[var(--color-tinta-2)] hover:bg-[var(--color-fundo)] hover:text-[var(--color-tinta)]"
               >
                 ‹
               </button>
-              <div className="flex gap-16 font-mono text-[13px] font-bold text-slate-200">
+              <div className="flex gap-16 font-mono text-[13px] font-bold text-[var(--color-tinta)]">
                 <span>{NOMES_MESES[mes1.getMonth()]} {mes1.getFullYear()}</span>
                 <span className="hidden sm:inline">{NOMES_MESES[mes2.getMonth()]} {mes2.getFullYear()}</span>
               </div>
               <button
                 type="button"
                 onClick={() => setMesVisivel(new Date(mesVisivel.getFullYear(), mesVisivel.getMonth() + 1, 1))}
-                className="flex size-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="flex size-7 items-center justify-center rounded-lg text-[var(--color-tinta-2)] hover:bg-[var(--color-fundo)] hover:text-[var(--color-tinta)]"
               >
                 ›
               </button>
@@ -314,7 +314,7 @@ export function SeletorDeData({
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               {/* Mês 1 */}
               <div>
-                <div className="mb-2 grid grid-cols-7 text-center font-mono text-[11px] font-semibold text-slate-500">
+                <div className="mb-2 grid grid-cols-7 text-center font-mono text-[11px] font-semibold text-[var(--color-tinta-2)] opacity-80">
                   {DIAS_SEMANA.map((d, i) => (
                     <span key={i}>{d}</span>
                   ))}
@@ -331,12 +331,12 @@ export function SeletorDeData({
                         type="button"
                         onClick={() => aoClicarDia(cel.data)}
                         className={`flex h-8 w-full items-center justify-center font-semibold transition-all ${
-                          !cel.pertenceAoMes ? 'text-slate-700 opacity-40' : 'text-slate-200 hover:bg-slate-800'
+                          !cel.pertenceAoMes ? 'opacity-30 text-[var(--color-tinta-2)]' : 'text-[var(--color-tinta)] hover:bg-[var(--color-fundo)]'
                         } ${
                           eInicio || eFim
-                            ? '!bg-emerald-600 !text-white rounded-lg shadow-md font-bold'
+                            ? '!bg-[var(--color-verde)] !text-white rounded-lg shadow-md font-bold'
                             : noIntervalo
-                            ? '!bg-emerald-950/70 !text-emerald-300'
+                            ? '!bg-[var(--color-verde)]/20 !text-[var(--color-verde)]'
                             : 'rounded-lg'
                         }`}
                       >
@@ -349,7 +349,7 @@ export function SeletorDeData({
 
               {/* Mês 2 */}
               <div className="hidden sm:block">
-                <div className="mb-2 grid grid-cols-7 text-center font-mono text-[11px] font-semibold text-slate-500">
+                <div className="mb-2 grid grid-cols-7 text-center font-mono text-[11px] font-semibold text-[var(--color-tinta-2)] opacity-80">
                   {DIAS_SEMANA.map((d, i) => (
                     <span key={i}>{d}</span>
                   ))}
@@ -366,12 +366,12 @@ export function SeletorDeData({
                         type="button"
                         onClick={() => aoClicarDia(cel.data)}
                         className={`flex h-8 w-full items-center justify-center font-semibold transition-all ${
-                          !cel.pertenceAoMes ? 'text-slate-700 opacity-40' : 'text-slate-200 hover:bg-slate-800'
+                          !cel.pertenceAoMes ? 'opacity-30 text-[var(--color-tinta-2)]' : 'text-[var(--color-tinta)] hover:bg-[var(--color-fundo)]'
                         } ${
                           eInicio || eFim
-                            ? '!bg-emerald-600 !text-white rounded-lg shadow-md font-bold'
+                            ? '!bg-[var(--color-verde)] !text-white rounded-lg shadow-md font-bold'
                             : noIntervalo
-                            ? '!bg-emerald-950/70 !text-emerald-300'
+                            ? '!bg-[var(--color-verde)]/20 !text-[var(--color-verde)]'
                             : 'rounded-lg'
                         }`}
                       >
@@ -384,18 +384,18 @@ export function SeletorDeData({
             </div>
 
             {/* Rodapé com Ações (Cancelar & Aplicar) */}
-            <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-800/60 pt-3">
+            <div className="mt-6 flex items-center justify-end gap-3 border-t border-[var(--color-linha)] pt-3">
               <button
                 type="button"
                 onClick={() => setAberto(false)}
-                className="px-4 py-2 text-[13px] font-medium text-slate-400 transition-colors hover:text-white"
+                className="px-4 py-2 text-[13px] font-medium text-[var(--color-tinta-2)] transition-colors hover:text-[var(--color-tinta)]"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={aoAplicar}
-                className="rounded-xl bg-emerald-600 px-5 py-2 text-[13px] font-semibold text-white shadow-lg shadow-emerald-950/50 transition-all hover:bg-emerald-500 active:scale-95"
+                className="rounded-xl bg-[var(--color-verde)] px-5 py-2 text-[13px] font-semibold text-white shadow-md transition-all hover:opacity-90 active:scale-95"
               >
                 Aplicar
               </button>
@@ -406,3 +406,4 @@ export function SeletorDeData({
     </div>
   )
 }
+
