@@ -54,9 +54,24 @@ export function Grafo3DCofre({
     return a.ponte && (area.get(a.de) === areaFoco || area.get(a.para) === areaFoco)
   })
 
+  // ‼️ CAUSA RAIZ CORRIGIDA 20/09/2026: uma aresta "ponte" podia entrar em
+  // arestasVisiveis com uma ponta fora da área filtrada (por desenho: "pontes
+  // mantêm anéis vazados"), mas o node dessa ponta nunca entrava em
+  // graphData.nodes, porque só olhava visivel(n.id). O 3d-force-graph (d3-force)
+  // exige que todo link.source/target exista no array de nodes, senão lança
+  // "node not found: <id>" e quebra o grafo inteiro. Achado ao clicar num
+  // filtro de área: qualquer clique nos botões de área (recolhidos ou não)
+  // reproduzia. Correção: todo endpoint de uma aresta visível entra no
+  // conjunto de nós, mesmo quando sua própria área está fora do foco.
+  const idsPorPonte = new Set<string>()
+  for (const a of arestasVisiveis) {
+    if (!visivel(a.de)) idsPorPonte.add(a.de)
+    if (!visivel(a.para)) idsPorPonte.add(a.para)
+  }
+
   // Converte nós e arestas para formato do 3d-force-graph
   const graphData = {
-    nodes: nos.filter((n) => visivel(n.id)).map((n) => ({
+    nodes: nos.filter((n) => visivel(n.id) || idsPorPonte.has(n.id)).map((n) => ({
       id: n.id,
       rotulo: n.rotulo,
       especie: n.especie,
@@ -244,7 +259,7 @@ export function Grafo3DCofre({
   }, [graphData, modoLayout])
 
   return (
-    <div className="relative h-[550px] w-full overflow-hidden rounded-lg">
+    <div className="relative h-[550px] w-full overflow-hidden rounded-lg lg:h-[680px]">
       <div ref={containerRef} className="h-full w-full cursor-grab active:cursor-grabbing" />
       
       {/* Controles de Câmera e Dicas de Interação 3D (WCAG / Mobile) */}

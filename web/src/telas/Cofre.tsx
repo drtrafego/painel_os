@@ -604,15 +604,43 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
   const [termoBusca, setTermoBusca] = useState('')
 
   // Modos de Visualização Futuristas (Estilo Kimi/JARVIS)
+  // ‼️ PADRÃO MUDOU PRA true EM 20/09/2026: o visual futurista (SynapseCanvas,
+  // HUD, glow neon) só aparecia depois de clicar num botão, escondido atrás
+  // de um toggle que nascia desligado. Ele nunca clicou, achou que "não tinha
+  // nada de futurista implementado" quando na verdade já estava tudo pronto,
+  // só nunca visível de cara. Agora é o padrão; quem quiser o modo sépia
+  // original desliga manual, e a preferência continua salva por navegador.
   const [modoComando, setModoComando] = useState(() => {
     try {
-      return localStorage.getItem('painel_os:cofre_modo_comando') !== 'false'
+      const salvo = localStorage.getItem('painel_os:cofre_modo_comando')
+      return salvo === null ? true : salvo === 'true'
     } catch {
       return true
     }
   })
   const [modoLayout, setModoLayout] = useState<ModoLayout>('multi-anel')
   const [animarSinal, setAnimarSinal] = useState(true)
+
+  // ‼️ SIDEBAR DE ÁREAS RECOLHÍVEL POR PADRÃO (item 3 do briefing, 20/09/2026):
+  // o grafo é "a parte mais importante da tela" (cobrado pelo dono) e não pode
+  // competir em pé de igualdade com painel de texto. Recolhida por padrão libera
+  // ~140px pro grafo; expande com um clique e a preferência fica salva.
+  const [areasAbertas, setAreasAbertas] = useState(() => {
+    try {
+      return localStorage.getItem('painel_os:cofre_areas_abertas') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const alternarAreasAbertas = () => {
+    setAreasAbertas((prev) => {
+      const prox = !prev
+      try {
+        localStorage.setItem('painel_os:cofre_areas_abertas', String(prox))
+      } catch {}
+      return prox
+    })
+  }
 
   const alternarModoComando = () => {
     setModoComando((prev) => {
@@ -836,51 +864,86 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
         <Kpi rotulo="amarrados" valor={cofre.cobertura === null ? null : `${cofre.cobertura}%`} cor={baixa ? 'text-ambar' : 'text-verde'} nota="têm ao menos uma ligação" />
       </div>
 
-      <div className="grid items-start gap-3 lg:grid-cols-[168px_minmax(0,1fr)_310px]">
-        {/* Coluna Esquerda: Filtro de Áreas & Quem Aprendeu */}
-        <aside className={`carta p-3.5 transition-colors ${modoComando ? 'bg-[#0B0F17]/90 border-sky-500/30' : ''}`}>
-          <Cabecalho cor="var(--color-lima)" meta={areaFoco ? 'filtrando' : undefined}>áreas</Cabecalho>
-          <ul className="space-y-1">
-            {cofre.areas.map((a) => {
-              const fixa = a.sempre_visivel === true || a.id === 'transversal'
-              const so = areaFoco === a.id
-              return (
-                <li key={a.id}>
-                  <button
-                    type="button"
-                    data-filtro-area={fixa ? undefined : ''} data-area={a.id}
-                    aria-pressed={so}
-                    disabled={fixa}
-                    title={fixa ? 'transversal nunca é filtrada' : so ? 'mostrar o mapa inteiro' : 'ver só esta área'}
-                    onClick={() => !fixa && setAreaFoco(so ? null : a.id)}
-                    className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors duration-200 ${so ? 'border-lima/45 bg-lima/10' : 'border-transparent hover:border-linha'} ${fixa ? 'cursor-default opacity-90' : ''}`}
-                  >
-                    <span className="size-2 shrink-0 rounded-full" style={{ background: corDaArea(a.id) }} />
-                    <span className="min-w-0 flex-1 truncate text-[11px]">{a.nome}</span>
-                    <span className="font-mono text-[10px] opacity-70">{a.total}</span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-          <p className="mt-2 font-mono text-[9px] leading-relaxed opacity-70">
-            Clique numa área para ver só ela. Transversal fica sempre e pontes mantêm anéis vazados.
-          </p>
+      <div className={`grid items-start gap-3 transition-[grid-template-columns] duration-200 ${areasAbertas ? 'lg:grid-cols-[168px_minmax(0,1fr)_280px]' : 'lg:grid-cols-[40px_minmax(0,1fr)_280px]'}`}>
+        {/* Coluna Esquerda: Filtro de Áreas & Quem Aprendeu — recolhida por padrão, o grafo é a parte principal da tela */}
+        <aside className={`carta transition-colors ${areasAbertas ? 'p-3.5' : 'p-1.5'} ${modoComando ? 'bg-[#0B0F17]/90 border-sky-500/30' : ''}`}>
+          <button
+            type="button"
+            data-toggle-areas
+            onClick={alternarAreasAbertas}
+            title={areasAbertas ? 'recolher áreas' : 'expandir áreas'}
+            className={`flex w-full items-center rounded-md py-1 text-[10px] font-mono uppercase tracking-[.14em] opacity-80 hover:opacity-100 ${areasAbertas ? 'justify-between px-1' : 'justify-center'}`}
+          >
+            {areasAbertas ? <><span>áreas</span><span>{areaFoco ? 'filtrando' : '«'}</span></> : <span>»</span>}
+          </button>
 
-          <div className="mt-4 border-t border-linha pt-3">
-            <Cabecalho cor="var(--color-ciano)">quem aprendeu</Cabecalho>
-            <ul className="space-y-1">
-              {autores.map(([quem, quantos]) => (
-                <li key={quem} className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[11px]">{quem}</span>
-                  <span className="font-mono text-[10px] opacity-70">{quantos}</span>
-                </li>
-              ))}
+          {areasAbertas ? (
+            <>
+              <ul className="space-y-1">
+                {cofre.areas.map((a) => {
+                  const fixa = a.sempre_visivel === true || a.id === 'transversal'
+                  const so = areaFoco === a.id
+                  return (
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        data-filtro-area={fixa ? undefined : ''} data-area={a.id}
+                        aria-pressed={so}
+                        disabled={fixa}
+                        title={fixa ? 'transversal nunca é filtrada' : so ? 'mostrar o mapa inteiro' : 'ver só esta área'}
+                        onClick={() => !fixa && setAreaFoco(so ? null : a.id)}
+                        className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors duration-200 ${so ? 'border-lima/45 bg-lima/10' : 'border-transparent hover:border-linha'} ${fixa ? 'cursor-default opacity-90' : ''}`}
+                      >
+                        <span className="size-2 shrink-0 rounded-full" style={{ background: corDaArea(a.id) }} />
+                        <span className="min-w-0 flex-1 truncate text-[11px]">{a.nome}</span>
+                        <span className="font-mono text-[10px] opacity-70">{a.total}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+              <p className="mt-2 font-mono text-[9px] leading-relaxed opacity-70">
+                Clique numa área para ver só ela. Transversal fica sempre e pontes mantêm anéis vazados.
+              </p>
+
+              <div className="mt-4 border-t border-linha pt-3">
+                <Cabecalho cor="var(--color-ciano)">quem aprendeu</Cabecalho>
+                <ul className="space-y-1">
+                  {autores.map(([quem, quantos]) => (
+                    <li key={quem} className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[11px]">{quem}</span>
+                      <span className="font-mono text-[10px] opacity-70">{quantos}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          ) : (
+            <ul className="mt-1 space-y-1.5">
+              {cofre.areas.map((a) => {
+                const so = areaFoco === a.id
+                const fixa = a.sempre_visivel === true || a.id === 'transversal'
+                return (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      data-filtro-area-recolhido data-area={a.id}
+                      aria-pressed={so}
+                      disabled={fixa}
+                      title={`${a.nome} · ${a.total}`}
+                      onClick={() => !fixa && setAreaFoco(so ? null : a.id)}
+                      className={`mx-auto flex size-5 items-center justify-center rounded-full border transition-colors ${so ? 'border-lima/60' : 'border-transparent hover:border-linha'}`}
+                    >
+                      <span className="size-2 shrink-0 rounded-full" style={{ background: corDaArea(a.id) }} />
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
-          </div>
+          )}
         </aside>
 
-        {/* Coluna Central: O Grafo Interativo 3D / 2D com Fundo Sináptico */}
+        {/* Coluna Central: O Grafo Interativo 3D / 2D com Fundo Sináptico — a parte mais importante da tela */}
         <section className={`carta overflow-hidden p-3 transition-colors ${modoComando ? 'bg-[#0B0F17]/90 border-sky-500/30' : ''}`}>
           <Cabecalho cor="var(--color-lima)" meta={`${cofre.conexoes} ligações · ${modoComando ? '3D Force Graph' : '2D SVG'}`}>
             mapa dos aprendizados
