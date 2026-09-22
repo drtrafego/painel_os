@@ -698,7 +698,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
 
   if (!cofre || cofre.erro || cofre.conexoes === null || !nos.length) {
     return (
-      <div className="mx-auto max-w-[1180px] px-4 py-5 sm:px-6">
+      <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
         <TituloDaTela titulo="Cofre de conhecimento." pergunta={vista.pergunta} />
         <div className="carta p-5 text-sm text-tinta-2">
           Não consegui medir o Cofre. {cofre?.erro ?? 'O estado ainda não tem a fonte dos aprendizados.'}
@@ -736,7 +736,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
   const ligar = (id: string) => setAlvo((antigo) => (antigo === id || id === escolhido ? null : id))
 
   return (
-    <div className={`mx-auto max-w-[1240px] px-4 py-5 sm:px-6 transition-colors duration-300 ${
+    <div className={`w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 transition-colors duration-300 ${
       modoComando ? 'text-slate-100' : 'text-tinta'
     }`}>
       <TituloDaTela

@@ -197,17 +197,26 @@ export function Grafo3DCofre({
       }
     })
 
-    // Suporte a Redimensionamento da Janela
+    // Suporte a Redimensionamento da Janela e Container (ResizeObserver)
     const handleResize = () => {
       if (!containerRef.current) return
-      Graph.width(containerRef.current.clientWidth).height(containerRef.current.clientHeight)
+      const w = containerRef.current.clientWidth || 800
+      const h = containerRef.current.clientHeight || 550
+      Graph.width(w).height(h)
     }
     window.addEventListener('resize', handleResize)
+
+    let ro: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
+      ro = new ResizeObserver(() => handleResize())
+      ro.observe(containerRef.current)
+    }
 
     fgRef.current = Graph
 
     return () => {
       window.removeEventListener('resize', handleResize)
+      ro?.disconnect()
       if (containerRef.current) {
         containerRef.current.innerHTML = ''
       }

@@ -17,10 +17,10 @@ export function Ferramentas({ estado, medidoEm, vista }: PropsTela) {
   // parcial apresentada como completa, so que com o nome certo.
   const dado = dadoDaVista(vista, estado)
   const [filtro, setFiltro] = useState<Ferramenta['estado'] | 'todos'>('todos')
-  if (!dados) return <div className="mx-auto max-w-[1180px] px-4 py-5 sm:px-6"><TituloDaTela titulo="Ferramentas." pergunta={vista.pergunta} /><div className="carta p-5 text-sm text-tinta-2">O estado ainda não tem o inventário de ferramentas.</div></div>
+  if (!dados) return <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10"><TituloDaTela titulo="Ferramentas." pergunta={vista.pergunta} /><div className="carta p-5 text-sm text-tinta-2">O estado ainda não tem o inventário de ferramentas.</div></div>
   const itens = filtro === 'todos' ? dados.itens : dados.itens.filter((x) => x.estado === filtro)
     const grupos = ['MCP', 'App', 'Integração', 'Script', 'Skill', 'Acesso'] as const
-    return <div className="mx-auto max-w-[1180px] px-4 py-5 sm:px-6">
+    return <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
     <TituloDaTela titulo="Ferramentas & Acessos." pergunta="O que a operação alcança, independentemente do motor de IA, e por quais adaptadores e skills de agentes." direita={<span className="rotulo">medido {new Date(medidoEm).toLocaleTimeString('pt-BR', { hour12: false, timeZone: 'UTC' })} utc</span>} />
     <Parcial dado={dado} />
     {dados.erro && <div className="mt-3 mb-3 rounded-lg border border-ambar/30 bg-ambar/8 px-3 py-2 text-xs text-tinta-2">Inventário parcial: {dados.erro}</div>}

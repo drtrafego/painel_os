@@ -72,7 +72,7 @@ export function Estudio({ estado, vista }: PropsTela) {
 
   if (!pecas || pecas.erro) {
     return (
-      <div className="mx-auto max-w-[1400px] px-4 py-5 sm:px-6">
+      <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
         <TituloDaTela titulo="O que está pronto para sair." pergunta={vista.pergunta} />
         <section className="mt-4 max-w-2xl rounded-xl border border-vermelho/35 bg-vermelho/8 p-4">
           <Cabecalho cor="var(--color-vermelho)" meta="não lido">
@@ -92,7 +92,7 @@ export function Estudio({ estado, vista }: PropsTela) {
   }
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-5 sm:px-6">
+    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       <TituloDaTela
         titulo="O que está pronto para sair."
         pergunta={vista.pergunta}

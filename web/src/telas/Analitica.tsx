@@ -8,7 +8,7 @@ export function Analitica({ estado, vista }: PropsTela) {
 
   if (!pecas || pecas.erro || pecas.total === null || !medidas) {
     return (
-      <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6">
+      <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
         <TituloDaTela titulo="Analítica de conteúdo." pergunta={vista.pergunta} />
         <section className="carta mt-4 max-w-2xl p-5"><Cabecalho cor="var(--color-vermelho)" meta="indisponível">não consegui ler o registro de conteúdo</Cabecalho><p className="font-serif text-[20px] text-tinta">Isto não é zero publicações. É ausência de medição.</p><p className="mt-3 text-[12px] text-tinta-2">{pecas?.erro ?? 'O estado é anterior à leitura de posts.json.'}</p></section>
       </div>
@@ -21,7 +21,7 @@ export function Analitica({ estado, vista }: PropsTela) {
   const formatos = Object.entries(medidas.por_formato).sort((a, b) => b[1] - a[1])
   const canais = Object.entries(medidas.por_canal).sort((a, b) => b[1] - a[1])
   return (
-    <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6">
+    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       <TituloDaTela titulo="Analítica de conteúdo." pergunta={vista.pergunta} direita={<span className="rotulo">posts.json de {pecas.atualizado_em ? new Date(pecas.atualizado_em).toLocaleString('pt-BR', { timeZone: 'UTC', hour12: false }) : '—'} utc</span>} />
       <Parcial dado={vista.dado} />
 

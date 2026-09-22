@@ -32,7 +32,7 @@ function CarregandoTela() {
     <div
       role="status"
       aria-live="polite"
-      className="mx-auto flex min-h-56 max-w-[1240px] items-center px-4 py-8 sm:px-6"
+      className="w-full max-w-none flex min-h-56 items-center px-3 py-4 sm:px-6 lg:px-8 xl:px-10"
     >
       <div className="flex items-center gap-3 text-tinta-2">
         <span className="size-2 animate-pulse rounded-full bg-verde" aria-hidden="true" />
@@ -277,7 +277,7 @@ export default function App() {
           {/* Resposta nova rejeitada: os numeros abaixo sao os anteriores, e
               isso vai dito ANTES deles, nao num rodape que ninguem acha. */}
           {origem === 'estado-invalido' && problemas && (
-            <div className="mx-auto max-w-[1240px] px-4 pt-4 sm:px-6">
+            <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
               <EstadoInvalido problemas={problemas} origem="/api/estado" />
             </div>
           )}
