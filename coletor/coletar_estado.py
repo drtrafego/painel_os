@@ -822,6 +822,93 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
             for chave, total in sorted(contagem.items(), key=lambda kv: (-kv[1], kv[0]))
         ]
 
+    # Injeção dinâmica de Nós e Arestas de Skills & Acessos no Cofre (skill -> agente -> sistema)
+    try:
+        ferr = ler_ferramentas(raiz=raiz_fonte)
+        skills_acessos = ferr.get("skills_acessos", [])
+        if skills_acessos:
+            for sa in skills_acessos:
+                no_skill_id = sa["id"]
+                no_agente_id = f"agente-{sa['responsavel'].lower()}"
+                no_sistema_id = f"sistema-{_chave(sa['sistema']).replace(' ', '-')[:30]}"
+
+                if no_skill_id not in ids:
+                    ids.add(no_skill_id)
+                    nos.append({
+                        "id": no_skill_id,
+                        "rotulo": f"Skill: {sa['nome']}",
+                        "arquivo": sa["origem"],
+                        "linhas": 1,
+                        "modificado": sa["ultima_verificacao"],
+                        "tipo": "skill",
+                        "especie": "padrao",
+                        "area": "operacao",
+                        "familia": "ferramentas",
+                        "corpo": sa["finalidade"],
+                        "caso": f"Skill/Acesso de {sa['responsavel']}",
+                        "autor": sa["responsavel"],
+                        "quando": sa["ultima_verificacao"][:10] if sa["ultima_verificacao"] else "2026-09-20",
+                        "peso": 3,
+                        "vencido": False,
+                        "grau": 0
+                    })
+                if no_agente_id not in ids:
+                    ids.add(no_agente_id)
+                    nos.append({
+                        "id": no_agente_id,
+                        "rotulo": f"Agente: {sa['responsavel']}",
+                        "arquivo": f"agente/{sa['responsavel'].lower()}",
+                        "linhas": 1,
+                        "modificado": sa["ultima_verificacao"],
+                        "tipo": "agente",
+                        "especie": "padrao",
+                        "area": "operacao",
+                        "familia": "agentes",
+                        "corpo": f"Agente responsável {sa['responsavel']}",
+                        "caso": f"Responsável por skills e conexões",
+                        "autor": sa["responsavel"],
+                        "quando": sa["ultima_verificacao"][:10] if sa["ultima_verificacao"] else "2026-09-20",
+                        "peso": 4,
+                        "vencido": False,
+                        "grau": 0
+                    })
+                if no_sistema_id not in ids:
+                    ids.add(no_sistema_id)
+                    nos.append({
+                        "id": no_sistema_id,
+                        "rotulo": f"Sistema: {sa['sistema']}",
+                        "arquivo": f"sistema/{sa['sistema']}",
+                        "linhas": 1,
+                        "modificado": sa["ultima_verificacao"],
+                        "tipo": "sistema",
+                        "especie": "padrao",
+                        "area": "operacao",
+                        "familia": "sistemas",
+                        "corpo": f"Sistema {sa['sistema']}",
+                        "caso": f"Alvo de integração/skill",
+                        "autor": sa["responsavel"],
+                        "quando": sa["ultima_verificacao"][:10] if sa["ultima_verificacao"] else "2026-09-20",
+                        "peso": 3,
+                        "vencido": False,
+                        "grau": 0
+                    })
+
+                if (no_skill_id, no_agente_id) not in vistas:
+                    vistas.add((no_skill_id, no_agente_id))
+                    arestas.append({"de": no_skill_id, "para": no_agente_id, "porque": f"Skill {sa['nome']} pertence a {sa['responsavel']}", "ponte": False})
+                if (no_agente_id, no_sistema_id) not in vistas:
+                    vistas.add((no_agente_id, no_sistema_id))
+                    arestas.append({"de": no_agente_id, "para": no_sistema_id, "porque": f"Agente {sa['responsavel']} acessa {sa['sistema']}", "ponte": False})
+
+            grau = {n["id"]: 0 for n in nos}
+            for a in arestas:
+                if a["de"] in grau: grau[a["de"]] += 1
+                if a["para"] in grau: grau[a["para"]] += 1
+            for n in nos:
+                n["grau"] = grau[n["id"]]
+    except Exception:
+        pass
+
     return {
         "erro": None,
         "arquivo": "painel_os/data/cofre.json",
@@ -829,7 +916,7 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
         "arestas": arestas,
         "arquivos": len({n["arquivo"].split(":")[0].split(" em ")[-1] for n in nos}) or None,
         "conexoes": len(arestas),
-        "cobertura": cobertura,
+        "cobertura": round(len({i for i, g in grau.items() if g}) / len(nos) * 100, 1) if nos else None,
         "areas": _agrupar("area", areas),
         "familias": _agrupar("familia", familias),
         "grau_medio": round(2 * len(arestas) / len(nos), 1) if nos else None,
@@ -1127,10 +1214,74 @@ def ler_ferramentas(configs_codex=CONFIGS_CODEX, configs_claude=CONFIGS_CLAUDE,
             "fallback": None, "proveniencias": ["componente operacional"],
         })
 
-    itens.sort(key=lambda x: (("MCP", "App", "Integração", "Script").index(x["tipo"]), x["nome"].casefold()))
+    # Dynamic scan of skills and access connections for Luana and Renato
+    skills_acessos = []
+    fontes_skills = [
+        ("Luana", RAIZ / "luana/.claude/skills", RAIZ / "luana/conexoes"),
+        ("Renato", RAIZ / "renato/.claude/skills", RAIZ / "renato/conexoes"),
+    ]
+    for resp, pasta_skills, pasta_conexoes in fontes_skills:
+        if pasta_skills.is_dir():
+            for p in sorted(pasta_skills.glob("*/SKILL.md")):
+                try:
+                    fm, corpo = ler_frontmatter(p)
+                    nome = (fm.get("name") if fm else None) or p.parent.name
+                    desc = (fm.get("description") if fm else None) or "skill registrada em SKILL.md"
+                    st = p.stat()
+                    mod = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()
+                    skills_acessos.append({
+                        "id": f"skill-{resp.lower()}-{p.parent.name}",
+                        "nome": nome,
+                        "tipo": "Skill",
+                        "responsavel": resp,
+                        "sistema": "Claude / Agent Runtime",
+                        "finalidade": desc[:160],
+                        "origem": str(p.relative_to(RAIZ)),
+                        "estado": "disponível",
+                        "ultima_verificacao": mod
+                    })
+                except Exception:
+                    pass
+
+        if pasta_conexoes.is_dir():
+            for p in sorted(pasta_conexoes.glob("*.md")):
+                try:
+                    st = p.stat()
+                    mod = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()
+                    nome = p.stem.replace("_", " ").title()
+                    skills_acessos.append({
+                        "id": f"conexao-{resp.lower()}-{p.stem}",
+                        "nome": f"Conexão {nome}",
+                        "tipo": "Acesso",
+                        "responsavel": resp,
+                        "sistema": nome,
+                        "finalidade": f"Manual e integração de conexão {p.name}",
+                        "origem": str(p.relative_to(RAIZ)),
+                        "estado": "disponível",
+                        "ultima_verificacao": mod
+                    })
+                except Exception:
+                    pass
+
+    for sa in skills_acessos:
+        itens.append({
+            "id": sa["id"],
+            "nome": f"{sa['responsavel']}: {sa['nome']}",
+            "tipo": sa["tipo"],
+            "estado": sa["estado"],
+            "evidencia": f"{sa['sistema']} · {sa['finalidade']}",
+            "fallback": None,
+            "proveniencias": [sa["origem"]],
+            "responsavel": sa["responsavel"],
+            "sistema": sa["sistema"],
+            "finalidade": sa["finalidade"],
+            "ultima_verificacao": sa["ultima_verificacao"]
+        })
+
+    itens.sort(key=lambda x: (("MCP", "App", "Integração", "Script", "Skill", "Acesso").index(x["tipo"]) if x["tipo"] in ("MCP", "App", "Integração", "Script", "Skill", "Acesso") else 99, x["nome"].casefold()))
     contagem = {estado: sum(1 for i in itens if i["estado"] == estado) for estado in ("disponível", "fallback", "ausente")}
-    por_tipo = {tipo: sum(1 for i in itens if i["tipo"] == tipo) for tipo in ("MCP", "App", "Integração", "Script")}
-    return {"erro": "; ".join(sorted(set(erros))) or None, "itens": itens, "contagem": contagem, "por_tipo": por_tipo, "medidos": len(itens)}
+    por_tipo = {tipo: sum(1 for i in itens if i["tipo"] == tipo) for tipo in ("MCP", "App", "Integração", "Script", "Skill", "Acesso")}
+    return {"erro": "; ".join(sorted(set(erros))) or None, "itens": itens, "contagem": contagem, "por_tipo": por_tipo, "medidos": len(itens), "skills_acessos": skills_acessos}
 
 
 def ler_cobrancas(buscar=None):

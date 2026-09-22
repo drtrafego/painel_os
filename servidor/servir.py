@@ -317,32 +317,113 @@ def _invalidar_cache() -> None:
 
 
 _cache_vivos = {"quando": 0.0, "corpo": b""}
-_trava_vivos = threading.Lock()
+def coletar_skills_acessos(raiz: Path = Path("/opt/gastaomatos")) -> dict:
+    """Lê skills e conexões de Luana e Renato no servidor e classifica estados reais sem expor segredos."""
+    itens = []
+    fontes = [
+        ("Luana", raiz / "luana/.claude/skills", raiz / "luana/conexoes", raiz / "luana"),
+        ("Renato", raiz / "renato/.claude/skills", raiz / "renato/conexoes", raiz / "renato"),
+    ]
+    for resp, pasta_skills, pasta_conexoes, pasta_agente in fontes:
+        # 1. Skills
+        if pasta_skills.is_dir():
+            for p in sorted(pasta_skills.glob("*/SKILL.md")):
+                try:
+                    texto = p.read_text(encoding="utf-8", errors="replace")
+                    nome = p.parent.name
+                    desc = "Skill registrada no playbook"
+                    # parsing básico de frontmatter sem importar libs extras
+                    if texto.startswith("---"):
+                        partes = texto.split("---", 2)
+                        if len(partes) >= 3:
+                            for linha in partes[1].splitlines():
+                                if linha.startswith("name:"):
+                                    nome = linha.split("name:", 1)[1].strip()
+                                elif linha.startswith("description:"):
+                                    desc = linha.split("description:", 1)[1].strip()
+                    st = p.stat()
+                    mod = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()
+                    
+                    # Diferenciação de estado: documentada vs configurada vs disponível
+                    estado = "documentada"
+                    if len(texto.strip()) > 100:
+                        estado = "disponível"
+                    
+                    itens.append({
+                        "id": f"skill-{resp.lower()}-{p.parent.name}",
+                        "responsavel": resp,
+                        "nome": nome,
+                        "tipo": "Skill",
+                        "finalidade": desc[:180],
+                        "sistema": "Claude / Agent Runtime",
+                        "origem": str(p),
+                        "estado": estado,
+                        "ultima_verificacao": mod,
+                    })
+                except Exception:
+                    pass
+
+        # 2. Conexões / Acessos
+        if pasta_conexoes.is_dir():
+            for p in sorted(pasta_conexoes.glob("*.md")):
+                try:
+                    st = p.stat()
+                    mod = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()
+                    nome = p.stem.replace("_", " ").title()
+                    texto = p.read_text(encoding="utf-8", errors="replace")
+                    
+                    # Verificação de arquivos de segredos/env associados sem ler seus conteúdos
+                    env_associado = None
+                    for candidato in (f".env.{p.stem}", f".env.{p.stem.lower()}", f".{p.stem}.json"):
+                        if (pasta_agente / candidato).is_file():
+                            env_associado = candidato
+                            break
+
+                    estado = "documentada"
+                    if env_associado:
+                        estado = "configurada"
+                    elif len(texto) > 100:
+                        estado = "disponível"
+
+                    itens.append({
+                        "id": f"conexao-{resp.lower()}-{p.stem}",
+                        "responsavel": resp,
+                        "nome": f"Conexão {nome}",
+                        "tipo": "Acesso",
+                        "finalidade": f"Manual de integração de {nome}",
+                        "sistema": nome,
+                        "origem": str(p),
+                        "estado": estado,
+                        "ultima_verificacao": mod,
+                    })
+                except Exception:
+                    pass
+
+    return {
+        "ok": True,
+        "coletado_em": datetime.now(timezone.utc).isoformat(),
+        "total": len(itens),
+        "itens": itens,
+    }
 
 
-def obter_agentes_vivos() -> bytes:
-    """Sonda os agentes ao vivo usando agentes_vivos.py com cache isolado de 15s."""
-    global _cache_vivos
+_cache_acessos = {"quando": 0.0, "corpo": b""}
+_trava_acessos = threading.Lock()
+
+
+def obter_skills_acessos() -> bytes:
+    """Retorna inventário em tempo real de skills e conexões com cache de 15s."""
+    global _cache_acessos
     agora = time.monotonic()
-    if _cache_vivos["corpo"] and (agora - float(_cache_vivos["quando"])) < 15.0:
-        return _cache_vivos["corpo"]
-    with _trava_vivos:
+    if _cache_acessos["corpo"] and (agora - float(_cache_acessos["quando"])) < 15.0:
+        return _cache_acessos["corpo"]
+    with _trava_acessos:
         agora = time.monotonic()
-        if _cache_vivos["corpo"] and (agora - float(_cache_vivos["quando"])) < 15.0:
-            return _cache_vivos["corpo"]
-        try:
-            import agentes_vivos
-            dados = agentes_vivos.ler_agentes()
-        except Exception as e:
-            dados = {
-                "ok": False,
-                "motivo": f"erro_sonda: {type(e).__name__}",
-                "contagem": {"trabalhando": 0, "silencioso": 0, "parado": 0, "vivos": 0, "total": 0, "indeterminados": 0},
-                "agentes": [],
-                "avisos": [str(e)],
-            }
+        if _cache_acessos["corpo"] and (agora - float(_cache_acessos["quando"])) < 15.0:
+            return _cache_acessos["corpo"]
+        dados = coletar_skills_acessos()
         corpo = json.dumps(dados, ensure_ascii=False).encode("utf-8")
-        _cache_vivos.update(quando=time.monotonic(), corpo=corpo)
+        _cache_acessos.update(quando=time.monotonic(), corpo=corpo)
         return corpo
 
 
@@ -650,6 +731,22 @@ class Manipulador(SimpleHTTPRequestHandler):
             except Exception as e:
                 corpo = json.dumps(
                     {"ok": False, "motivo": f"{type(e).__name__}: {e}", "agentes": []},
+                    ensure_ascii=False,
+                ).encode("utf-8")
+                self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(corpo)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(corpo)
+            return
+        if rota.path == "/api/ferramentas/acessos":
+            try:
+                corpo = obter_skills_acessos()
+                self.send_response(200)
+            except Exception as e:
+                corpo = json.dumps(
+                    {"ok": False, "erro": f"{type(e).__name__}: {e}", "itens": []},
                     ensure_ascii=False,
                 ).encode("utf-8")
                 self.send_response(500)
