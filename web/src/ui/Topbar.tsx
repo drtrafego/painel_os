@@ -22,11 +22,15 @@ export function Topbar({
   estado,
   vista,
   aoAbrirMenu,
+  expandido,
+  aoAlternarExpandido,
 }: {
   hora: string
   estado: Estado
   vista: string
   aoAbrirMenu: () => void
+  expandido?: boolean
+  aoAlternarExpandido?: () => void
 }) {
   const naoLidos = estado.sessao.filter(ilegivel)
   const lidos = estado.sessao.filter((s) => !ilegivel(s))
@@ -66,6 +70,18 @@ export function Topbar({
     frase = 'nenhuma checagem para ler'
   }
 
+  const aoClicarExpandir = (e: React.MouseEvent) => {
+    if (e.shiftKey) {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {})
+      } else {
+        document.exitFullscreen().catch(() => {})
+      }
+    } else {
+      aoAlternarExpandido?.()
+    }
+  }
+
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-linha bg-topo/70 px-3 sm:px-5">
       <button
@@ -100,6 +116,22 @@ export function Topbar({
           <Pilula tom={tom}>{frase}</Pilula>
         </span>
         <span className="font-mono text-[12px] tabular-nums text-tinta-2">{hora}</span>
+
+        {aoAlternarExpandido && (
+          <button
+            type="button"
+            onClick={aoClicarExpandir}
+            title={
+              expandido
+                ? 'Usar largura padrão (centralizado) · Shift+Clique para tela cheia do navegador'
+                : 'Expandir para a tela toda (100% da largura) · Shift+Clique para tela cheia do navegador'
+            }
+            aria-label={expandido ? 'Usar largura padrão' : 'Expandir para tela toda'}
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-linha bg-carta/50 text-tinta-2 transition-all hover:border-linha-forte hover:bg-carta hover:text-tinta active:scale-95"
+          >
+            <Icone nome={expandido ? 'tela-normal' : 'tela-cheia'} tamanho={14} />
+          </button>
+        )}
       </div>
     </header>
   )

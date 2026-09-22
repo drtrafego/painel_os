@@ -69,11 +69,30 @@ export default function App() {
     }
   })
 
+  const [larguraExpandida, setLarguraExpandida] = useState(() => {
+    try {
+      const salvo = localStorage.getItem('painel_os:largura_expandida')
+      return salvo === null ? true : salvo === 'true'
+    } catch {
+      return true
+    }
+  })
+
   const alternarSidebar = () => {
     setSidebarRecolhida((prev) => {
       const prox = !prev
       try {
         localStorage.setItem('painel_os:sidebar_recolhida', String(prox))
+      } catch {}
+      return prox
+    })
+  }
+
+  const alternarLarguraExpandida = () => {
+    setLarguraExpandida((prev) => {
+      const prox = !prev
+      try {
+        localStorage.setItem('painel_os:largura_expandida', String(prox))
       } catch {}
       return prox
     })
@@ -245,8 +264,15 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar hora={hora} estado={estado} vista={vista.nome} aoAbrirMenu={() => setMenuAberto(true)} />
+      <div className="flex min-w-0 flex-1 flex-col" data-expandido={larguraExpandida ? 'true' : 'false'}>
+        <Topbar
+          hora={hora}
+          estado={estado}
+          vista={vista.nome}
+          aoAbrirMenu={() => setMenuAberto(true)}
+          expandido={larguraExpandida}
+          aoAlternarExpandido={alternarLarguraExpandida}
+        />
         <main ref={areaRef} className="min-h-0 flex-1 overflow-y-auto">
           {/* Resposta nova rejeitada: os numeros abaixo sao os anteriores, e
               isso vai dito ANTES deles, nao num rodape que ninguem acha. */}
