@@ -70,6 +70,18 @@ JANELA_CANDIDATO_S = 6 * 3600
 RAIZ_CODEX = Path.home() / ".codex-luana" / "sessions"
 JANELA_CODEX_S = 90
 
+# Identidades operacionais são deliberadamente uma allowlist. O conteúdo de
+# session_meta é não confiável e não deve virar nome arbitrário na interface.
+IDENTIDADES_CODEX = {
+    "cont_radar": "nova-mineradora",
+    "cont_estrategista": "suri",
+    "cont_copy": "cleo",
+    "cont_designer": "dani",
+    "cont_corretor": "corretor",
+    "cont_qa": "guardiao",
+}
+IDENTIDADE_CODEX_GENERICA = "sessao-codex"
+
 # --------------------------------------------------------------------------
 # OS TRES ESTADOS
 # --------------------------------------------------------------------------
@@ -201,6 +213,52 @@ def _classificar(fase: str, silencio_s: float) -> str:
     return SILENCIOSO if silencio_s <= JANELA_CANDIDATO_S else PARADO
 
 
+def _texto_curto(valor: object, limite: int = 160) -> str | None:
+    if not isinstance(valor, str):
+        return None
+    valor = " ".join(valor.split())
+    return valor[:limite] if valor else None
+
+
+def _identidade_codex(caminho: Path) -> dict:
+    """Lê somente o session_meta inicial, sem expor prompt ou caminhos.
+
+    O nome da tarefa usa apenas o último componente de agent_path, que é um
+    rótulo operacional curto. Nunca devolvemos o caminho bruto.
+    """
+    resultado = {"identidade": IDENTIDADE_CODEX_GENERICA, "papel": None,
+                 "tarefa": None, "pai": None, "profundidade": None}
+    try:
+        with caminho.open("rb") as arquivo:
+            linha = arquivo.readline(128 * 1024)
+        meta = json.loads(linha.decode("utf-8", "replace"))
+        payload = meta.get("payload") if isinstance(meta, dict) else None
+        if not isinstance(payload, dict):
+            return resultado
+        papel = _texto_curto(payload.get("agent_role"), 80)
+        resultado["papel"] = papel
+        if papel in IDENTIDADES_CODEX:
+            resultado["identidade"] = IDENTIDADES_CODEX[papel]
+        tarefa = _texto_curto(payload.get("agent_path"), 240)
+        if tarefa:
+            tarefa = tarefa.rstrip("/").rsplit("/", 1)[-1]
+            resultado["tarefa"] = _texto_curto(tarefa.replace("_", " "), 120)
+        nickname = _texto_curto(payload.get("agent_nickname"), 80)
+        if resultado["tarefa"] is None and nickname:
+            resultado["tarefa"] = nickname
+        source = payload.get("source")
+        spawn = source.get("subagent", {}).get("thread_spawn", {}) if isinstance(source, dict) else {}
+        if isinstance(spawn, dict):
+            pai = _texto_curto(spawn.get("parent_thread_id"), 80)
+            resultado["pai"] = pai
+            profundidade = spawn.get("depth")
+            if isinstance(profundidade, int) and 0 <= profundidade <= 32:
+                resultado["profundidade"] = profundidade
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        pass
+    return resultado
+
+
 def _sessao_mais_ativa(dir_projeto: Path) -> Path | None:
     """Escolhe pela última evidência dentro da sessão, não pelo diretório."""
     candidatas = [d for d in dir_projeto.iterdir() if d.is_dir() and (d / "subagents").is_dir()]
@@ -227,9 +285,12 @@ def _codex_recentes(agora: float) -> list[dict]:
     encontrados.sort(key=lambda par: par[1])
     agentes = []
     for caminho, silencio in encontrados[:32]:
+        identidade = _identidade_codex(caminho)
         agentes.append({
             "id": caminho.stem.removeprefix("rollout-")[-36:], "tipo": "codex",
-            "descricao": None, "pai": None, "profundidade": None,
+            "identidade": identidade["identidade"], "papel": identidade["papel"],
+            "tarefa": identidade["tarefa"], "descricao": identidade["tarefa"],
+            "pai": identidade["pai"], "profundidade": identidade["profundidade"],
             "estado": TRABALHANDO if silencio <= LIMIAR_ATIVO_S else SILENCIOSO,
             "fase": "atividade_codex", "etapa": "atividade Codex detectada",
             "etapa_e_description": False, "ferramenta": None,

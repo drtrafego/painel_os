@@ -23,9 +23,9 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   const [squad, setSquad] = useState<FiltroOffice>(() => agentes.some((agente) => agente.estado === 'trabalhando') ? 'ativos' : 'todos')
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
   const catalogoVisual = useMemo(() => mesclarRuntimesNoCatalogo(catalogo, agentes), [agentes, catalogo])
-  const agentesPorCatalogo = useMemo(() => new Map(agentes.map((agente) => [catalogoVisual.find((item) => normalizarId(item.id) === normalizarId(agente.id) || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.id)))?.id ?? agente.id, agente])), [agentes, catalogoVisual])
+  const agentesPorCatalogo = useMemo(() => new Map(agentes.map((agente) => [catalogoVisual.find((item) => (agente.identidade && agente.identidade !== 'sessao-codex' && (normalizarId(item.id) === normalizarId(agente.identidade ?? '') || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? '')))) || normalizarId(item.id) === normalizarId(agente.id) || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.id)))?.id ?? agente.id, agente])), [agentes, catalogoVisual])
   const ativos = useMemo(() => new Set(agentes.filter((agente) => agente.estado === 'trabalhando').map((agente) => {
-    return catalogoVisual.find((item) => normalizarId(item.id) === normalizarId(agente.id) || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.id)))?.id ?? agente.id
+    return catalogoVisual.find((item) => (agente.identidade && agente.identidade !== 'sessao-codex' && (normalizarId(item.id) === normalizarId(agente.identidade ?? '') || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? '')))) || normalizarId(item.id) === normalizarId(agente.id) || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.id)))?.id ?? agente.id
   })), [agentes, catalogoVisual])
   const visiveis = useMemo(() => catalogoVisual.filter((agente) => squad === 'todos' || (squad === 'ativos' ? ativos.has(agente.id) : agente.squad === squad)), [ativos, catalogoVisual, squad])
   const ativosAnteriores = useRef(agentes.filter((agente) => agente.estado === 'trabalhando').length)

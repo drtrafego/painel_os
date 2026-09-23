@@ -11,10 +11,10 @@ function conferir(nome: string, obtido: unknown, esperado: unknown) {
 
 const base = [{ id: 'cleo', nome: 'Cleo', papel: 'Copy', squad: 'conteúdo' as const, área: 'Copy', abreviação: 'CL', cor: '#0f0', aliases: ['cleo-produtor'] }]
 const catalogo = mesclarRuntimesNoCatalogo(base, [
-  { id: 'cleo-produtor', etapa: 'escrevendo legenda', etapa_e_description: true },
-  { id: 'session-123456', etapa: 'renderizando', etapa_e_description: false },
+  { id: 'session-cleo', identidade: 'cleo', papel: 'cont_copy', tarefa: 'produzir legenda', etapa: 'escrevendo legenda', etapa_e_description: true },
+  { id: 'session-123456', identidade: 'sessao-codex', etapa: 'renderizando', etapa_e_description: false },
 ])
-conferir('alias não duplica agente catalogado', catalogo.length, 2)
+conferir('identidade não duplica agente catalogado', catalogo.length, 2)
 conferir('runtime desconhecido entra no pipeline', catalogo[1]?.squad, 'pipeline Codex')
 conferir('booleano de proveniência não vira descrição', catalogo[1]?.descricao, 'renderizando')
 conferir('rótulo usa sufixo honesto do ID', catalogo[1]?.nome, 'Sessão Codex · 123456')

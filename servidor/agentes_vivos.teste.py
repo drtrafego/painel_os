@@ -16,6 +16,7 @@ import tempfile
 import time
 from pathlib import Path
 
+import agentes_vivos as mod
 from agentes_vivos import (
     TRABALHANDO,
     SILENCIOSO,
@@ -68,6 +69,9 @@ def testar_agentes_vivos():
     agora = time.time()
     with tempfile.TemporaryDirectory(prefix="agentes-vivos-teste-") as tmp_dir:
         raiz = Path(tmp_dir)
+        # Isola do Codex real da máquina: sem isto, qualquer sessão Codex viva
+        # agora entra nos resultados e derruba as contagens do teste.
+        mod.RAIZ_CODEX = raiz / "codex-vazio"
         projeto = raiz / "projeto"
         antiga = projeto / "sessao-antiga" / "subagents"
         nova = projeto / "sessao-nova" / "subagents"
@@ -232,6 +236,21 @@ def testar_agentes_vivos():
         casa_zero = ler_agentes_da_casa(projetos={"errado": "pasta_inexistente_123"}, raiz=tmp)
         conferir("ok=False quando todas falham", casa_zero["ok"], False)
         conferir("motivo correto de falha total", casa_zero["motivo"], "todas_as_sessoes_falharam")
+
+        print("\n--- Teste 7: Identidade Codex lida só do session_meta, sem vazar agent_path")
+        meta_codex = tmp / "rollout-teste.jsonl"
+        meta_codex.write_text(json.dumps({
+            "type": "session_meta", "payload": {
+                "agent_role": "cont_copy", "agent_nickname": "Cleo",
+                "agent_path": "/root/segredo/produzir_legenda",
+                "source": {"subagent": {"thread_spawn": {
+                    "parent_thread_id": "pai-123", "depth": 2}}},
+            },
+        }) + "\n" + '{"prompt":"NUNCA DEVE SAIR"}\n')
+        conferir("identidade codex allowlisted", mod._identidade_codex(meta_codex), {
+            "identidade": "cleo", "papel": "cont_copy",
+            "tarefa": "produzir legenda", "pai": "pai-123", "profundidade": 2,
+        })
 
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

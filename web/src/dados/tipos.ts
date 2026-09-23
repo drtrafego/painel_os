@@ -229,6 +229,10 @@ export type AgenteVivo = {
   id: string
   /** Qual sessão da casa gerou este agente: luana, renato ou bia. */
   dono?: 'luana' | 'renato' | 'bia' | string
+  /** Identidade operacional allowlisted, ou sessao-codex para desconhecidos. */
+  identidade?: string | null
+  papel?: string | null
+  tarefa?: string | null
   tipo?: string | null
   descricao?: string | null
   pai?: string | null
