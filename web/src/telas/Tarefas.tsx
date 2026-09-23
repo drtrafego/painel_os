@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
+import { PixelOffice } from '../ui/PixelOffice'
 import type { PropsTela } from './Vazias'
 
 const STATUS: [string, string][] = [
@@ -74,6 +76,11 @@ export function Tarefas({ estado, vista }: PropsTela) {
   const ativos = vivos?.contagem?.trabalhando ?? 0
   const listaVivos = vivos?.agentes?.filter((a) => a.estado === 'trabalhando' || a.estado === 'silencioso') ?? []
 
+  const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal'>('office')
+  const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
+
+  const agenteSelecionado = listaVivos.find((a) => a.id === agenteInspecionado)
+
   return (
     <div className="w-full max-w-none space-y-6 px-3 py-4 font-mono sm:px-6 lg:px-8 xl:px-10">
       {/* Header Principal Retrô em Pixel Art */}
@@ -83,7 +90,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
             <div className="flex items-center gap-2.5">
               <span className="inline-block size-5 bg-[#a3e635] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] animate-pulse" />
               <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-[#facc15]">
-                [ 👾 TAREFAS GTD & SONDA OPERACIONAL ]
+                [ 👾 PIXEL AGENTS & TAREFAS GTD ]
               </h1>
             </div>
             <p className="mt-2 text-xs sm:text-sm text-slate-300 max-w-4xl leading-relaxed">
@@ -91,65 +98,129 @@ export function Tarefas({ estado, vista }: PropsTela) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* Alternador de Visualização: Virtual Office vs Terminal Cards */}
+            <div className="flex items-center border-2 border-black bg-[#0f172a] p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <button
+                type="button"
+                onClick={() => setModoExibicao('office')}
+                className={`px-3 py-1.5 text-xs font-black uppercase transition-all ${
+                  modoExibicao === 'office'
+                    ? 'bg-[#a3e635] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🎮 VIRTUAL OFFICE
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoExibicao('terminal')}
+                className={`px-3 py-1.5 text-xs font-black uppercase transition-all ${
+                  modoExibicao === 'terminal'
+                    ? 'bg-[#38bdf8] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                📟 TERMINAL CRT
+              </button>
+            </div>
+
             <div className="border-2 border-black bg-[#0f172a] px-3.5 py-2 text-xs font-bold text-[#38bdf8] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
               {dados?.coletado_em ? `📡 SYNC: ${new Date(dados.coletado_em).toLocaleString('pt-BR')}` : 'OFFLINE'}
-            </div>
-            <div className="border-2 border-black bg-[#0f172a] px-3.5 py-2 text-xs font-bold text-[#a3e635] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              ESTADO GTD ATIVO
             </div>
           </div>
         </div>
       </div>
 
-      {/* Sonda PixelArt dos Agentes ao Vivo — Janela Expansiva */}
-      <PixelJanela
-        titulo="⚡ SONDA DE AGENTES AO VIVO NA TAREFA"
-        subtitulo="Monitoramento em tempo real de transcripts e subprocessos ativos"
-        badge={carregandoVivos ? 'CONSULTANDO...' : vivos?.ok ? `${vivos.contagem?.vivos ?? 0} VIVOS (${ativos} EXEC)` : 'SONDA OFF'}
-        corBadge={ativos > 0 ? 'text-[#a3e635]' : 'text-slate-400'}
-      >
-        {listaVivos.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
-            {listaVivos.map((ag) => (
-              <div
-                key={ag.id}
-                className="flex flex-col justify-between border-2 border-black bg-[#0f172a] p-3.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-1.5 border-b border-slate-700 pb-2">
-                    <span className="truncate text-xs font-black uppercase text-[#38bdf8]" title={ag.id}>
-                      {ag.id}
-                    </span>
-                    <span
-                      className={`border border-black px-1.5 py-0.5 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                        ag.estado === 'trabalhando' ? 'bg-[#a3e635] text-black' : 'bg-[#facc15] text-black'
-                      }`}
-                    >
-                      {ag.estado === 'trabalhando' ? 'EXEC' : 'SILENT'}
-                    </span>
-                  </div>
-                  <div
-                    className="mt-2.5 border-l-2 border-[#38bdf8] pl-2 text-xs text-slate-200 line-clamp-3 leading-relaxed"
-                    title={ag.etapa_e_description ?? ag.etapa}
-                  >
-                    {ag.etapa ?? 'ETAPA EM ANDAMENTO'}
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between border-t border-slate-700/80 pt-2 text-[10px] text-slate-400">
-                  <span className="truncate max-w-[120px] font-semibold">{ag.ferramenta ? `TOOL: ${ag.ferramenta}` : ag.fase}</span>
-                  <span className="tabular-nums font-mono text-[#a3e635]">
-                    {ag.silencio_s !== null && ag.silencio_s !== undefined ? `${ag.silencio_s}s` : ''}
+      {/* Seletor do Modo Virtual Office (Canvas Pixel Art Estilo pixel-agents-hq) */}
+      {modoExibicao === 'office' ? (
+        <section className="space-y-3">
+          <PixelOffice
+            agentes={listaVivos}
+            aoSelecionarAgente={(id) => setAgenteInspecionado(id)}
+            agenteSelecionadoId={agenteInspecionado}
+          />
+
+          {/* Ficha Inspector do Agente Clicado */}
+          {agenteSelecionado && (
+            <div className="border-4 border-black bg-[#0f172a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="size-3 bg-[#a3e635] animate-ping" />
+                  <span className="text-sm font-black uppercase text-[#facc15]">
+                    AGENTE INSPECCIONADO: {agenteSelecionado.id.toUpperCase()}
+                  </span>
+                  <span className="border border-black bg-[#1e293b] px-2 py-0.5 text-[10px] text-[#38bdf8]">
+                    {agenteSelecionado.estado === 'trabalhando' ? 'EM EXECUÇÃO' : 'OCIOSO'}
                   </span>
                 </div>
+                <p className="text-xs text-slate-300">
+                  {agenteSelecionado.etapa_e_description ?? agenteSelecionado.etapa ?? 'Sem descrição da tarefa atual'}
+                </p>
+                <div className="text-[10.5px] text-slate-400">
+                  Ferramenta ativa: <span className="text-[#a3e635]">{agenteSelecionado.ferramenta ?? 'Nenhuma'}</span> · Fase: {agenteSelecionado.fase} · Silêncio: {agenteSelecionado.silencio_s ?? 0}s
+                </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="border-2 border-dashed border-slate-700 bg-[#0f172a]/60 p-6 text-center text-xs text-slate-400">
-            Nenhum agente em execução ativa neste instante. Monitorando transcripts e processos a cada 10s.
-          </div>
-        )}
-      </PixelJanela>
+              <button
+                type="button"
+                onClick={() => setAgenteInspecionado(null)}
+                className="border-2 border-black bg-[#1e293b] px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-700"
+              >
+                FECHAR INSPECTOR ✕
+              </button>
+            </div>
+          )}
+        </section>
+      ) : (
+        /* Modo Terminal CRT Cards */
+        <PixelJanela
+          titulo="⚡ SONDA DE AGENTES AO VIVO NA TAREFA"
+          subtitulo="Monitoramento em tempo real de transcripts e subprocessos ativos"
+          badge={carregandoVivos ? 'CONSULTANDO...' : vivos?.ok ? `${vivos.contagem?.vivos ?? 0} VIVOS (${ativos} EXEC)` : 'SONDA OFF'}
+          corBadge={ativos > 0 ? 'text-[#a3e635]' : 'text-slate-400'}
+        >
+          {listaVivos.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
+              {listaVivos.map((ag) => (
+                <div
+                  key={ag.id}
+                  className="flex flex-col justify-between border-2 border-black bg-[#0f172a] p-3.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1.5 border-b border-slate-700 pb-2">
+                      <span className="truncate text-xs font-black uppercase text-[#38bdf8]" title={ag.id}>
+                        {ag.id}
+                      </span>
+                      <span
+                        className={`border border-black px-1.5 py-0.5 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+                          ag.estado === 'trabalhando' ? 'bg-[#a3e635] text-black' : 'bg-[#facc15] text-black'
+                        }`}
+                      >
+                        {ag.estado === 'trabalhando' ? 'EXEC' : 'SILENT'}
+                      </span>
+                    </div>
+                    <div
+                      className="mt-2.5 border-l-2 border-[#38bdf8] pl-2 text-xs text-slate-200 line-clamp-3 leading-relaxed"
+                      title={ag.etapa_e_description ?? ag.etapa}
+                    >
+                      {ag.etapa ?? 'ETAPA EM ANDAMENTO'}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-700/80 pt-2 text-[10px] text-slate-400">
+                    <span className="truncate max-w-[120px] font-semibold">{ag.ferramenta ? `TOOL: ${ag.ferramenta}` : ag.fase}</span>
+                    <span className="tabular-nums font-mono text-[#a3e635]">
+                      {ag.silencio_s !== null && ag.silencio_s !== undefined ? `${ag.silencio_s}s` : ''}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="border-2 border-dashed border-slate-700 bg-[#0f172a]/60 p-6 text-center text-xs text-slate-400">
+              Nenhum agente em execução ativa neste instante. Monitorando transcripts e processos a cada 10s.
+            </div>
+          )}
+        </PixelJanela>
+      )}
 
       {erro ? (
         <section
