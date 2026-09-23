@@ -222,9 +222,9 @@ export function SeletorDeData({
   const textoFaixaFormatada = `${formatarDataBr(faixaAtiva.inicio)} — ${formatarDataBr(faixaAtiva.fim)}`
 
   return (
-    <div ref={containerRef} className="relative inline-flex items-center text-[var(--color-tinta)] font-sans">
+    <div ref={containerRef} className="relative inline-flex max-w-full items-center text-[var(--color-tinta)] font-sans">
       {/* BARRA DE NAVEGAÇÃO E SELETOR DE DATAS DA CABEÇA (Conforme Imagem 1) */}
-      <div className="flex items-center gap-2">
+      <div className="flex max-w-full items-center gap-1.5 sm:gap-2">
         {/* Controles rápidos de mês: < Mês Ano > */}
         <div className="flex items-center rounded-xl border border-[var(--color-linha)] bg-[var(--color-carta)] p-0.5 shadow-sm">
           <button
@@ -235,7 +235,7 @@ export function SeletorDeData({
           >
             <span className="text-xs">‹</span>
           </button>
-          <span className="px-2.5 font-mono text-[12px] font-semibold text-[var(--color-tinta)]">
+          <span className="px-1.5 font-mono text-[11px] font-semibold text-[var(--color-tinta)] sm:px-2.5 sm:text-[12px]">
             {nomeMesAnoAtivo}
           </span>
           <button
@@ -253,10 +253,10 @@ export function SeletorDeData({
           type="button"
           onClick={() => setAberto((a) => !a)}
           aria-expanded={aberto}
-          className="flex items-center gap-2.5 rounded-xl border border-[var(--color-linha)] bg-[var(--color-carta)] px-3.5 py-1.5 font-mono text-[12px] font-medium text-[var(--color-tinta)] shadow-sm transition-all hover:border-[var(--color-linha-forte)] hover:bg-[var(--color-fundo)] active:scale-95"
+          className="flex min-w-0 items-center gap-1.5 rounded-xl border border-[var(--color-linha)] bg-[var(--color-carta)] px-2 py-1.5 font-mono text-[11px] font-medium text-[var(--color-tinta)] shadow-sm transition-all hover:border-[var(--color-linha-forte)] hover:bg-[var(--color-fundo)] active:scale-95 sm:gap-2.5 sm:px-3.5 sm:text-[12px]"
         >
           <span className="opacity-80">📅</span>
-          <span>{textoFaixaFormatada}</span>
+          <span className="whitespace-nowrap">{textoFaixaFormatada}</span>
         </button>
       </div>
 
@@ -406,4 +406,3 @@ export function SeletorDeData({
     </div>
   )
 }
-

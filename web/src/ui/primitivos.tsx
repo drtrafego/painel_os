@@ -125,7 +125,7 @@ export function TituloDaTela({
         <h1 className="titulo-pagina">{titulo}</h1>
         <p className="rotulo mt-1.5">{pergunta}</p>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:w-auto sm:shrink-0">
         {mostrarSeletorData && <SeletorDeData />}
         {direita}
       </div>

@@ -99,7 +99,9 @@ export function Topbar({
 
       <div className="ml-auto flex shrink-0 items-center gap-3 sm:gap-4">
         {/* Seletor de Datas Interativo */}
-        <SeletorDeData />
+        <span className="hidden sm:inline-flex">
+          <SeletorDeData />
+        </span>
 
         <span className="rotulo hidden xl:inline">
           convocações de agente{' '}
