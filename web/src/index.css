@@ -178,9 +178,19 @@
   filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.85));
 }
 
+/* Suporte a Layout Expandido / Tela Toda */
+[data-expandido="true"] .max-w-\[1240px\],
+[data-expandido="true"] .max-w-\[1180px\],
+[data-expandido="true"] .max-w-\[1400px\],
+[data-expandido="true"] [data-container-tela] {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
   }
 }
+

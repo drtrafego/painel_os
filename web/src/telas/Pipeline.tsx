@@ -5,7 +5,7 @@ export function Pipeline({ estado, vista }: PropsTela) {
   const pipeline = estado.pipeline
   if (!pipeline || pipeline.erro || pipeline.total === null) {
     return (
-      <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6">
+      <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
         <TituloDaTela titulo="Pipeline comercial." pergunta={vista.pergunta} />
         <section className="carta mt-4 max-w-2xl p-5">
           <Cabecalho cor="var(--color-vermelho)" meta="indisponível">não consegui medir o funil</Cabecalho>
@@ -18,7 +18,7 @@ export function Pipeline({ estado, vista }: PropsTela) {
 
   const maior = Math.max(...pipeline.etapas.map((e) => e.total), 1)
   return (
-    <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6">
+    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       <TituloDaTela titulo="Pipeline comercial." pergunta={vista.pergunta} direita={<span className="rotulo">agregado de {pipeline.coletado_em ? new Date(pipeline.coletado_em).toLocaleString('pt-BR', { timeZone: 'UTC', hour12: false }) : '—'} utc</span>} />
       <div className="grid gap-3 sm:grid-cols-2">
         <Kpi rotulo="leads registrados" valor={pipeline.total} nota="soma do totalLeads do analytics" />

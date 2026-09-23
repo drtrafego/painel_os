@@ -169,59 +169,68 @@ function Mapa({
     const mapaAlt = new Map<string, Posto>()
 
     if (modoLayout === 'orbita') {
-      // Distribuição radial concêntrica ordenada por grau de conexão
-      const ordenados = [...nos].sort((a, b) => b.grau - a.grau)
-      const maxGrau = Math.max(1, ...nos.map((n) => n.grau))
-      const total = nos.length
+      // Distribuição em múltiplos anéis concêntricos equilibrados a partir do centro
+      const ordenados = [...nos].sort((a, b) => b.grau - a.grau || b.peso - a.peso)
+      const total = ordenados.length
+      const rMin = Math.min(caixa.largura, caixa.altura) * 0.16
+      const rMax = Math.min(caixa.largura, caixa.altura) * 0.44
+      
+      const numAneis = total > 50 ? 4 : total > 25 ? 3 : 2
+      const porAnel = Math.ceil(total / numAneis)
 
       ordenados.forEach((n, i) => {
         const pBase = postosBase.get(n.id)
         if (!pBase) return
-        const frac = 1 - (n.grau / maxGrau) * 0.7
-        const rMax = Math.min(caixa.largura, caixa.altura) * 0.42
-        const rOrbita = Math.max(40, rMax * (0.2 + frac * 0.8))
-        const angulo = (i / total) * 2 * Math.PI - Math.PI / 2
+        const anelIdx = Math.floor(i / porAnel)
+        const posNoAnel = i % porAnel
+        const totalNoAnel = Math.min(porAnel, total - anelIdx * porAnel)
+        
+        const rOrbita = rMin + (anelIdx / Math.max(1, numAneis - 1)) * (rMax - rMin)
+        const offset = (anelIdx % 2) * (Math.PI / totalNoAnel)
+        const angulo = (posNoAnel / totalNoAnel) * 2 * Math.PI - Math.PI / 2 + offset
+        
         mapaAlt.set(n.id, {
           ...pBase,
-          x: cx + Math.cos(angulo) * rOrbita,
-          y: cy + Math.sin(angulo) * rOrbita,
+          x: Math.round((cx + Math.cos(angulo) * rOrbita) * 10) / 10,
+          y: Math.round((cy + Math.sin(angulo) * rOrbita) * 10) / 10,
+          angulo,
         })
       })
       return mapaAlt
     }
 
     if (modoLayout === 'hierarquia') {
-      // Agrupamento vertical/horizontal por espécie de aprendizado
-      // ‼️ CORRIGIDO 21/09/2026: EU TINHA DITO NO README QUE ISSO JÁ ESTAVA
-      // CORRIGIDO "NOS DOIS LUGARES" e não estava — só arrumei o
-      // Grafo3DCofre.tsx (3D), esqueci esta cópia local do 2D. Achado só
-      // porque ele mandou PRINT REAL do resultado (todos os 46 nós caindo
-      // no bucket "outro", coluna única, círculos se encostando, o mapa
-      // desistiu e caiu pro modo lista). Mesma lista errada, mesmo defeito:
-      // zero overlap com as espécies reais (correcao/defeito/medicao/
-      // ordem/padrao/trava, medido em data/cofre.json).
-      const especies = ['padrao', 'ordem', 'trava', 'correcao', 'defeito', 'medicao']
-      const colunas = new Map<string, NoMemoria[]>()
+      // Camadas (Tiered Grid): Agrupamento balanceado ocupando o espaço central por área ou espécie
+      const grupos = new Map<string, NoMemoria[]>()
       nos.forEach((n) => {
-        const esp = especies.includes(n.especie.toLowerCase()) ? n.especie.toLowerCase() : 'outro'
-        const l = colunas.get(esp) ?? []
+        const chave = n.area || 'operacao'
+        const l = grupos.get(chave) ?? []
         l.push(n)
-        colunas.set(esp, l)
+        grupos.set(chave, l)
       })
 
-      const chaves = Array.from(colunas.keys())
-      const nCols = chaves.length
-      chaves.forEach((esp, colIdx) => {
-        const lista = colunas.get(esp) ?? []
-        const posX = 60 + (colIdx / Math.max(1, nCols - 1)) * (caixa.largura - 120)
-        lista.forEach((n, rowIdx) => {
+      const chaves = Array.from(grupos.keys())
+      const nGrupos = chaves.length
+      const paddingX = Math.max(40, caixa.largura * 0.08)
+      const paddingY = Math.max(45, caixa.altura * 0.10)
+      const larguraUtil = caixa.largura - paddingX * 2
+      const alturaUtil = caixa.altura - paddingY * 2
+
+      chaves.forEach((grp, grpIdx) => {
+        const lista = grupos.get(grp) ?? []
+        const yCamada = paddingY + (grpIdx / Math.max(1, nGrupos - 1)) * alturaUtil
+        const totalItens = lista.length
+        
+        lista.forEach((n, itemIdx) => {
           const pBase = postosBase.get(n.id)
           if (!pBase) return
-          const posY = 70 + (rowIdx / Math.max(1, lista.length)) * (caixa.altura - 140)
+          const xPos = paddingX + (totalItens === 1 ? larguraUtil / 2 : (itemIdx / (totalItens - 1)) * larguraUtil)
+          // Pequena variação vertical alternada para evitar colisão horizontal de nós próximos
+          const offsetRow = (itemIdx % 2 === 1 ? 14 : -14)
           mapaAlt.set(n.id, {
             ...pBase,
-            x: posX,
-            y: posY,
+            x: Math.round(xPos * 10) / 10,
+            y: Math.round((yCamada + (totalItens > 8 ? offsetRow : 0)) * 10) / 10,
           })
         })
       })
@@ -690,7 +699,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
 
   if (!cofre || cofre.erro || cofre.conexoes === null || !nos.length) {
     return (
-      <div className="mx-auto max-w-[1180px] px-4 py-5 sm:px-6">
+      <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
         <TituloDaTela titulo="Cofre de conhecimento." pergunta={vista.pergunta} mostrarSeletorData={false} />
         <div className="carta p-5 text-sm text-tinta-2">
           Não consegui medir o Cofre. {cofre?.erro ?? 'O estado ainda não tem a fonte dos aprendizados.'}
@@ -740,7 +749,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
   const ligar = (id: string) => setAlvo((antigo) => (antigo === id || id === escolhido ? null : id))
 
   return (
-    <div className={`mx-auto max-w-[1240px] px-4 py-5 sm:px-6 transition-colors duration-300 ${
+    <div className={`w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 transition-colors duration-300 ${
       modoComando ? 'text-slate-100' : 'text-tinta'
     }`}>
       <TituloDaTela

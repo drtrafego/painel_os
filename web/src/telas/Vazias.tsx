@@ -35,7 +35,7 @@ export type PropsTela = {
  */
 export function TelaSemDado({ vista }: { vista: Vista }) {
   return (
-    <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6">
+    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       <TituloDaTela
         titulo={vista.nome + '.'}
         pergunta={vista.pergunta}

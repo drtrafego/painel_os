@@ -6,7 +6,7 @@ export type NomeIcone =
   | 'pipeline' | 'analitica' | 'biblioteca' | 'cofre'
   | 'coroa' | 'bot' | 'lupa' | 'pincel' | 'codigo' | 'escudo'
   | 'radar' | 'texto' | 'megafone' | 'grafico' | 'seta' | 'chat' | 'menu'
-  | 'recolher' | 'expandir'
+  | 'recolher' | 'expandir' | 'tela-cheia' | 'tela-normal'
 
 const TRACOS: Record<NomeIcone, React.ReactNode> = {
   comando: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
@@ -33,6 +33,8 @@ const TRACOS: Record<NomeIcone, React.ReactNode> = {
   menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
   recolher: <><path d="M15 18l-6-6 6-6" /></>,
   expandir: <><path d="M9 18l6-6-6-6" /></>,
+  'tela-cheia': <><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" /></>,
+  'tela-normal': <><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" /></>,
 }
 
 export function Icone({

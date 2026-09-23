@@ -24,7 +24,7 @@ export function Aprovacoes({ estado, vista }: PropsTela) {
     finally { setOcupado(null) }
   }
   const esperando = contar('aguardando')
-  return <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6">
+  return <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
     <TituloDaTela titulo="Aprovações." pergunta={vista.pergunta} direita={<span className="rotulo">somente leitura · nenhuma ação automática</span>} />
     {erro ? <section className="rounded-xl border border-vermelho/30 bg-vermelho/6 p-4" data-aprovacoes-erro><Cabecalho cor="var(--color-vermelho)">fila indisponível</Cabecalho><p className="text-[12px] text-tinta-2">{erro}</p><p className="mt-2 text-[11px] text-tinta-3">Nenhum número parcial aparece no lugar.</p></section> : <>
       {!dados?.decisoes_habilitadas && <div data-decisoes-bloqueadas className="mb-3 rounded-lg border border-ambar/30 bg-ambar/8 px-3 py-2.5 text-[11px] leading-relaxed text-tinta-2"><span className="font-mono uppercase tracking-[.16em] text-ambar">Decisões bloqueadas.</span> {dados?.decisoes_bloqueio}. A fila continua disponível somente para leitura.</div>}

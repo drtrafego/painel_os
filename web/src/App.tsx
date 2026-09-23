@@ -32,7 +32,7 @@ function CarregandoTela() {
     <div
       role="status"
       aria-live="polite"
-      className="mx-auto flex min-h-56 max-w-[1240px] items-center px-4 py-8 sm:px-6"
+      className="w-full max-w-none flex min-h-56 items-center px-3 py-4 sm:px-6 lg:px-8 xl:px-10"
     >
       <div className="flex items-center gap-3 text-tinta-2">
         <span className="size-2 animate-pulse rounded-full bg-verde" aria-hidden="true" />
@@ -69,11 +69,30 @@ export default function App() {
     }
   })
 
+  const [larguraExpandida, setLarguraExpandida] = useState(() => {
+    try {
+      const salvo = localStorage.getItem('painel_os:largura_expandida')
+      return salvo === null ? true : salvo === 'true'
+    } catch {
+      return true
+    }
+  })
+
   const alternarSidebar = () => {
     setSidebarRecolhida((prev) => {
       const prox = !prev
       try {
         localStorage.setItem('painel_os:sidebar_recolhida', String(prox))
+      } catch {}
+      return prox
+    })
+  }
+
+  const alternarLarguraExpandida = () => {
+    setLarguraExpandida((prev) => {
+      const prox = !prev
+      try {
+        localStorage.setItem('painel_os:largura_expandida', String(prox))
       } catch {}
       return prox
     })
@@ -245,13 +264,20 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar hora={hora} estado={estado} vista={vista.nome} aoAbrirMenu={() => setMenuAberto(true)} />
+      <div className="flex min-w-0 flex-1 flex-col" data-expandido={larguraExpandida ? 'true' : 'false'}>
+        <Topbar
+          hora={hora}
+          estado={estado}
+          vista={vista.nome}
+          aoAbrirMenu={() => setMenuAberto(true)}
+          expandido={larguraExpandida}
+          aoAlternarExpandido={alternarLarguraExpandida}
+        />
         <main ref={areaRef} className="min-h-0 flex-1 overflow-y-auto">
           {/* Resposta nova rejeitada: os numeros abaixo sao os anteriores, e
               isso vai dito ANTES deles, nao num rodape que ninguem acha. */}
           {origem === 'estado-invalido' && problemas && (
-            <div className="mx-auto max-w-[1240px] px-4 pt-4 sm:px-6">
+            <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
               <EstadoInvalido problemas={problemas} origem="/api/estado" />
             </div>
           )}

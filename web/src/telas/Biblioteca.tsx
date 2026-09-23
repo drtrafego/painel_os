@@ -8,7 +8,7 @@ export function Biblioteca({ estado, vista }: PropsTela) {
   const biblioteca = estado.biblioteca
   if (!biblioteca || biblioteca.erro) {
     return (
-      <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6">
+      <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
         <TituloDaTela titulo="Biblioteca." pergunta={vista.pergunta} />
         <section className="carta mt-4 max-w-2xl p-5">
           <Cabecalho cor="var(--color-vermelho)" meta="não lido">não consegui abrir o acervo</Cabecalho>
@@ -19,7 +19,7 @@ export function Biblioteca({ estado, vista }: PropsTela) {
   }
 
   return (
-    <div className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6">
+    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       <TituloDaTela titulo="Biblioteca." pergunta={vista.pergunta} direita={<span className="rotulo">índice de {new Date(biblioteca.atualizado_em).toLocaleString('pt-BR', { timeZone: 'UTC', hour12: false })} utc</span>} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi rotulo="itens no índice" valor={biblioteca.total} nota="é a lista inteira abaixo" />
