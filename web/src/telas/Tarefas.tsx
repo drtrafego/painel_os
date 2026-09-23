@@ -74,7 +74,8 @@ export function Tarefas({ estado, vista }: PropsTela) {
   const { dados: vivos, carregando: carregandoVivos } = useAgentesVivos()
   const erro = dados?.erro ?? (!dados ? 'a medição de tarefas não veio no estado atual' : null)
   const ativos = vivos?.contagem?.trabalhando ?? 0
-  const listaVivos = vivos?.agentes?.filter((a) => a.estado === 'trabalhando' || a.estado === 'silencioso') ?? []
+  // A sonda é a única fonte de presença; o catálogo do escritório completa o restante.
+  const listaVivos = vivos?.agentes ?? []
 
   const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal'>('office')
   const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
@@ -145,7 +146,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
             <div className="border-4 border-black bg-[#0f172a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="size-3 bg-[#a3e635] animate-ping" />
+                  <span className={`size-3 ${agenteSelecionado?.estado === 'trabalhando' ? 'bg-[#a3e635] animate-ping' : 'bg-slate-500'}`} />
                   <span className="text-sm font-black uppercase text-[#facc15]">
                     AGENTE INSPECCIONADO: {agenteSelecionado.id.toUpperCase()}
                   </span>
@@ -192,10 +193,10 @@ export function Tarefas({ estado, vista }: PropsTela) {
                       </span>
                       <span
                         className={`border border-black px-1.5 py-0.5 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                          ag.estado === 'trabalhando' ? 'bg-[#a3e635] text-black' : 'bg-[#facc15] text-black'
+                          ag.estado === 'trabalhando' ? 'bg-[#a3e635] text-black' : ag.estado === 'silencioso' ? 'bg-[#facc15] text-black' : 'bg-slate-500 text-white'
                         }`}
                       >
-                        {ag.estado === 'trabalhando' ? 'EXEC' : 'SILENT'}
+                        {ag.estado === 'trabalhando' ? 'EXEC' : ag.estado === 'silencioso' ? 'OCIOSO' : 'FORA'}
                       </span>
                     </div>
                     <div
