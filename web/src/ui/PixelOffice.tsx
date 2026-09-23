@@ -36,7 +36,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
     const container = containerRef.current
     if (!container) return
     setPan({ x: 0, y: 0 })
-    setZoom(zoomParaEnquadrar(container.clientWidth, container.clientHeight, catalogoVisual.length))
+    setZoom(zoomParaEnquadrar(container.clientWidth, container.clientHeight, visiveis.length))
   }
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
     const observer = new ResizeObserver(enquadrarCatalogo)
     observer.observe(container)
     return () => observer.disconnect()
-  }, [catalogoVisual.length])
+  }, [squad, visiveis.length])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
