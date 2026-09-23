@@ -51,6 +51,15 @@ BRT = ZoneInfo("America/Sao_Paulo")
 RAIZ_PROJETOS = Path.home() / ".claude" / "projects"
 PROJETO_PADRAO = "-opt-gastaomatos-luana"
 
+# As três sessões da casa. Nome de exibição (dono) -> pasta do projeto em
+# ~/.claude/projects/. Se um quarto agente ganhar sessão própria, cadastrar
+# aqui é o único passo necessário — ler_agentes() já sabe ler qualquer uma.
+PROJETOS_DA_CASA: dict[str, str] = {
+    "luana": "-opt-gastaomatos-luana",
+    "renato": "-opt-gastaomatos-renato",
+    "bia": "-opt-gastaomatos-bia",
+}
+
 # Quanto do fim do transcript a gente le pra achar o ultimo tool_use.
 # 256 KB cobre folgado varios turnos; o arquivo pode ter 14 MB.
 CAUDA_BYTES = 256 * 1024
@@ -402,6 +411,57 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
     )
 
 
+def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
+                         raiz: Path | None = None) -> dict:
+    """Agrega ler_agentes() das três sessões da casa em um único retrato.
+
+    Nunca deixa uma sessão que falhou apagar as que funcionaram: erro de
+    uma entra em `avisos`, com o dono nomeado, e as outras duas continuam
+    valendo. Cada agente ganha o campo `dono` (luana/renato/bia) — sem
+    isso o front não tem como saber de quem é o boneco.
+    """
+    projetos = projetos or PROJETOS_DA_CASA
+    t0 = time.perf_counter()
+    agentes: list[dict] = []
+    avisos: list[str] = []
+    conta = {TRABALHANDO: 0, SILENCIOSO: 0, PARADO: 0}
+    historico_total = 0
+    indeterminados_total = 0
+    algum_ok = False
+
+    for dono, projeto in projetos.items():
+        r = ler_agentes(projeto=projeto, raiz=raiz)
+        if not r.get("ok"):
+            avisos.append(f"{dono}: {r.get('motivo')} — {r.get('erro')}")
+            continue
+        algum_ok = True
+        for a in r.get("agentes", []):
+            a = {**a, "dono": dono}
+            agentes.append(a)
+            if a.get("estado") in conta:
+                conta[a["estado"]] += 1
+        historico_total += r.get("contagem", {}).get("historico") or 0
+        indeterminados_total += r.get("contagem", {}).get("indeterminados") or 0
+        avisos.extend(f"{dono}: {av}" for av in r.get("avisos", []))
+
+    agentes.sort(key=lambda a: (a.get("silencio_s") is None, a.get("silencio_s") or 0))
+    agora = _agora()
+    return {
+        "ok": algum_ok,
+        "motivo": "leitura_ok" if algum_ok else "todas_as_sessoes_falharam",
+        "erro": None,
+        "medido_em": _hora_br(agora),
+        "medido_em_iso": datetime.fromtimestamp(agora, BRT).isoformat(),
+        "custo_ms": round((time.perf_counter() - t0) * 1000, 1),
+        "limiares_s": {"ativo": LIMIAR_ATIVO_S, "janela_candidato": JANELA_CANDIDATO_S},
+        "contagem": {**conta, "vivos": conta[TRABALHANDO] + conta[SILENCIOSO],
+                     "total": len(agentes), "historico": historico_total,
+                     "indeterminados": indeterminados_total},
+        "agentes": agentes,
+        "avisos": avisos,
+    }
+
+
 # --------------------------------------------------------------------------
 # _CALIBRAGEM
 # --------------------------------------------------------------------------
@@ -414,5 +474,8 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
 if __name__ == "__main__":
     import sys
     alvo = sys.argv[1] if len(sys.argv) > 1 else PROJETO_PADRAO
-    r = ler_agentes(projeto=alvo)
+    if alvo == "--casa":
+        r = ler_agentes_da_casa()
+    else:
+        r = ler_agentes(projeto=alvo)
     print(json.dumps(r, ensure_ascii=False, indent=2)[:4000])

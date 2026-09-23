@@ -72,7 +72,11 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
         ctx.fillStyle = '#7c451b'; ctx.fillRect(-25, -12, 50, 26); ctx.fillStyle = '#0b1324'; ctx.fillRect(-13, -10, 26, 16); ctx.fillStyle = agente.cor; ctx.fillRect(-10, -7, 20, 10); ctx.fillStyle = '#0b1324'; ctx.fillRect(-7, -5, 11, 1); ctx.fillRect(-7, -1, 8, 1); ctx.fillStyle = '#cbd5e1'; ctx.fillRect(-10, 5, 20, 4)
         ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(-10, 18, 20, 4); ctx.fillStyle = agente.cor; ctx.fillRect(-7, -1, 14, 12); ctx.fillStyle = '#fed7aa'; ctx.fillRect(-6, -14, 12, 12); ctx.fillStyle = index % 2 ? '#78350f' : '#1e293b'; ctx.fillRect(-7, -17, 14, 6); ctx.fillStyle = '#0f172a'; ctx.fillRect(-4, -9, 2, 2); ctx.fillRect(2, -9, 2, 2)
         if (pulse) { ctx.fillStyle = '#facc15'; ctx.fillRect(8, -17, 4, 4) }; if (selecionado) { ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2; ctx.strokeRect(-18, -22, 36, 46) }
-        ctx.fillStyle = '#020617'; ctx.fillRect(-43, 25, 86, 16); ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#f8fafc'; ctx.fillText(agente.nome.slice(0, 17), 0, 33); ctx.font = '6px monospace'; ctx.fillStyle = estado === 'executando' ? '#a3e635' : estado === 'ocioso' ? '#facc15' : '#94a3b8'; ctx.fillText(estado === 'executando' ? 'EXECUTANDO' : estado === 'ocioso' ? 'OCIOSO' : 'FORA DA EXECUÇÃO', 0, 39)
+        ctx.fillStyle = '#020617'; ctx.fillRect(-43, 25, 86, 16); ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center'
+        const tagDono = runtime?.dono ? `[${runtime.dono[0].toUpperCase()}] ` : ''
+        ctx.fillStyle = runtime?.dono === 'luana' ? '#38bdf8' : runtime?.dono === 'renato' ? '#c084fc' : runtime?.dono === 'bia' ? '#f472b6' : '#f8fafc'
+        ctx.fillText(`${tagDono}${agente.nome}`.slice(0, 18), 0, 33)
+        ctx.font = '6px monospace'; ctx.fillStyle = estado === 'executando' ? '#a3e635' : estado === 'ocioso' ? '#facc15' : '#94a3b8'; ctx.fillText(estado === 'executando' ? 'EXECUTANDO' : estado === 'ocioso' ? 'OCIOSO' : 'FORA DA EXECUÇÃO', 0, 39)
         ctx.restore()
       })
       ctx.restore(); tick += 1; if (!reduzirMovimento) frame = requestAnimationFrame(render)

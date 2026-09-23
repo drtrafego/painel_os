@@ -76,11 +76,12 @@ def gravar_atomico(caminho: Path, bruto):
             arquivo.flush()
             os.fsync(arquivo.fileno())
         os.replace(temporario, caminho)
-        descritor = os.open(caminho.parent, os.O_DIRECTORY)
-        try:
-            os.fsync(descritor)
-        finally:
-            os.close(descritor)
+        if hasattr(os, "O_DIRECTORY"):
+            descritor = os.open(caminho.parent, os.O_DIRECTORY)
+            try:
+                os.fsync(descritor)
+            finally:
+                os.close(descritor)
     finally:
         try:
             os.unlink(temporario)

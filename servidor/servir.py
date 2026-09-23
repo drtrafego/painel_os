@@ -73,11 +73,16 @@ from pathlib import Path
 try:
     # Quando este arquivo é carregado como módulo pelo servidor/testes, o
     # pacote está disponível a partir da raiz do painel.
-    from servidor.agentes_vivos import ler_agentes
+    from servidor.agentes_vivos import ler_agentes, ler_agentes_da_casa
 except ModuleNotFoundError:
-    # Execução direta (python servidor/servir.py), em que o diretório do
-    # script é a entrada do sys.path.
-    from agentes_vivos import ler_agentes
+    try:
+        # Execução direta (python servidor/servir.py), em que o diretório do
+        # script é a entrada do sys.path.
+        from agentes_vivos import ler_agentes, ler_agentes_da_casa
+    except ModuleNotFoundError:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from agentes_vivos import ler_agentes, ler_agentes_da_casa
 
 RAIZ = Path(__file__).resolve().parent.parent
 DIST = RAIZ / "web" / "dist"
@@ -325,12 +330,23 @@ def _invalidar_cache() -> None:
         _cache.update(quando=0.0, corpo=b"")
 
 
+_cache_vivos: dict[str, object] = {"quando": 0.0, "corpo": b""}
+_trava_vivos = threading.Lock()
+JANELA_CACHE_VIVOS = 2.0
+
+
 def obter_agentes_vivos() -> bytes:
-    """Serializa a leitura da sonda viva no contrato JSON da API."""
-    return json.dumps(ler_agentes(), ensure_ascii=False).encode("utf-8")
-
-
-_cache_vivos = {"quando": 0.0, "corpo": b""}
+    """Serializa a leitura agregada da sonda viva (/api/agentes-vivos) com cache curto."""
+    agora = time.monotonic()
+    if _cache_vivos["corpo"] and (agora - float(_cache_vivos["quando"])) < JANELA_CACHE_VIVOS:
+        return _cache_vivos["corpo"]  # type: ignore[return-value]
+    with _trava_vivos:
+        agora = time.monotonic()
+        if _cache_vivos["corpo"] and (agora - float(_cache_vivos["quando"])) < JANELA_CACHE_VIVOS:
+            return _cache_vivos["corpo"]  # type: ignore[return-value]
+        corpo = json.dumps(ler_agentes_da_casa(), ensure_ascii=False).encode("utf-8")
+        _cache_vivos.update(quando=time.monotonic(), corpo=corpo)
+        return corpo
 def coletar_skills_acessos(raiz: Path = Path("/opt/gastaomatos")) -> dict:
     """Lê skills e conexões de Luana e Renato no servidor e classifica estados reais sem expor segredos."""
     itens = []
@@ -722,6 +738,18 @@ class Manipulador(SimpleHTTPRequestHandler):
         sys.stderr.flush()
 
     # --------------------------------------------------------------- rotas
+    def do_HEAD(self):  # noqa: N802
+        # As rotas /api/* não existem como arquivo: sem isto, HEAD cai no
+        # handler de arquivo estático da classe base e devolve 404 falso
+        # para uma rota que responde 200 em GET.
+        if urlsplit(self.path).path.startswith("/api/"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+        super().do_HEAD()
+
     def do_GET(self):  # noqa: N802
         rota = urlsplit(self.path)
         if rota.path == "/api/estado":

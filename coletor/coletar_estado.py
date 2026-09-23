@@ -2554,12 +2554,30 @@ def redigir(texto: str) -> str:
 # corte continua existindo so pra encurtar, nunca pra proteger.
 # ---------------------------------------------------------------------------
 
-CLIENTES_MD = RAIZ / "luana/memoria/clientes.md"
+_PADRAO_CLIENTES = RAIZ / "luana/memoria/clientes.md"
+_ENV_CLIENTES = os.environ.get("PAINEL_OS_CLIENTES_MD")
+if _ENV_CLIENTES:
+    CLIENTES_MD = Path(_ENV_CLIENTES)
+elif _PADRAO_CLIENTES.is_file():
+    CLIENTES_MD = _PADRAO_CLIENTES
+else:
+    # Fallback para ambiente local de desenvolvimento / teste
+    _LOCAL_CLIENTES = Path(__file__).resolve().parent.parent / "data" / "clientes.md"
+    CLIENTES_MD = _LOCAL_CLIENTES if _LOCAL_CLIENTES.is_file() else _PADRAO_CLIENTES
 
 # Os dois lugares, fora do negrito da primeira celula, onde clientes.md escreve
 # uma PESSOA: o tratamento e a linha de contato. Sao forma de nome, nao de ramo.
 RE_TRATAMENTO = re.compile(r"\b(?:Dr|Dra|Sr|Sra)\.?\s+([A-ZÁ-Ú][\wÀ-ÿ]+)")
 RE_CONTATO = re.compile(r"\bContato:\s*([A-ZÁ-Ú][\wÀ-ÿ]+)")
+
+# Palavras comuns de cabeçalhos de tabela, notas e metadados que não são clientes.
+CABECALHOS_TABELA = {
+    "cliente", "clientes", "nome", "nomes", "empresa", "empresas",
+    "conta", "contas", "lead", "leads", "responsavel", "status",
+    "situacao", "id", "projeto", "ramo", "cidade", "de", "do", "da",
+    "e", "nota", "notas", "observacao", "observacoes", "total", "contato",
+    "razao", "social", "tipo", "acao", "acoes", "detalhe", "detalhes",
+}
 
 # Bot, produto e persona da casa. NAO sao pessoa e continuam aparecendo de
 # proposito: "reservas do Gramado -> painel" e nome de sistema, nao de gente.
@@ -2641,14 +2659,31 @@ def carregar_nomes_de_cliente(caminho: Path = CLIENTES_MD):
             brutos.append(achado.group(1))
         for achado in RE_CONTATO.finditer(limpa):
             brutos.append(achado.group(1))
+        # Nome do cliente na célula: aceita com negrito (**Nome**), link ([Nome](...))
+        # ou texto puro (Nome), com ou sem parênteses adicionais.
         m = re.search(r"\*\*(.+?)\*\*", celula)
-        if not m:
+        if m:
+            cand = m.group(1)
+        else:
+            m_link = re.search(r"\[(.+?)\]", celula)
+            if m_link:
+                cand = m_link.group(1)
+            else:
+                cand = celula
+
+        nome = cand.split("(")[0].strip(" :.*·#_`~-")
+        if not nome or set(nome) <= {"-", ":", " ", "|", "."}:
             continue
-        nome = m.group(1).split("(")[0].strip(" :.*·")
-        if not nome or nome.startswith("@") or "=" in nome:
+        if nome.startswith("@") or "=" in nome:
             continue
-        if len(nome.split()) > 5:
-            continue  # frase em negrito nao e nome de cliente
+        chave_nome = _chave(nome)
+        if chave_nome.startswith(("obs:", "observacao", "total:", "nota:")):
+            continue
+        palavras = [p for p in re.split(r"[^a-z0-9]+", chave_nome) if p]
+        if not palavras or all(p in CABECALHOS_TABELA for p in palavras):
+            continue
+        if len(nome.split()) > 5 or len(nome) < 2:
+            continue  # frase longa nao e nome de cliente
         brutos.append(nome)
 
     nomes = {}

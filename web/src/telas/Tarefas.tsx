@@ -83,10 +83,20 @@ export function Tarefas({ estado, vista }: PropsTela) {
   const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal'>('office')
   const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
 
-  const agenteSelecionado = listaVivos.find((a) => a.id === agenteInspecionado) ?? (() => {
+  const agenteSelecionado: AgenteVivo | undefined = listaVivos.find((a) => a.id === agenteInspecionado) ?? (() => {
     const ficha = catalogoPixel.find((agente) => agente.id === agenteInspecionado || agente.aliases?.includes(agenteInspecionado ?? ''))
     if (!ficha) return undefined
-    return { id: ficha.id, estado: 'parado', fase: ficha.área, etapa: ficha.descricao ?? ficha.papel, etapa_e_description: false, ferramenta: null, silencio_s: 0, arquivo: 'catálogo operacional' } satisfies AgenteVivo
+    return {
+      id: ficha.id,
+      dono: undefined,
+      estado: 'parado' as const,
+      fase: ficha.área,
+      etapa: ficha.descricao ?? ficha.papel,
+      etapa_e_description: false,
+      ferramenta: null,
+      silencio_s: 0,
+      arquivo: 'catálogo operacional',
+    }
   })()
 
   return (
@@ -158,6 +168,16 @@ export function Tarefas({ estado, vista }: PropsTela) {
                   <span className="text-sm font-black uppercase text-[#facc15]">
                     AGENTE INSPECCIONADO: {agenteSelecionado.id.toUpperCase()}
                   </span>
+                  {agenteSelecionado.dono && (
+                    <span className={`border border-black px-2 py-0.5 text-[10px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+                      agenteSelecionado.dono === 'luana' ? 'bg-[#38bdf8] text-black' :
+                      agenteSelecionado.dono === 'renato' ? 'bg-[#c084fc] text-black' :
+                      agenteSelecionado.dono === 'bia' ? 'bg-[#f472b6] text-black' :
+                      'bg-slate-300 text-black'
+                    }`}>
+                      {agenteSelecionado.dono.toUpperCase()}
+                    </span>
+                  )}
                   <span className="border border-black bg-[#1e293b] px-2 py-0.5 text-[10px] text-[#38bdf8]">
                     {agenteSelecionado.arquivo === 'catálogo operacional' ? 'FORA DA EXECUÇÃO' : agenteSelecionado.estado === 'trabalhando' ? 'EM EXECUÇÃO' : 'OCIOSO'}
                   </span>
@@ -196,9 +216,24 @@ export function Tarefas({ estado, vista }: PropsTela) {
                 >
                   <div>
                     <div className="flex items-center justify-between gap-1.5 border-b border-slate-700 pb-2">
-                      <span className="truncate text-xs font-black uppercase text-[#38bdf8]" title={ag.id}>
-                        {ag.id}
-                      </span>
+                      <div className="flex items-center gap-1.5 truncate">
+                        {ag.dono && (
+                          <span
+                            className={`border border-black px-1.5 py-0.5 text-[8.5px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+                              ag.dono === 'luana' ? 'bg-[#38bdf8] text-black' :
+                              ag.dono === 'renato' ? 'bg-[#c084fc] text-black' :
+                              ag.dono === 'bia' ? 'bg-[#f472b6] text-black' :
+                              'bg-slate-300 text-black'
+                            }`}
+                            title={`Origem: ${ag.dono.toUpperCase()}`}
+                          >
+                            {ag.dono.toUpperCase()}
+                          </span>
+                        )}
+                        <span className="truncate text-xs font-black uppercase text-[#38bdf8]" title={ag.id}>
+                          {ag.id}
+                        </span>
+                      </div>
                       <span
                         className={`border border-black px-1.5 py-0.5 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
                           ag.estado === 'trabalhando' ? 'bg-[#a3e635] text-black' : ag.estado === 'silencioso' ? 'bg-[#facc15] text-black' : 'bg-slate-500 text-white'

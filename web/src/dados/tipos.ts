@@ -227,6 +227,16 @@ export type Pecas = {
 
 export type AgenteVivo = {
   id: string
+  /** Qual sessão da casa gerou este agente: luana, renato ou bia. */
+  dono?: 'luana' | 'renato' | 'bia' | string
+  tipo?: string | null
+  descricao?: string | null
+  pai?: string | null
+  profundidade?: number | null
+  inicio?: string | null
+  inicio_epoch?: number | null
+  ultima_atividade?: string | null
+  transcript_bytes?: number | null
   fase: string
   etapa: string
   /** Indica que a etapa veio da descrição de uma tool, não é texto de UI. */
@@ -234,8 +244,8 @@ export type AgenteVivo = {
   ferramenta?: string | null
   silencio_s: number
   estado: 'trabalhando' | 'silencioso' | 'parado'
-  arquivo: string
-  problema?: string
+  arquivo?: string
+  problema?: string | null
 }
 
 export type AgentesVivos = {
