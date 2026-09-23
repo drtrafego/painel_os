@@ -29,17 +29,17 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
     for (const agente of agentes) {
       const chave = chaveAgente(agente.dono, agente.id)
       mapa.set(chave, agente)
-      const itemCat = catalogoVisual.find(
-        (item) =>
-          item.id === chave ||
-          (agente.identidade &&
-            agente.identidade !== 'sessao-codex' &&
-            (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
-              item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? '')))) ||
-          item.id === agente.id ||
-          item.aliases?.includes(agente.id) ||
-          item.aliases?.includes(chave)
-      )
+      const itemCat =
+        catalogoVisual.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
+        catalogoVisual.find(
+          (item) =>
+            item.id === agente.id ||
+            item.aliases?.includes(agente.id) ||
+            (agente.identidade &&
+              agente.identidade !== 'sessao-codex' &&
+              (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
+                item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? ''))))
+        )
       if (itemCat) {
         mapa.set(itemCat.id, agente)
       }
@@ -54,17 +54,17 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
           .filter((agente) => agente.estado === 'trabalhando')
           .map((agente) => {
             const chave = chaveAgente(agente.dono, agente.id)
-            const itemCat = catalogoVisual.find(
-              (item) =>
-                item.id === chave ||
-                (agente.identidade &&
-                  agente.identidade !== 'sessao-codex' &&
-                  (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
-                    item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? '')))) ||
-                item.id === agente.id ||
-                item.aliases?.includes(agente.id) ||
-                item.aliases?.includes(chave)
-            )
+            const itemCat =
+              catalogoVisual.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
+              catalogoVisual.find(
+                (item) =>
+                  item.id === agente.id ||
+                  item.aliases?.includes(agente.id) ||
+                  (agente.identidade &&
+                    agente.identidade !== 'sessao-codex' &&
+                    (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
+                      item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? ''))))
+              )
             return itemCat?.id ?? chave
           })
       ),

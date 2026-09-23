@@ -281,6 +281,245 @@ def _texto_curto(valor: object, limite: int = 160) -> str | None:
     return valor[:limite] if valor else None
 
 
+def _formatar_modelo(modelo: str | None) -> str | None:
+    if not modelo or not isinstance(modelo, str):
+        return None
+    m = modelo.strip()
+    m_low = m.lower()
+
+    # Anthropic
+    if any(k in m_low for k in ("opus-5-5", "opus-5.5", "5-5-opus", "5.5-opus")):
+        return "Opus 5.5"
+    if any(k in m_low for k in ("opus-4-5", "opus-4.5", "4-5-opus", "4.5-opus")):
+        return "Opus 4.5"
+    if any(k in m_low for k in ("opus-5", "5-opus")):
+        return "Opus 5"
+    if "opus" in m_low:
+        return "Opus 3"
+
+    if any(k in m_low for k in ("sonnet-3-7", "sonnet-3.7", "3-7-sonnet", "3.7-sonnet")):
+        return "Sonnet 3.7"
+    if any(k in m_low for k in ("sonnet-3-5", "sonnet-3.5", "3-5-sonnet", "3.5-sonnet")):
+        return "Sonnet 3.5"
+    if any(k in m_low for k in ("sonnet-4-5", "sonnet-4.5", "4-5-sonnet", "4.5-sonnet")):
+        return "Sonnet 4.5"
+    if any(k in m_low for k in ("sonnet-5", "5-sonnet")):
+        return "Sonnet 5"
+    if "sonnet" in m_low:
+        return "Sonnet"
+
+    if any(k in m_low for k in ("haiku-4-5", "haiku-4.5", "4-5-haiku", "4.5-haiku")):
+        return "Haiku 4.5"
+    if any(k in m_low for k in ("haiku-3-5", "haiku-3.5", "3-5-haiku", "3.5-haiku")):
+        return "Haiku 3.5"
+    if "haiku" in m_low:
+        return "Haiku"
+
+    if "gpt-6" in m_low:
+        return "GPT-6 Astra" if "astra" in m_low else "GPT-6"
+    if "gpt-4o-mini" in m_low:
+        return "GPT-4o mini"
+    if "gpt-4o" in m_low:
+        return "GPT-4o"
+    if "gpt-4" in m_low:
+        return "GPT-4"
+    if "o3-mini" in m_low:
+        return "o3-mini"
+    if "o3" in m_low:
+        return "o3"
+    if "o1-mini" in m_low:
+        return "o1-mini"
+    if "o1-preview" in m_low or "o1" in m_low:
+        return "o1"
+
+    limpo = m.replace("claude-", "").replace("anthropic/", "").replace("_", " ")
+    return limpo[:25].strip().title()
+
+
+def _formatar_duracao(segundos: float | None) -> str | None:
+    if segundos is None or segundos < 0:
+        return None
+    s = int(round(segundos))
+    if s < 60:
+        return f"{s}s"
+    minutos = s // 60
+    segs = s % 60
+    if minutos < 60:
+        return f"{minutos}m {segs}s" if segs > 0 else f"{minutos}m"
+    horas = minutos // 60
+    resto_mins = minutos % 60
+    return f"{horas}h {resto_mins}m" if resto_mins > 0 else f"{horas}h"
+
+
+def _formatar_tokens(tokens: int | None) -> str | None:
+    if tokens is None or tokens < 0:
+        return None
+    if tokens < 1000:
+        return str(tokens)
+    if tokens < 1_000_000:
+        return f"{tokens / 1000:.1f}k"
+    return f"{tokens / 1_000_000:.1f}M"
+
+
+def _formatar_esforco(esforco: str | None) -> str | None:
+    if not esforco or not isinstance(esforco, str):
+        return None
+    e = esforco.lower().strip()
+    mapa = {
+        "low": "baixo",
+        "baixo": "baixo",
+        "medium": "médio",
+        "medio": "médio",
+        "médio": "médio",
+        "high": "alto",
+        "alto": "alto",
+        "max": "máximo",
+        "maximo": "máximo",
+        "máximo": "máximo",
+    }
+    return mapa.get(e, e.capitalize())
+
+
+def _ts_para_epoch(ts: object) -> float | None:
+    if isinstance(ts, (int, float)):
+        return float(ts) if ts > 0 else None
+    if not isinstance(ts, str) or not ts.strip():
+        return None
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
+_CACHE_METRICAS: dict[str, dict] = {}
+
+
+def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
+    chave = str(caminho)
+    try:
+        st = caminho.stat()
+    except OSError:
+        return {}
+
+    cached = _CACHE_METRICAS.get(chave)
+    if cached and cached.get("mtime") == st.st_mtime and cached.get("size") == st.st_size:
+        res = dict(cached["metricas"])
+        p_epoch = cached.get("primeiro_ts_epoch")
+        if p_epoch:
+            rodando_s = max(0.0, agora - p_epoch)
+            res["rodando_ha_s"] = round(rodando_s, 1)
+            res["rodando_ha"] = _formatar_duracao(rodando_s)
+        return res
+
+    modelo = None
+    esforco = None
+    ferramentas_usadas = 0
+    tokens_input = 0
+    tokens_output = 0
+    tokens_cache = 0
+    primeiro_ts_epoch = None
+
+    try:
+        with caminho.open("r", encoding="utf-8", errors="replace") as fh:
+            for linha in fh:
+                linha = linha.strip()
+                if not linha:
+                    continue
+                try:
+                    reg = json.loads(linha)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(reg, dict):
+                    continue
+
+                ts_raw = reg.get("timestamp") or reg.get("created_at") or reg.get("time")
+                ts_ep = _ts_para_epoch(ts_raw)
+                if ts_ep:
+                    if primeiro_ts_epoch is None:
+                        primeiro_ts_epoch = ts_ep
+
+                if not esforco:
+                    e = reg.get("effort")
+                    if not e and isinstance(reg.get("message"), dict):
+                        e = reg["message"].get("effort")
+                    if not e and isinstance(reg.get("payload"), dict):
+                        e = reg["payload"].get("effort")
+                    if isinstance(e, str) and e.strip():
+                        esforco = e.strip()
+
+                msg = reg.get("message")
+                if isinstance(msg, dict):
+                    if not modelo and isinstance(msg.get("model"), str):
+                        modelo = msg["model"].strip()
+                    conteudo = msg.get("content")
+                    if isinstance(conteudo, list):
+                        for bloco in conteudo:
+                            if isinstance(bloco, dict) and bloco.get("type") == "tool_use":
+                                ferramentas_usadas += 1
+                    usage = msg.get("usage")
+                    if isinstance(usage, dict):
+                        tokens_input += int(usage.get("input_tokens") or 0)
+                        tokens_output += int(usage.get("output_tokens") or 0)
+                        tokens_cache += int(usage.get("cache_read_input_tokens") or 0)
+                        tokens_cache += int(usage.get("cache_creation_input_tokens") or 0)
+
+                tipo = reg.get("type")
+                payload = reg.get("payload") if isinstance(reg.get("payload"), dict) else {}
+
+                if not modelo:
+                    if tipo == "session_meta":
+                        prov = payload.get("provenance")
+                        if isinstance(prov, dict) and isinstance(prov.get("model"), str):
+                            modelo = prov["model"].strip()
+                        elif isinstance(payload.get("model"), str):
+                            modelo = payload["model"].strip()
+                    elif tipo == "turn_context" and isinstance(payload.get("model"), str):
+                        modelo = payload["model"].strip()
+
+                if tipo == "token_usage_record":
+                    u = payload.get("usage") or payload.get("turn_token_usage") or payload.get("thread_token_usage")
+                    if isinstance(u, dict):
+                        tokens_input += int(u.get("input_tokens") or 0)
+                        tokens_output += int(u.get("output_tokens") or 0)
+                        tokens_cache += int(u.get("cached_input_tokens") or 0)
+
+                if tipo in ("response_item", "event_msg"):
+                    p_tipo = payload.get("type")
+                    if p_tipo in ("function_call", "custom_tool_call", "tool_call", "execute_command"):
+                        ferramentas_usadas += 1
+                    p_content = payload.get("content")
+                    if isinstance(p_content, list):
+                        for b in p_content:
+                            if isinstance(b, dict) and b.get("type") in ("tool_use", "tool_call", "function_call"):
+                                ferramentas_usadas += 1
+    except OSError:
+        pass
+
+    tokens_total = tokens_input + tokens_output + tokens_cache
+    rodando_s = max(0.0, agora - primeiro_ts_epoch) if primeiro_ts_epoch else None
+
+    metricas = {
+        "modelo": modelo,
+        "modelo_legivel": _formatar_modelo(modelo),
+        "esforco": _formatar_esforco(esforco),
+        "ferramentas_usadas": ferramentas_usadas,
+        "tokens_total": tokens_total if tokens_total > 0 else None,
+        "tokens_formatado": _formatar_tokens(tokens_total) if tokens_total > 0 else None,
+        "rodando_ha_s": round(rodando_s, 1) if rodando_s is not None else None,
+        "rodando_ha": _formatar_duracao(rodando_s),
+    }
+
+    _CACHE_METRICAS[chave] = {
+        "mtime": st.st_mtime,
+        "size": st.st_size,
+        "primeiro_ts_epoch": primeiro_ts_epoch,
+        "metricas": metricas,
+    }
+
+    return metricas
+
+
 def _identidade_codex(caminho: Path) -> dict:
     """Lê somente o session_meta inicial, sem expor prompt ou caminhos.
 
@@ -309,15 +548,16 @@ def _identidade_codex(caminho: Path) -> dict:
         nickname = _texto_curto(payload.get("agent_nickname"), 80)
         if resultado["tarefa"] is None and nickname:
             resultado["tarefa"] = nickname
-        source = payload.get("source")
-        spawn = source.get("subagent", {}).get("thread_spawn", {}) if isinstance(source, dict) else {}
+        source = payload.get("source") if isinstance(payload, dict) else None
+        subagent = source.get("subagent") if isinstance(source, dict) else None
+        spawn = subagent.get("thread_spawn") if isinstance(subagent, dict) else {}
         if isinstance(spawn, dict):
             pai = _texto_curto(spawn.get("parent_thread_id"), 80)
             resultado["pai"] = pai
             profundidade = spawn.get("depth")
             if isinstance(profundidade, int) and 0 <= profundidade <= 32:
                 resultado["profundidade"] = profundidade
-    except (OSError, UnicodeError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError, AttributeError, TypeError, ValueError):
         pass
     return resultado
 
@@ -417,6 +657,10 @@ def _codex_recentes(agora: float, dono: str | None = None,
     agentes = []
     for caminho, silencio in encontrados[:32]:
         identidade = _identidade_codex(caminho)
+        metricas = _extrair_metricas_transcript(caminho, agora)
+        quem_mandou = identidade.get("pai") or identidade.get("tarefa")
+        estado_codex = TRABALHANDO if silencio <= LIMIAR_ATIVO_S else SILENCIOSO
+        status_codex = "executando" if estado_codex == TRABALHANDO else "ocioso"
         agentes.append({
             "id": caminho.stem.removeprefix("rollout-")[-36:],
             "tipo": "codex",
@@ -428,7 +672,7 @@ def _codex_recentes(agora: float, dono: str | None = None,
             "descricao": identidade["tarefa"],
             "pai": identidade["pai"],
             "profundidade": identidade["profundidade"],
-            "estado": TRABALHANDO if silencio <= LIMIAR_ATIVO_S else SILENCIOSO,
+            "estado": estado_codex,
             "fase": "atividade_codex",
             "etapa": "atividade Codex detectada",
             "etapa_e_description": False,
@@ -438,8 +682,48 @@ def _codex_recentes(agora: float, dono: str | None = None,
             "inicio": None,
             "transcript_bytes": caminho.stat().st_size,
             "problema": None,
+            "modelo": metricas.get("modelo"),
+            "modelo_legivel": metricas.get("modelo_legivel"),
+            "esforco": metricas.get("esforco"),
+            "ferramentas_usadas": metricas.get("ferramentas_usadas", 0),
+            "tokens_total": metricas.get("tokens_total"),
+            "tokens_formatado": metricas.get("tokens_formatado"),
+            "rodando_ha_s": metricas.get("rodando_ha_s"),
+            "rodando_ha": metricas.get("rodando_ha"),
+            "quem_mandou": quem_mandou,
+            "status": status_codex,
         })
     return agentes
+
+
+def _finalizar_item_claude(item: dict, metricas: dict | None, agora: float) -> None:
+    if metricas:
+        if metricas.get("rodando_ha") is None and item.get("inicio_epoch"):
+            dur_s = max(0.0, agora - item["inicio_epoch"])
+            metricas["rodando_ha_s"] = round(dur_s, 1)
+            metricas["rodando_ha"] = _formatar_duracao(dur_s)
+        item.update({
+            "modelo": metricas.get("modelo"),
+            "modelo_legivel": metricas.get("modelo_legivel"),
+            "esforco": metricas.get("esforco"),
+            "ferramentas_usadas": metricas.get("ferramentas_usadas", 0),
+            "tokens_total": metricas.get("tokens_total"),
+            "tokens_formatado": metricas.get("tokens_formatado"),
+            "rodando_ha_s": metricas.get("rodando_ha_s"),
+            "rodando_ha": metricas.get("rodando_ha"),
+        })
+    item["quem_mandou"] = item.get("pai") or item.get("descricao")
+    if item.get("problema"):
+        item["status"] = f"erro ({item['problema']})" if len(item["problema"]) <= 40 else "erro"
+    elif item.get("estado") == TRABALHANDO:
+        item["status"] = "executando"
+    elif item.get("estado") == SILENCIOSO:
+        item["status"] = "ocioso"
+    elif item.get("estado") == PARADO:
+        item["status"] = "encerrado"
+    else:
+        item["status"] = "desconhecido"
+    item.pop("inicio_epoch", None)
 
 
 def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
@@ -518,6 +802,10 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                             "ferramenta": None,
                             "silencio_s": None, "ultima_atividade": None, "inicio": None,
                             "transcript_bytes": None, "problema": None,
+                            "modelo": None, "modelo_legivel": None, "esforco": None,
+                            "ferramentas_usadas": 0, "tokens_total": None, "tokens_formatado": None,
+                            "rodando_ha_s": None, "rodando_ha": None,
+                            "quem_mandou": None, "status": None,
                         }
                         try:
                             meta = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -545,6 +833,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                             item["estado"] = PARADO
                             item["fase"] = "sem_transcript"
                             item["etapa"] = "nunca escreveu no transcript"
+                            _finalizar_item_claude(item, None, agora)
                             agentes.append(item)
                             avisos.append(f"{ident}: registrado sem transcript")
                             continue
@@ -552,6 +841,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                             item["problema"] = f"transcript ilegível: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
                             item["estado"] = None
                             item["etapa"] = "não foi possível ler"
+                            _finalizar_item_claude(item, None, agora)
                             agentes.append(item)
                             avisos.append(f"{ident}: transcript ilegível")
                             continue
@@ -560,6 +850,8 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                             item["estado"] = PARADO
                             item["fase"] = "fora_da_janela"
                             item["etapa"] = "fora da janela de leitura (histórico)"
+                            metricas = _extrair_metricas_transcript(transcript, agora)
+                            _finalizar_item_claude(item, metricas, agora)
                             agentes.append(item)
                             continue
 
@@ -569,6 +861,8 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                             item["problema"] = f"falha ao ler a cauda: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
                             item["estado"] = None
                             item["etapa"] = "não foi possível ler"
+                            metricas = _extrair_metricas_transcript(transcript, agora)
+                            _finalizar_item_claude(item, metricas, agora)
                             agentes.append(item)
                             avisos.append(f"{ident}: falha ao ler a cauda do transcript")
                             continue
@@ -584,6 +878,8 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                             item["problema"] = cauda["problema_api"]
                         elif cauda["linhas_ilegiveis"]:
                             item["problema"] = f"{cauda['linhas_ilegiveis']} linha(s) ilegível(is) na cauda"
+                        metricas = _extrair_metricas_transcript(transcript, agora)
+                        _finalizar_item_claude(item, metricas, agora)
                         agentes.append(item)
     except PermissionError as e:
         claude_motivo = "sem_permissao"

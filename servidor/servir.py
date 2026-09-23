@@ -392,7 +392,7 @@ def redigir_dados_agentes(dados: dict) -> dict:
         if not isinstance(ag, dict):
             continue
         copia = dict(ag)
-        for campo in ("descricao", "etapa", "tarefa", "problema"):
+        for campo in ("descricao", "etapa", "tarefa", "problema", "quem_mandou", "status", "esforco", "modelo", "modelo_legivel"):
             if campo in copia and isinstance(copia[campo], str):
                 copia[campo] = redigir_texto_livre(copia[campo])
         agentes_redigidos.append(copia)

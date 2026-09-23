@@ -24,6 +24,7 @@ from agentes_vivos import (
     ler_agentes,
     ler_agentes_da_casa,
     _sessao_mais_ativa,
+    _identidade_codex,
 )
 
 falhas = 0
@@ -357,6 +358,92 @@ def testar_agentes_vivos():
         conferir("caminho /opt/ sanitizado na descrição", "/opt/" in desc_res, False)
         conferir("telefone redigido", "47 99988-7766" in desc_res, False)
         conferir("caminho /opt/ sanitizado no aviso", "/opt/" in aviso_res, False)
+
+        print("\n--- Teste 13: Rollout Codex com subagent como string não quebra agentes Claude")
+        pasta_t13 = tmp / "projeto_t13"
+        s_t13 = pasta_t13 / "sessao_t13" / "subagents"
+        s_t13.mkdir(parents=True, exist_ok=True)
+        (s_t13 / "agent-claude_t13.meta.json").write_text(json.dumps({
+            "agentType": "worker",
+            "description": "Tarefa Claude normal"
+        }), encoding="utf-8")
+        (s_t13 / "agent-claude_t13.jsonl").write_text(json.dumps({
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": "trabalhando"}]}
+        }) + "\n", encoding="utf-8")
+
+        codex_t13_dir = tmp / "codex_t13" / "sessions" / "2026" / "09" / "23"
+        codex_t13_dir.mkdir(parents=True, exist_ok=True)
+        rollout_str = codex_t13_dir / "rollout-str_subagent.jsonl"
+        rollout_str.write_text(json.dumps({
+            "type": "session_meta",
+            "payload": {
+                "source": {
+                    "subagent": "texto_em_vez_de_dict"
+                },
+                "agent_nickname": "agente-estranho"
+            }
+        }) + "\n", encoding="utf-8")
+
+        # Testar _identidade_codex diretamente
+        ident_str = _identidade_codex(rollout_str)
+        conferir("subagent string não causa AttributeError", isinstance(ident_str, dict), True)
+        conferir("tarefa preenchida via nickname", ident_str.get("tarefa"), "agente-estranho")
+
+        # Testar ler_agentes_da_casa com esse rollout Codex
+        r_t13 = ler_agentes_da_casa(
+            projetos={"luana": "projeto_t13"},
+            raiz=tmp,
+            codex={"luana": tmp / "codex_t13"}
+        )
+        conferir("agregação t13 ok=True", r_t13["ok"], True)
+        ids_t13 = {a["id"] for a in r_t13["agentes"]}
+        conferir("agente Claude de Luana continua vivo e intacto", "claude_t13" in ids_t13, True)
+
+        print("\n--- Teste 14: Extração de métricas (modelo, esforço, tokens, ferramentas, rodando_ha)")
+        pasta_t14 = tmp / "projeto_t14"
+        s_t14 = pasta_t14 / "sessao_t14" / "subagents"
+        s_t14.mkdir(parents=True, exist_ok=True)
+        (s_t14 / "agent-metricas.meta.json").write_text(json.dumps({
+            "agentType": "dev",
+            "description": "Desenvolvimento com métricas",
+            "parentAgentId": "chefe-1"
+        }), encoding="utf-8")
+        
+        # Transcript Claude com modelo, tokens, ferramentas e esforço
+        agora_iso = "2026-09-23T19:00:00+00:00"
+        (s_t14 / "agent-metricas.jsonl").write_text(
+            json.dumps({
+                "timestamp": agora_iso,
+                "effort": "high",
+                "type": "assistant",
+                "message": {
+                    "model": "claude-3-5-sonnet-20241022",
+                    "content": [
+                        {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}},
+                        {"type": "tool_use", "name": "Read", "input": {"file": "a.txt"}},
+                    ],
+                    "usage": {
+                        "input_tokens": 12500,
+                        "output_tokens": 2400,
+                        "cache_read_input_tokens": 1000
+                    }
+                }
+            }) + "\n",
+            encoding="utf-8"
+        )
+
+        r_t14 = ler_agentes("projeto_t14", raiz=tmp)
+        ag_m = next((a for a in r_t14["agentes"] if a["id"] == "metricas"), None)
+        conferir("agente metricas encontrado", ag_m is not None, True)
+        if ag_m:
+            conferir("modelo legível", ag_m.get("modelo_legivel"), "Sonnet 3.5")
+            conferir("esforço formatado", ag_m.get("esforco"), "alto")
+            conferir("ferramentas usadas contadas", ag_m.get("ferramentas_usadas"), 2)
+            conferir("tokens total somados", ag_m.get("tokens_total"), 15900)
+            conferir("tokens formatado", ag_m.get("tokens_formatado"), "15.9k")
+            conferir("quem mandou preenchido", ag_m.get("quem_mandou"), "chefe-1")
+            conferir("status preenchido", ag_m.get("status") in ("executando", "ocioso"), True)
 
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

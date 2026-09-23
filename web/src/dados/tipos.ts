@@ -251,6 +251,16 @@ export type AgenteVivo = {
   estado: 'trabalhando' | 'silencioso' | 'parado'
   arquivo?: string
   problema?: string | null
+  modelo?: string | null
+  modelo_legivel?: string | null
+  esforco?: string | null
+  ferramentas_usadas?: number
+  tokens_total?: number | null
+  tokens_formatado?: string | null
+  rodando_ha_s?: number | null
+  rodando_ha?: string | null
+  quem_mandou?: string | null
+  status?: string | null
 }
 
 export type AgentesVivos = {

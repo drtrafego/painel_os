@@ -43,6 +43,57 @@ conferir('dois donos com mesmo agente catalogado geram entradas distintas', cata
 conferir('segundo dono ganha identificador composto', catalogoColisao[1]?.id, 'bia:cleo')
 conferir('segundo dono recebe tag no nome', catalogoColisao[1]?.nome.includes('[B]'), true)
 
+// Teste de resolução no mapa agentesPorCatalogo e ativos para 2 Cleos (Correção 2)
+const agentesDuasCleos = [
+  { id: 'rollout-1', dono: 'luana', identidade: 'cleo', estado: 'trabalhando' as const, etapa: 'trabalho luana', silencio_s: 1 },
+  { id: 'rollout-2', dono: 'bia', identidade: 'cleo', estado: 'trabalhando' as const, etapa: 'trabalho bia', silencio_s: 1 },
+]
+const catDuasCleos = mesclarRuntimesNoCatalogo(base, agentesDuasCleos)
+conferir('catálogo com 2 Cleos tem 2 avatares', catDuasCleos.length, 2)
+
+const chaveAgente = (dono: string | undefined | null, id: string) => (dono ? `${dono}:${id}` : id)
+const mapaDuasCleos = new Map<string, any>()
+for (const agente of agentesDuasCleos) {
+  const chave = chaveAgente(agente.dono, agente.id)
+  mapaDuasCleos.set(chave, agente)
+  const itemCat =
+    catDuasCleos.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
+    catDuasCleos.find(
+      (item) =>
+        item.id === agente.id ||
+        item.aliases?.includes(agente.id) ||
+        (agente.identidade &&
+          agente.identidade !== 'sessao-codex' &&
+          (item.id === agente.identidade || item.aliases?.includes(agente.identidade)))
+    )
+  if (itemCat) {
+    mapaDuasCleos.set(itemCat.id, agente)
+  }
+}
+conferir('mapa tem a Cleo original e a Cleo da Bia', mapaDuasCleos.has('cleo') && mapaDuasCleos.has('bia:rollout-2'), true)
+conferir('Cleo original mapeada para o agente da Luana', mapaDuasCleos.get('cleo')?.dono, 'luana')
+conferir('Cleo da Bia mapeada para o agente da Bia', mapaDuasCleos.get('bia:rollout-2')?.dono, 'bia')
+
+const ativosDuasCleos = new Set(
+  agentesDuasCleos
+    .filter((agente) => agente.estado === 'trabalhando')
+    .map((agente) => {
+      const chave = chaveAgente(agente.dono, agente.id)
+      const itemCat =
+        catDuasCleos.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
+        catDuasCleos.find(
+          (item) =>
+            item.id === agente.id ||
+            item.aliases?.includes(agente.id) ||
+            (agente.identidade &&
+              agente.identidade !== 'sessao-codex' &&
+              (item.id === agente.identidade || item.aliases?.includes(agente.identidade)))
+        )
+      return itemCat?.id ?? chave
+    })
+)
+conferir('ambas as Cleos constam como ativas no escritório', ativosDuasCleos.size, 2)
+
 
 if (falhas) process.exit(1)
 console.log('APROVADO: catálogo vivo deduplica aliases e preserva etapa textual.')
