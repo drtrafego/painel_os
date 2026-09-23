@@ -80,6 +80,9 @@ IDENTIDADES_CODEX = {
     "cont_corretor": "corretor",
     "cont_qa": "guardiao",
 }
+IDENTIDADES_POR_TAREFA_CODEX = {
+    "iris_orquestradora": "iris",
+}
 IDENTIDADE_CODEX_GENERICA = "sessao-codex"
 
 # --------------------------------------------------------------------------
@@ -242,6 +245,8 @@ def _identidade_codex(caminho: Path) -> dict:
         tarefa = _texto_curto(payload.get("agent_path"), 240)
         if tarefa:
             tarefa = tarefa.rstrip("/").rsplit("/", 1)[-1]
+            if resultado["identidade"] == IDENTIDADE_CODEX_GENERICA:
+                resultado["identidade"] = IDENTIDADES_POR_TAREFA_CODEX.get(tarefa, resultado["identidade"])
             resultado["tarefa"] = _texto_curto(tarefa.replace("_", " "), 120)
         nickname = _texto_curto(payload.get("agent_nickname"), 80)
         if resultado["tarefa"] is None and nickname:

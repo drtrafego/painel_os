@@ -252,6 +252,12 @@ def testar_agentes_vivos():
             "tarefa": "produzir legenda", "pai": "pai-123", "profundidade": 2,
         })
 
+        meta_iris = tmp / "rollout-iris.jsonl"
+        meta_iris.write_text(json.dumps({"type": "session_meta", "payload": {
+            "agent_role": "worker", "agent_path": "/root/iris_orquestradora",
+        }}) + "\n")
+        conferir("íris reconhecida pela tarefa operacional", mod._identidade_codex(meta_iris)["identidade"], "iris")
+
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
