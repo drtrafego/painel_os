@@ -271,6 +271,93 @@ def testar_agentes_vivos():
         }}) + "\n")
         conferir("íris reconhecida pela tarefa operacional", mod._identidade_codex(meta_iris)["identidade"], "iris")
 
+        print("\n--- Teste 8: Resiliência a meta.json nulo e linha não-dict no transcript")
+        pasta_resil = tmp / "projeto_malformado" / "sessao_1" / "subagents"
+        pasta_resil.mkdir(parents=True, exist_ok=True)
+        # meta com null puro
+        (pasta_resil / "agent-nullmeta.meta.json").write_text("null", encoding="utf-8")
+        (pasta_resil / "agent-nullmeta.jsonl").write_text(json.dumps({"type": "user"}) + "\n", encoding="utf-8")
+        # transcript com linha não-dict ("123", "[1,2]")
+        (pasta_resil / "agent-badlines.meta.json").write_text(json.dumps({"agentType": "dev"}), encoding="utf-8")
+        (pasta_resil / "agent-badlines.jsonl").write_text("123\n\"string\"\n" + json.dumps({
+            "type": "assistant",
+            "message": {"content": [{"type": "tool_use", "name": "run_command", "input": {"description": "Rodando"}}]}
+        }) + "\n", encoding="utf-8")
+
+        r_mal = ler_agentes("projeto_malformado", raiz=tmp)
+        conferir("projeto malformado não causa crash (ok=True)", r_mal["ok"], True)
+        ag_null = next((a for a in r_mal["agentes"] if a["id"] == "nullmeta"), None)
+        conferir("agente com meta nulo continua existindo com problema anotado", bool(ag_null and ag_null.get("problema")), True)
+        ag_bad = next((a for a in r_mal["agentes"] if a["id"] == "badlines"), None)
+        conferir("agente com linhas não-dict na cauda continua lendo o tool_use", ag_bad and ag_bad.get("etapa"), "Rodando")
+
+        print("\n--- Teste 9: Agente com erro de API ou stop_reason=refusal classificado como PARADO")
+        pasta_erros = tmp / "projeto_erros_api" / "sessao_1" / "subagents"
+        pasta_erros.mkdir(parents=True, exist_ok=True)
+        (pasta_erros / "agent-refusal.meta.json").write_text(json.dumps({"agentType": "worker"}), encoding="utf-8")
+        (pasta_erros / "agent-refusal.jsonl").write_text(json.dumps({
+            "type": "assistant",
+            "message": {"stop_reason": "refusal", "content": [{"type": "text", "text": "recusado"}]}
+        }) + "\n", encoding="utf-8")
+        (pasta_erros / "agent-apierr.meta.json").write_text(json.dumps({"agentType": "worker"}), encoding="utf-8")
+        (pasta_erros / "agent-apierr.jsonl").write_text(json.dumps({
+            "type": "assistant",
+            "isApiErrorMessage": True,
+            "message": {"content": [{"type": "text", "text": "overloaded_error"}]}
+        }) + "\n", encoding="utf-8")
+
+        r_erros = ler_agentes("projeto_erros_api", raiz=tmp)
+        conferir("agentes com erro de API ou refusal não aparecem nos vivos", len(r_erros["agentes"]), 0)
+        conferir("contagem de histórico inclui os agentes com erro/recusa", r_erros["contagem"]["historico"], 2)
+
+        print("\n--- Teste 10: Múltiplas sessões ativas do mesmo projeto dentro de JANELA_CANDIDATO_S")
+        pasta_multi = tmp / "projeto_multisessao"
+        s1 = pasta_multi / "sessao_alfa" / "subagents"
+        s2 = pasta_multi / "sessao_beta" / "subagents"
+        s1.mkdir(parents=True, exist_ok=True)
+        s2.mkdir(parents=True, exist_ok=True)
+        (s1 / "agent-alfa1.meta.json").write_text(json.dumps({"agentType": "dev"}), encoding="utf-8")
+        (s1 / "agent-alfa1.jsonl").write_text(json.dumps({
+            "type": "assistant", "message": {"content": [{"type": "tool_use", "name": "cmd", "input": {"description": "Alfa"}}]}
+        }) + "\n", encoding="utf-8")
+        (s2 / "agent-beta1.meta.json").write_text(json.dumps({"agentType": "qa"}), encoding="utf-8")
+        (s2 / "agent-beta1.jsonl").write_text(json.dumps({
+            "type": "assistant", "message": {"content": [{"type": "tool_use", "name": "cmd", "input": {"description": "Beta"}}]}
+        }) + "\n", encoding="utf-8")
+
+        r_multi = ler_agentes("projeto_multisessao", raiz=tmp)
+        ids_multi = {a["id"] for a in r_multi["agentes"]}
+        conferir("múltiplas sessões ativas agregam agentes de ambas", ids_multi, {"alfa1", "beta1"})
+
+        print("\n--- Teste 11: Sanitização de caminhos absolutos em avisos")
+        caminhos_vazando = [av for av in r_mal.get("avisos", []) if "/home/" in av or "/opt/" in av or "C:\\" in av]
+        conferir("nenhum caminho absoluto nos avisos", caminhos_vazando, [])
+
+        print("\n--- Teste 12: Redação de texto livre (clientes e PII) no servidor")
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from servir import redigir_dados_agentes
+        payload_teste = {
+            "ok": True,
+            "agentes": [
+                {
+                    "id": "ag_teste",
+                    "descricao": "Atendimento Dr. Lucas na pasta /opt/gastaomatos/luana e tel 47 99988-7766",
+                    "etapa": "Atualizando Rocha Advogados no arquivo /home/claude/repo",
+                }
+            ],
+            "avisos": ["Erro de leitura em /opt/gastaomatos/luana/algo.py"],
+        }
+        redigido = redigir_dados_agentes(payload_teste)
+        desc_res = redigido["agentes"][0]["descricao"]
+        etapa_res = redigido["agentes"][0]["etapa"]
+        aviso_res = redigido["avisos"][0]
+
+        conferir("nome de cliente Dr. Lucas redigido", "Dr. Lucas" in desc_res, False)
+        conferir("caminho /opt/ sanitizado na descrição", "/opt/" in desc_res, False)
+        conferir("telefone redigido", "47 99988-7766" in desc_res, False)
+        conferir("caminho /opt/ sanitizado no aviso", "/opt/" in aviso_res, False)
+
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -283,3 +370,4 @@ def testar_agentes_vivos():
 
 if __name__ == "__main__":
     testar_agentes_vivos()
+

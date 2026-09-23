@@ -73,7 +73,7 @@ function PixelJanela({
 
 export function Tarefas({ estado, vista }: PropsTela) {
   const dados = estado.tarefas
-  const { dados: vivos, carregando: carregandoVivos } = useAgentesVivos()
+  const { dados: vivos, carregando: carregandoVivos, erro: erroVivos, falhouHaSegundos } = useAgentesVivos()
   const erro = dados?.erro ?? (!dados ? 'a medição de tarefas não veio no estado atual' : null)
   const ativos = vivos?.contagem?.trabalhando ?? 0
   // A sonda é a única fonte de presença; o catálogo do escritório completa o restante.
@@ -83,21 +83,23 @@ export function Tarefas({ estado, vista }: PropsTela) {
   const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal' | 'squad'>('office')
   const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
 
-  const agenteSelecionado: AgenteVivo | undefined = listaVivos.find((a) => a.id === agenteInspecionado) ?? (() => {
-    const ficha = catalogoPixel.find((agente) => agente.id === agenteInspecionado || agente.aliases?.includes(agenteInspecionado ?? ''))
-    if (!ficha) return undefined
-    return {
-      id: ficha.id,
-      dono: undefined,
-      estado: 'parado' as const,
-      fase: ficha.área,
-      etapa: ficha.descricao ?? ficha.papel,
-      etapa_e_description: false,
-      ferramenta: null,
-      silencio_s: 0,
-      arquivo: 'catálogo operacional',
-    }
-  })()
+  const agenteSelecionado: AgenteVivo | undefined =
+    listaVivos.find((a) => a.id === agenteInspecionado || `${a.dono}:${a.id}` === agenteInspecionado) ??
+    (() => {
+      const ficha = catalogoPixel.find((agente) => agente.id === agenteInspecionado || agente.aliases?.includes(agenteInspecionado ?? ''))
+      if (!ficha) return undefined
+      return {
+        id: ficha.id,
+        dono: undefined,
+        estado: 'parado' as const,
+        fase: ficha.área,
+        etapa: ficha.descricao ?? ficha.papel,
+        etapa_e_description: false,
+        ferramenta: null,
+        silencio_s: 0,
+        arquivo: 'catálogo operacional',
+      }
+    })()
 
   return (
     <div className="w-full max-w-none space-y-6 px-3 py-4 font-mono sm:px-6 lg:px-8 xl:px-10">
@@ -163,6 +165,37 @@ export function Tarefas({ estado, vista }: PropsTela) {
         </div>
       </div>
 
+      {/* Alerta de Falha da Sonda Viva */}
+      {(erroVivos || vivos?.ok === false) && (
+        <div className="border-4 border-black bg-[#450a0a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center gap-2 text-xs font-black uppercase text-[#f87171]">
+            <span>⚠ FALHA NA SONDA DE AGENTES AO VIVO</span>
+            {falhouHaSegundos !== null && (
+              <span className="border border-black bg-[#1e293b] px-2 py-0.5 text-[10px] text-[#facc15]">
+                {falhouHaSegundos === 0 ? 'sonda falhou na inicialização' : `sonda falhou há ${falhouHaSegundos}s`}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-slate-200">
+            {erroVivos || vivos?.erro || vivos?.motivo || 'Erro ao comunicar com a sonda de agentes ao vivo.'}
+          </p>
+        </div>
+      )}
+
+      {/* Avisos Não-Fatais da Sonda Viva */}
+      {vivos?.avisos && vivos.avisos.length > 0 && (
+        <div className="border-3 border-black bg-[#451a03] p-3.5 text-xs text-[#fbbf24] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center gap-2 font-bold uppercase">
+            <span>⚠️ Avisos da sonda ({vivos.avisos.length}):</span>
+          </div>
+          <ul className="mt-1 list-disc pl-5 space-y-0.5 text-[11px] text-amber-200">
+            {vivos.avisos.map((aviso, idx) => (
+              <li key={idx} className="break-words">{aviso}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Seletor do Modo Virtual Office (Canvas Pixel Art Estilo pixel-agents-hq) */}
       {modoExibicao === 'office' ? (
         <section className="space-y-3">
@@ -176,9 +209,9 @@ export function Tarefas({ estado, vista }: PropsTela) {
           {/* Ficha Inspector do Agente Clicado */}
           {agenteSelecionado && (
             <div className="border-4 border-black bg-[#0f172a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className={`size-3 ${agenteSelecionado?.estado === 'trabalhando' ? 'bg-[#a3e635] animate-ping' : 'bg-slate-500'}`} />
+                  <span className={`size-3 shrink-0 ${agenteSelecionado?.estado === 'trabalhando' ? 'bg-[#a3e635] animate-ping' : 'bg-slate-500'}`} />
                   <span className="text-sm font-black uppercase text-[#facc15]">
                     AGENTE INSPECCIONADO: {agenteSelecionado.id.toUpperCase()}
                   </span>
@@ -196,7 +229,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
                     {agenteSelecionado.arquivo === 'catálogo operacional' ? 'FORA DA EXECUÇÃO' : agenteSelecionado.estado === 'trabalhando' ? 'EM EXECUÇÃO' : 'OCIOSO'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-300">
+                <p className="text-xs text-slate-300 break-words break-all [overflow-wrap:anywhere]">
                   {agenteSelecionado.etapa ?? 'Sem descrição da tarefa atual'}
                 </p>
                 <div className="text-[10.5px] text-slate-400">
@@ -206,7 +239,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
               <button
                 type="button"
                 onClick={() => setAgenteInspecionado(null)}
-                className="border-2 border-black bg-[#1e293b] px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-700"
+                className="shrink-0 border-2 border-black bg-[#1e293b] px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-700"
               >
                 FECHAR INSPECTOR ✕
               </button>
@@ -218,22 +251,38 @@ export function Tarefas({ estado, vista }: PropsTela) {
         <PixelJanela
           titulo="⚡ SONDA DE AGENTES AO VIVO NA TAREFA"
           subtitulo="Monitoramento em tempo real de transcripts e subprocessos ativos"
-          badge={carregandoVivos ? 'CONSULTANDO...' : vivos?.ok ? `${vivos.contagem?.vivos ?? 0} VIVOS (${ativos} EXEC)` : 'SONDA OFF'}
-          corBadge={ativos > 0 ? 'text-[#a3e635]' : 'text-slate-400'}
+          badge={
+            carregandoVivos
+              ? 'CONSULTANDO...'
+              : erroVivos || vivos?.ok === false
+              ? falhouHaSegundos !== null
+                ? `FALHA (${falhouHaSegundos}s)`
+                : 'FALHA'
+              : vivos?.ok
+              ? `${vivos.contagem?.vivos ?? 0} VIVOS (${ativos} EXEC)`
+              : 'SONDA OFF'
+          }
+          corBadge={
+            erroVivos || vivos?.ok === false
+              ? 'text-[#ef4444]'
+              : ativos > 0
+              ? 'text-[#a3e635]'
+              : 'text-slate-400'
+          }
         >
           {listaVivos.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
+            <div className="grid grid-cols-1 min-w-0 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
               {listaVivos.map((ag) => (
                 <div
-                  key={ag.id}
-                  className="flex flex-col justify-between border-2 border-black bg-[#0f172a] p-3.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+                  key={`${ag.dono ?? 'x'}:${ag.id}`}
+                  className="flex min-w-0 flex-col justify-between border-2 border-black bg-[#0f172a] p-3.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center justify-between gap-1.5 border-b border-slate-700 pb-2">
-                      <div className="flex items-center gap-1.5 truncate">
+                      <div className="flex min-w-0 items-center gap-1.5 truncate">
                         {ag.dono && (
                           <span
-                            className={`border border-black px-1.5 py-0.5 text-[8.5px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+                            className={`shrink-0 border border-black px-1.5 py-0.5 text-[8.5px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
                               ag.dono === 'luana' ? 'bg-[#38bdf8] text-black' :
                               ag.dono === 'renato' ? 'bg-[#c084fc] text-black' :
                               ag.dono === 'bia' ? 'bg-[#f472b6] text-black' :
@@ -249,7 +298,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
                         </span>
                       </div>
                       <span
-                        className={`border border-black px-1.5 py-0.5 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+                        className={`shrink-0 border border-black px-1.5 py-0.5 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
                           ag.estado === 'trabalhando' ? 'bg-[#a3e635] text-black' : ag.estado === 'silencioso' ? 'bg-[#facc15] text-black' : 'bg-slate-500 text-white'
                         }`}
                       >
@@ -257,7 +306,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
                       </span>
                     </div>
                     <div
-                      className="mt-2.5 border-l-2 border-[#38bdf8] pl-2 text-xs text-slate-200 line-clamp-3 leading-relaxed"
+                      className="mt-2.5 min-w-0 border-l-2 border-[#38bdf8] pl-2 text-xs text-slate-200 line-clamp-3 leading-relaxed break-words break-all [overflow-wrap:anywhere]"
                       title={ag.etapa ?? 'Etapa não informada'}
                     >
                       {ag.etapa ?? 'ETAPA EM ANDAMENTO'}

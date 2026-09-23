@@ -55,3 +55,10 @@ web/public/sac
 # --- editor / SO ---
 .DS_Store
 *.swp
+
+# --- Provas de tela e capturas geradas durante testes (evita vazar dado vivo) ---
+provas/*.png
+provas/*.jpg
+provas/*.jpeg
+provas/*.webp
+

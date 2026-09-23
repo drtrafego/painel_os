@@ -22,12 +22,62 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   const [foco, setFoco] = useState<string | null>(agenteSelecionadoId ?? null)
   const [squad, setSquad] = useState<FiltroOffice>(() => agentes.some((agente) => agente.estado === 'trabalhando') ? 'ativos' : 'todos')
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
+  const chaveAgente = (dono: string | undefined | null, id: string) => (dono ? `${dono}:${id}` : id)
   const catalogoVisual = useMemo(() => mesclarRuntimesNoCatalogo(catalogo, agentes), [agentes, catalogo])
-  const agentesPorCatalogo = useMemo(() => new Map(agentes.map((agente) => [catalogoVisual.find((item) => (agente.identidade && agente.identidade !== 'sessao-codex' && (normalizarId(item.id) === normalizarId(agente.identidade ?? '') || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? '')))) || normalizarId(item.id) === normalizarId(agente.id) || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.id)))?.id ?? agente.id, agente])), [agentes, catalogoVisual])
-  const ativos = useMemo(() => new Set(agentes.filter((agente) => agente.estado === 'trabalhando').map((agente) => {
-    return catalogoVisual.find((item) => (agente.identidade && agente.identidade !== 'sessao-codex' && (normalizarId(item.id) === normalizarId(agente.identidade ?? '') || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? '')))) || normalizarId(item.id) === normalizarId(agente.id) || item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.id)))?.id ?? agente.id
-  })), [agentes, catalogoVisual])
-  const visiveis = useMemo(() => catalogoVisual.filter((agente) => squad === 'todos' || (squad === 'ativos' ? ativos.has(agente.id) : agente.squad === squad)), [ativos, catalogoVisual, squad])
+  const agentesPorCatalogo = useMemo(() => {
+    const mapa = new Map<string, AgenteVivo>()
+    for (const agente of agentes) {
+      const chave = chaveAgente(agente.dono, agente.id)
+      mapa.set(chave, agente)
+      const itemCat = catalogoVisual.find(
+        (item) =>
+          item.id === chave ||
+          (agente.identidade &&
+            agente.identidade !== 'sessao-codex' &&
+            (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
+              item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? '')))) ||
+          item.id === agente.id ||
+          item.aliases?.includes(agente.id) ||
+          item.aliases?.includes(chave)
+      )
+      if (itemCat) {
+        mapa.set(itemCat.id, agente)
+      }
+    }
+    return mapa
+  }, [agentes, catalogoVisual])
+
+  const ativos = useMemo(
+    () =>
+      new Set(
+        agentes
+          .filter((agente) => agente.estado === 'trabalhando')
+          .map((agente) => {
+            const chave = chaveAgente(agente.dono, agente.id)
+            const itemCat = catalogoVisual.find(
+              (item) =>
+                item.id === chave ||
+                (agente.identidade &&
+                  agente.identidade !== 'sessao-codex' &&
+                  (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
+                    item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? '')))) ||
+                item.id === agente.id ||
+                item.aliases?.includes(agente.id) ||
+                item.aliases?.includes(chave)
+            )
+            return itemCat?.id ?? chave
+          })
+      ),
+    [agentes, catalogoVisual]
+  )
+
+  const visiveis = useMemo(
+    () =>
+      catalogoVisual.filter(
+        (agente) => squad === 'todos' || (squad === 'ativos' ? ativos.has(agente.id) : agente.squad === squad)
+      ),
+    [ativos, catalogoVisual, squad]
+  )
   const ativosAnteriores = useRef(agentes.filter((agente) => agente.estado === 'trabalhando').length)
 
   useEffect(() => {
@@ -60,16 +110,40 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   }, [])
   useEffect(() => { if (agenteSelecionadoId !== undefined) setFoco(agenteSelecionadoId) }, [agenteSelecionadoId])
 
+  const formatarRotulo = (nome: string, tagDono: string, limite = 21): string => {
+    const completo = `${tagDono}${nome}`
+    if (completo.length <= limite) return completo
+    if (nome.includes('·')) {
+      const partes = nome.split('·').map((s) => s.trim())
+      const prefixo = partes[0]
+      const sufixo = partes.slice(1).join('·')
+      const espaco = limite - tagDono.length - sufixo.length - 3
+      if (espaco > 3) {
+        return `${tagDono}${prefixo.slice(0, espaco - 1)}… · ${sufixo}`
+      }
+    }
+    return completo.slice(0, limite - 1) + '…'
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return
     const ctx = canvas.getContext('2d'); if (!ctx) return
     let frame = 0; let tick = 0
     const render = () => {
       const container = containerRef.current
-      if (container && (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight)) { canvas.width = container.clientWidth; canvas.height = container.clientHeight }
-      ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save()
+      const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+      const larguraCss = container ? container.clientWidth : 600
+      const alturaCss = container ? container.clientHeight : 440
+      if (canvas.width !== Math.round(larguraCss * dpr) || canvas.height !== Math.round(alturaCss * dpr)) {
+        canvas.width = Math.round(larguraCss * dpr)
+        canvas.height = Math.round(alturaCss * dpr)
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.imageSmoothingEnabled = false
+      ctx.clearRect(0, 0, larguraCss, alturaCss)
+      ctx.save()
       const centro = boundsDoCatalogo(visiveis.length)
-      ctx.translate(canvas.width / 2 + pan.x, canvas.height / 2 + pan.y); ctx.scale(zoom, zoom); ctx.translate(-centro.centroX, -centro.centroY)
+      ctx.translate(larguraCss / 2 + pan.x, alturaCss / 2 + pan.y); ctx.scale(zoom, zoom); ctx.translate(-centro.centroX, -centro.centroY)
       const colunas = 6; const linhas = Math.max(8, Math.ceil(visiveis.length / colunas))
       for (let row = 0; row < linhas * 5; row += 1) for (let col = 0; col < 40; col += 1) { ctx.fillStyle = (row + col) % 2 ? '#24324a' : '#1a263b'; ctx.fillRect(col * 24, row * 24, 24, 24) }
       ctx.fillStyle = '#0b1324'; ctx.fillRect(0, 0, 600, 34); ctx.fillStyle = '#334155'; ctx.fillRect(0, 34, 600, 4)
@@ -83,10 +157,10 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
         ctx.fillStyle = '#7c451b'; ctx.fillRect(-25, -12, 50, 26); ctx.fillStyle = '#0b1324'; ctx.fillRect(-13, -10, 26, 16); ctx.fillStyle = agente.cor; ctx.fillRect(-10, -7, 20, 10); ctx.fillStyle = '#0b1324'; ctx.fillRect(-7, -5, 11, 1); ctx.fillRect(-7, -1, 8, 1); ctx.fillStyle = '#cbd5e1'; ctx.fillRect(-10, 5, 20, 4)
         ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(-10, 18, 20, 4); ctx.fillStyle = agente.cor; ctx.fillRect(-7, -1, 14, 12); ctx.fillStyle = '#fed7aa'; ctx.fillRect(-6, -14, 12, 12); ctx.fillStyle = index % 2 ? '#78350f' : '#1e293b'; ctx.fillRect(-7, -17, 14, 6); ctx.fillStyle = '#0f172a'; ctx.fillRect(-4, -9, 2, 2); ctx.fillRect(2, -9, 2, 2)
         if (pulse) { ctx.fillStyle = '#facc15'; ctx.fillRect(8, -17, 4, 4) }; if (selecionado) { ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2; ctx.strokeRect(-18, -22, 36, 46) }
-        ctx.fillStyle = '#020617'; ctx.fillRect(-43, 25, 86, 16); ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center'
+        ctx.fillStyle = '#020617'; ctx.fillRect(-50, 25, 100, 16); ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center'
         const tagDono = runtime?.dono ? `[${runtime.dono[0].toUpperCase()}] ` : ''
         ctx.fillStyle = runtime?.dono === 'luana' ? '#38bdf8' : runtime?.dono === 'renato' ? '#c084fc' : runtime?.dono === 'bia' ? '#f472b6' : '#f8fafc'
-        ctx.fillText(`${tagDono}${agente.nome}`.slice(0, 18), 0, 33)
+        ctx.fillText(formatarRotulo(agente.nome, tagDono, 21), 0, 33)
         ctx.font = '6px monospace'; ctx.fillStyle = estado === 'executando' ? '#a3e635' : estado === 'ocioso' ? '#facc15' : '#94a3b8'; ctx.fillText(estado === 'executando' ? 'EXECUTANDO' : estado === 'ocioso' ? 'OCIOSO' : 'FORA DA EXECUÇÃO', 0, 39)
         ctx.restore()
       })
@@ -98,7 +172,9 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   const selecionarNoCanvas = (evento: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current; if (!canvas) return; const rect = canvas.getBoundingClientRect()
     const centro = boundsDoCatalogo(visiveis.length)
-    const mundoX = (evento.clientX - rect.left - canvas.width / 2 - pan.x) / zoom + centro.centroX; const mundoY = (evento.clientY - rect.top - canvas.height / 2 - pan.y) / zoom + centro.centroY
+    const larguraCss = rect.width
+    const alturaCss = rect.height
+    const mundoX = (evento.clientX - rect.left - larguraCss / 2 - pan.x) / zoom + centro.centroX; const mundoY = (evento.clientY - rect.top - alturaCss / 2 - pan.y) / zoom + centro.centroY
     const encontrado = visiveis.find((_agente, index) => { const pos = posicaoDe(index); return Math.abs(pos.x - mundoX) < 58 && Math.abs(pos.y - mundoY) < 42 })
     setFoco(encontrado?.id ?? null); if (encontrado) aoSelecionarAgente?.(agentesPorCatalogo.get(encontrado.id)?.id ?? encontrado.id)
   }

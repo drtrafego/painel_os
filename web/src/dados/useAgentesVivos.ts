@@ -4,19 +4,22 @@
  * Consulta /api/agentes-vivos em polling periódico a cada 10 segundos.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AgentesVivos } from './tipos'
 
 export type HookAgentesVivos = {
   dados: AgentesVivos | null
   carregando: boolean
   erro: string | null
+  falhouHaSegundos: number | null
 }
 
 export function useAgentesVivos(intervaloMs = 10000): HookAgentesVivos {
   const [dados, setDados] = useState<AgentesVivos | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
+  const [falhouHaSegundos, setFalhouHaSegundos] = useState<number | null>(null)
+  const ultimoSucessoRef = useRef<number | null>(null)
 
   useEffect(() => {
     let cancelado = false
@@ -36,11 +39,31 @@ export function useAgentesVivos(intervaloMs = 10000): HookAgentesVivos {
         const json: AgentesVivos = await r.json()
         if (cancelado) return
 
+        if (json.ok === false) {
+          const motivo = json.erro || json.motivo || 'Sonda retornou falha'
+          setErro(motivo)
+          if (ultimoSucessoRef.current !== null) {
+            setFalhouHaSegundos(Math.max(1, Math.round((Date.now() - ultimoSucessoRef.current) / 1000)))
+          } else {
+            setFalhouHaSegundos(0)
+          }
+          setDados(json)
+          return
+        }
+
+        ultimoSucessoRef.current = Date.now()
         setDados(json)
         setErro(null)
+        setFalhouHaSegundos(null)
       } catch (e) {
         if (cancelado) return
-        setErro(e instanceof Error ? e.message : String(e))
+        const msg = e instanceof Error ? e.message : String(e)
+        setErro(msg)
+        if (ultimoSucessoRef.current !== null) {
+          setFalhouHaSegundos(Math.max(1, Math.round((Date.now() - ultimoSucessoRef.current) / 1000)))
+        } else {
+          setFalhouHaSegundos(0)
+        }
       } finally {
         if (!cancelado) setCarregando(false)
       }
@@ -55,5 +78,6 @@ export function useAgentesVivos(intervaloMs = 10000): HookAgentesVivos {
     }
   }, [intervaloMs])
 
-  return { dados, carregando, erro }
+  return { dados, carregando, erro, falhouHaSegundos }
 }
+

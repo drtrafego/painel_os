@@ -119,6 +119,10 @@ def main() -> int:
     confere("/ COM credencial certa", bate(porta, credencial=(USUARIO, SENHA)), 200)
     confere("rota inexistente COM credencial devolve 404 sem derrubar a thread",
             bate(porta, "/nao-existe", credencial=(USUARIO, SENHA)), 404)
+    confere("HEAD em rota de API existente responde 200",
+            bate(porta, "/api/agentes-vivos", credencial=(USUARIO, SENHA), metodo="HEAD"), 200)
+    confere("HEAD em rota de API inexistente responde 404",
+            bate(porta, "/api/rota-inexistente", credencial=(USUARIO, SENHA), metodo="HEAD"), 404)
     confere("POST autenticado fora da rota de decisão devolve 404",
             bate(porta, "/api/aprovacoes", credencial=(USUARIO, SENHA), metodo="POST"), 404)
     confere("rota de decisão sem credencial para antes do corpo",

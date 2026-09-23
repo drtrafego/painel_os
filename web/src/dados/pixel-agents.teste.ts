@@ -28,5 +28,21 @@ conferir('sessão Codex real continua rotulada como Codex', comClaude[2]?.nome, 
 conferir('bounds de filtro curto têm uma linha real', boundsDoCatalogo(2).altura < boundsDoCatalogo(39).altura, true)
 conferir('filtro curto recebe zoom maior que overview', zoomParaEnquadrar(1200, 500, 2) > zoomParaEnquadrar(1200, 500, 39), true)
 
+// Teste de subagente Claude sem tipo
+const catalogoComClaude = mesclarRuntimesNoCatalogo(base, [
+  { id: 'agent-abc123', tipo: null, etapa: 'analisando repo', etapa_e_description: false },
+])
+conferir('subagente Claude sem tipo não é rotulado como Sessão Codex', catalogoComClaude[1]?.nome.startsWith('Subagente ·'), true)
+
+// Teste de colisão de donos: Cleo da Luana e Cleo da Bia não se anulam
+const catalogoColisao = mesclarRuntimesNoCatalogo(base, [
+  { id: 'cleo', dono: 'luana', etapa: 'trabalho luana' },
+  { id: 'cleo', dono: 'bia', etapa: 'trabalho bia' },
+])
+conferir('dois donos com mesmo agente catalogado geram entradas distintas', catalogoColisao.length, 2)
+conferir('segundo dono ganha identificador composto', catalogoColisao[1]?.id, 'bia:cleo')
+conferir('segundo dono recebe tag no nome', catalogoColisao[1]?.nome.includes('[B]'), true)
+
+
 if (falhas) process.exit(1)
 console.log('APROVADO: catálogo vivo deduplica aliases e preserva etapa textual.')

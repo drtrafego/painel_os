@@ -85,6 +85,21 @@ except ModuleNotFoundError:
         from agentes_vivos import ler_agentes, ler_agentes_da_casa
 
 RAIZ = Path(__file__).resolve().parent.parent
+
+try:
+    from coletor.coletar_estado import redigir, achou_nome_de_cliente, NEGACAO
+except ModuleNotFoundError:
+    try:
+        from coletar_estado import redigir, achou_nome_de_cliente, NEGACAO
+    except ModuleNotFoundError:
+        import sys
+        sys.path.insert(0, str(RAIZ / "coletor"))
+        try:
+            from coletar_estado import redigir, achou_nome_de_cliente, NEGACAO
+        except Exception:
+            redigir = None
+            achou_nome_de_cliente = None
+            NEGACAO = {"carregada": False}
 DIST = RAIZ / "web" / "dist"
 COLETOR = RAIZ / "coletor" / "coletar_estado.py"
 # 20/09/2026: o snapshot REAL vive em `data/`, igual aprovacoes.json e
@@ -127,6 +142,12 @@ ARTEFATOS_RAIZ = Path("/opt/gastaomatos/produtor_conteudo/out").resolve()
 HTTPS_ATIVO = RAIZ / "servidor" / ".https-ativo"
 APROVACAO_ESTADOS_FINAIS = {"aprovado", "reprovado", "cancelado"}
 APROVACAO_TIPOS = {"conteudo", "documento", "campanha", "outro"}
+ROTAS_API_VALIDAS = {
+    "/api/estado",
+    "/api/agentes-vivos",
+    "/api/ferramentas/acessos",
+    "/api/estudio/artefato",
+}
 _trava_aprovacoes = threading.Lock()
 MAXIMO_REQUISICOES = 32
 ARTEFATO_MAX_BYTES = 300_000_000
@@ -335,8 +356,63 @@ _trava_vivos = threading.Lock()
 JANELA_CACHE_VIVOS = 2.0
 
 
+def redigir_texto_livre(texto: str | None, limite: int = 400) -> str | None:
+    """Sanitiza texto livre: remove caminhos do sistema, redige emails/telefones e mascara nomes de clientes."""
+    if not texto or not isinstance(texto, str):
+        return texto
+    # 1. Sanitizar caminhos internos (/opt/..., /home/..., C:\...)
+    limpo = re.sub(r"/(?:opt|home|root|etc|var|tmp|usr)/\S+", "[caminho]", texto)
+    limpo = re.sub(r"[a-zA-Z]:\\[^\s'\":]+", "[caminho]", limpo)
+
+    # 2. Redigir emails e telefones
+    if callable(redigir):
+        try:
+            limpo = redigir(limpo)
+        except Exception:
+            pass
+
+    # 3. Mascarar nomes de clientes
+    if callable(achou_nome_de_cliente) and isinstance(NEGACAO, dict) and NEGACAO.get("carregada"):
+        try:
+            achados = achou_nome_de_cliente(limpo)
+            for ini, fim, _ in reversed(achados):
+                limpo = limpo[:ini] + "[cliente]" + limpo[fim:]
+        except Exception:
+            pass
+
+    return limpo[:limite].strip()
+
+
+def redigir_dados_agentes(dados: dict) -> dict:
+    """Passa todos os campos de texto livre da resposta dos agentes vivos pela redação de clientes e caminhos."""
+    if not isinstance(dados, dict):
+        return dados
+    agentes_redigidos = []
+    for ag in dados.get("agentes", []):
+        if not isinstance(ag, dict):
+            continue
+        copia = dict(ag)
+        for campo in ("descricao", "etapa", "tarefa", "problema"):
+            if campo in copia and isinstance(copia[campo], str):
+                copia[campo] = redigir_texto_livre(copia[campo])
+        agentes_redigidos.append(copia)
+
+    avisos_redigidos = []
+    for av in dados.get("avisos", []):
+        if isinstance(av, str):
+            avisos_redigidos.append(redigir_texto_livre(av, limite=300))
+        else:
+            avisos_redigidos.append(av)
+
+    return {
+        **dados,
+        "agentes": agentes_redigidos,
+        "avisos": avisos_redigidos,
+    }
+
+
 def obter_agentes_vivos() -> bytes:
-    """Serializa a leitura agregada da sonda viva (/api/agentes-vivos) com cache curto."""
+    """Serializa a leitura agregada da sonda viva (/api/agentes-vivos) com cache curto e redação estrita."""
     agora = time.monotonic()
     if _cache_vivos["corpo"] and (agora - float(_cache_vivos["quando"])) < JANELA_CACHE_VIVOS:
         return _cache_vivos["corpo"]  # type: ignore[return-value]
@@ -344,9 +420,12 @@ def obter_agentes_vivos() -> bytes:
         agora = time.monotonic()
         if _cache_vivos["corpo"] and (agora - float(_cache_vivos["quando"])) < JANELA_CACHE_VIVOS:
             return _cache_vivos["corpo"]  # type: ignore[return-value]
-        corpo = json.dumps(ler_agentes_da_casa(), ensure_ascii=False).encode("utf-8")
+        bruto = ler_agentes_da_casa()
+        redigido = redigir_dados_agentes(bruto)
+        corpo = json.dumps(redigido, ensure_ascii=False).encode("utf-8")
         _cache_vivos.update(quando=time.monotonic(), corpo=corpo)
         return corpo
+
 def coletar_skills_acessos(raiz: Path = Path("/opt/gastaomatos")) -> dict:
     """Lê skills e conexões de Luana e Renato no servidor e classifica estados reais sem expor segredos."""
     itens = []
@@ -742,8 +821,15 @@ class Manipulador(SimpleHTTPRequestHandler):
         # As rotas /api/* não existem como arquivo: sem isto, HEAD cai no
         # handler de arquivo estático da classe base e devolve 404 falso
         # para uma rota que responde 200 em GET.
-        if urlsplit(self.path).path.startswith("/api/"):
+        caminho = urlsplit(self.path).path
+        if caminho in ROTAS_API_VALIDAS:
             self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+        if caminho.startswith("/api/"):
+            self.send_response(404)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()

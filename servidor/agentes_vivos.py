@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,6 +61,23 @@ PROJETOS_DA_CASA: dict[str, str] = {
     "bia": "-opt-gastaomatos-bia",
 }
 
+# Pastas de sessões Codex por dono, incluindo workers de segundo plano.
+CODEX_DA_CASA: dict[str, list[Path]] = {
+    "luana": [
+        Path.home() / ".codex-luana" / "sessions",
+        Path.home() / ".codex-luana-workers" / "sessions",
+    ],
+    "renato": [
+        Path.home() / ".codex-renato" / "sessions",
+        Path.home() / ".codex-renato-workers" / "sessions",
+    ],
+    "bia": [
+        Path.home() / ".codex-bia" / "sessions",
+        Path.home() / ".codex-bia-workers" / "sessions",
+    ],
+}
+_CODEX_PADRAO = object()
+
 # Quanto do fim do transcript a gente le pra achar o ultimo tool_use.
 # 256 KB cobre folgado varios turnos; o arquivo pode ter 14 MB.
 CAUDA_BYTES = 256 * 1024
@@ -71,12 +89,6 @@ RAIZ_CODEX = Path.home() / ".codex-luana" / "sessions"
 # Cada sessão da casa tem o próprio CODEX_HOME. Sem este mapa, a agregação
 # chamava ler_agentes() três vezes e as sessões Codex da Luana apareciam
 # triplicadas, carimbadas como luana, renato e bia.
-CODEX_DA_CASA: dict[str, Path] = {
-    "luana": RAIZ_CODEX,
-    "renato": Path.home() / ".codex-renato" / "sessions",
-    "bia": Path.home() / ".codex-bia" / "sessions",
-}
-_CODEX_PADRAO = object()
 JANELA_CODEX_S = 90
 
 # Identidades operacionais são deliberadamente uma allowlist. O conteúdo de
@@ -93,6 +105,26 @@ IDENTIDADES_POR_TAREFA_CODEX = {
     "iris_orquestradora": "iris",
 }
 IDENTIDADE_CODEX_GENERICA = "sessao-codex"
+
+
+def _sanitizar_caminho(texto: str | None) -> str:
+    """Substitui caminhos absolutos do servidor por marcação segura."""
+    if not texto:
+        return ""
+    limpo = re.sub(r"/(?:opt|home|root|etc|var|tmp|usr)/[^\s':]+", "[caminho]", str(texto))
+    limpo = re.sub(r"[a-zA-Z]:\\[^\s':]+", "[caminho]", limpo)
+    return limpo
+
+
+def _deduzir_dono(projeto: str) -> str | None:
+    for dono, proj in PROJETOS_DA_CASA.items():
+        if proj == projeto:
+            return dono
+    proj_low = projeto.lower()
+    for dono in ("luana", "renato", "bia"):
+        if dono in proj_low:
+            return dono
+    return None
 
 # --------------------------------------------------------------------------
 # OS TRES ESTADOS
@@ -173,6 +205,7 @@ def _analisar_cauda(caminho: Path) -> dict:
     etapa_medida = False
     ferramenta = None
     ilegiveis = 0
+    problema_detectado = None
 
     for linha in reversed(linhas):
         try:
@@ -181,12 +214,27 @@ def _analisar_cauda(caminho: Path) -> dict:
             ilegiveis += 1
             continue
 
+        if not isinstance(reg, dict):
+            ilegiveis += 1
+            continue
+
         if ultimo_ts is None and isinstance(reg.get("timestamp"), str):
             ultimo_ts = reg["timestamp"]
 
+        msg = reg.get("message") if isinstance(reg.get("message"), dict) else {}
+        is_api_err = (
+            reg.get("isApiErrorMessage") is True
+            or (isinstance(msg, dict) and msg.get("isApiErrorMessage") is True)
+            or any(isinstance(b, dict) and b.get("isApiErrorMessage") is True for b in _blocos(reg))
+        )
+        stop_reason = msg.get("stop_reason") if isinstance(msg, dict) else None
+
+        if is_api_err or stop_reason in ("refusal", "error"):
+            fase = "erro_api"
+            problema_detectado = "erro de API" if is_api_err else f"execução recusada ({stop_reason})"
+
         if fase == "desconhecida":
             tipo = reg.get("type")
-            msg = reg.get("message") if isinstance(reg.get("message"), dict) else {}
             if tipo == "assistant":
                 tipos = [b.get("type") for b in _blocos(reg)]
                 if "tool_use" in tipos:
@@ -214,11 +262,12 @@ def _analisar_cauda(caminho: Path) -> dict:
         "ferramenta": ferramenta,
         "ultimo_ts_utc": ultimo_ts,
         "linhas_ilegiveis": ilegiveis,
+        "problema_api": problema_detectado,
     }
 
 
 def _classificar(fase: str, silencio_s: float) -> str:
-    if fase == "entregou":
+    if fase in ("entregou", "erro_api"):
         return PARADO
     if fase in ("executando_ferramenta", "processando_resultado", "escrevendo"):
         return TRABALHANDO if silencio_s <= LIMIAR_ATIVO_S else SILENCIOSO
@@ -284,39 +333,118 @@ def _sessao_mais_ativa(dir_projeto: Path) -> Path | None:
     return max(candidatas, key=ultima_evidencia)
 
 
-def _codex_recentes(agora: float, raiz_codex: Path | None = None) -> list[dict]:
-    """Sessões Codex recentes, sem inventar nome de agente."""
-    raiz_codex = raiz_codex or RAIZ_CODEX
-    if not raiz_codex.is_dir():
+def _sessoes_ativas(dir_projeto: Path, agora: float) -> list[Path]:
+    """Retorna todas as sessões com subagentes ativas dentro da janela de candidatos.
+    Se nenhuma estiver na janela, retorna a mais ativa para preservação de histórico."""
+    try:
+        candidatas = [d for d in dir_projeto.iterdir() if d.is_dir() and (d / "subagents").is_dir()]
+    except OSError:
         return []
-    encontrados = []
-    for caminho in raiz_codex.rglob("*.jsonl"):
+    if not candidatas:
+        return []
+
+    def ultima_evidencia(diretorio: Path) -> float:
         try:
-            silencio = max(0.0, agora - caminho.stat().st_mtime)
+            arquivos = [p for p in (diretorio / "subagents").iterdir() if p.is_file()]
+            return max((p.stat().st_mtime for p in arquivos), default=(diretorio / "subagents").stat().st_mtime)
         except OSError:
+            return 0.0
+
+    com_mtime = [(d, ultima_evidencia(d)) for d in candidatas]
+    ativas = [d for d, mt in com_mtime if (agora - mt) <= JANELA_CANDIDATO_S]
+    if ativas:
+        ativas.sort(key=lambda d: next(mt for x, mt in com_mtime if x == d), reverse=True)
+        return ativas
+    mais_ativa = max(com_mtime, key=lambda par: par[1])[0]
+    return [mais_ativa]
+
+
+def _pastas_codex_do_dono(dono: str | None = None, raiz_explicita: object = _CODEX_PADRAO) -> list[Path]:
+    """Retorna pastas de sessões Codex do dono (ou da casa toda), incluindo workers."""
+    if raiz_explicita is not _CODEX_PADRAO:
+        if isinstance(raiz_explicita, Path) and raiz_explicita.is_dir():
+            return [raiz_explicita]
+        elif isinstance(raiz_explicita, list):
+            return [p for p in raiz_explicita if isinstance(p, Path) and p.is_dir()]
+        return []
+    home = Path.home()
+    donos = [dono] if dono else list(PROJETOS_DA_CASA.keys())
+    pastas = []
+    for d in donos:
+        candidatas = list(CODEX_DA_CASA.get(d, []))
+        try:
+            for p in home.glob(f".codex-{d}*/sessions"):
+                if p not in candidatas and p.is_dir():
+                    candidatas.append(p)
+        except OSError:
+            pass
+        for c in candidatas:
+            if c.is_dir() and c not in pastas:
+                pastas.append(c)
+    if not pastas and RAIZ_CODEX.is_dir():
+        pastas.append(RAIZ_CODEX)
+    return pastas
+
+
+def _codex_recentes(agora: float, dono: str | None = None,
+                    raiz_codex: object = _CODEX_PADRAO,
+                    coletar_avisos: list[str] | None = None) -> list[dict]:
+    """Sessões Codex recentes, incluindo pastas normais e de workers.
+    Nunca silencia erro de leitura em pasta existente."""
+    pastas = _pastas_codex_do_dono(dono, raiz_explicita=raiz_codex)
+    encontrados = []
+    for pasta in pastas:
+        try:
+            arquivos = list(pasta.rglob("*.jsonl"))
+        except PermissionError as e:
+            if coletar_avisos is not None:
+                coletar_avisos.append(f"sem permissão em pasta codex: {_sanitizar_caminho(str(pasta))}")
             continue
-        if silencio <= JANELA_CODEX_S:
-            encontrados.append((caminho, silencio))
+        except OSError as e:
+            if coletar_avisos is not None:
+                coletar_avisos.append(f"erro ao ler codex: {type(e).__name__}: {_sanitizar_caminho(str(e))}")
+            continue
+
+        for caminho in arquivos:
+            try:
+                silencio = max(0.0, agora - caminho.stat().st_mtime)
+            except OSError:
+                continue
+            if silencio <= JANELA_CODEX_S:
+                encontrados.append((caminho, silencio))
+
     encontrados.sort(key=lambda par: par[1])
     agentes = []
     for caminho, silencio in encontrados[:32]:
         identidade = _identidade_codex(caminho)
         agentes.append({
-            "id": caminho.stem.removeprefix("rollout-")[-36:], "tipo": "codex",
-            "identidade": identidade["identidade"], "papel": identidade["papel"],
-            "tarefa": identidade["tarefa"], "descricao": identidade["tarefa"],
-            "pai": identidade["pai"], "profundidade": identidade["profundidade"],
+            "id": caminho.stem.removeprefix("rollout-")[-36:],
+            "tipo": "codex",
+            "motor": "codex",
+            "dono": dono,
+            "identidade": identidade["identidade"],
+            "papel": identidade["papel"],
+            "tarefa": identidade["tarefa"],
+            "descricao": identidade["tarefa"],
+            "pai": identidade["pai"],
+            "profundidade": identidade["profundidade"],
             "estado": TRABALHANDO if silencio <= LIMIAR_ATIVO_S else SILENCIOSO,
-            "fase": "atividade_codex", "etapa": "atividade Codex detectada",
-            "etapa_e_description": False, "ferramenta": None,
-            "silencio_s": round(silencio, 1), "ultima_atividade": _hora_br(agora - silencio),
-            "inicio": None, "transcript_bytes": caminho.stat().st_size, "problema": None,
+            "fase": "atividade_codex",
+            "etapa": "atividade Codex detectada",
+            "etapa_e_description": False,
+            "ferramenta": None,
+            "silencio_s": round(silencio, 1),
+            "ultima_atividade": _hora_br(agora - silencio),
+            "inicio": None,
+            "transcript_bytes": caminho.stat().st_size,
+            "problema": None,
         })
     return agentes
 
 
 def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
-                sessao: str | None = None, raiz_codex: object = _CODEX_PADRAO) -> dict:
+                sessao: str | None = None, dono: str | None = None,
+                raiz_codex: object = _CODEX_PADRAO) -> dict:
     """Retrato dos agentes desta sessao, agora.
 
     SEMPRE devolve dict com `ok` e `motivo`. Nunca levanta pra quem chama e
@@ -324,6 +452,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
     """
     t0 = time.perf_counter()
     agora = _agora()
+    dono = dono or _deduzir_dono(projeto)
     base = {
         "ok": False,
         "motivo": None,
@@ -345,127 +474,146 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
         return base
 
     raiz = raiz or RAIZ_PROJETOS
+    agentes: list[dict] = []
+    avisos: list[str] = []
+    claude_ok = False
+    claude_motivo = None
+    claude_erro = None
+
     try:
         dir_projeto = Path(raiz) / projeto
         if not dir_projeto.is_dir():
-            return fechar(motivo="projeto_inexistente",
-                          erro=f"não existe a pasta do projeto: {dir_projeto}",
-                          caminho=str(dir_projeto))
-
-        dir_sessao = (dir_projeto / sessao) if sessao else _sessao_mais_ativa(dir_projeto)
-        if dir_sessao is None:
-            return fechar(motivo="nenhuma_sessao_com_subagentes",
-                          erro=f"nenhuma sessão com pasta subagents/ dentro de {dir_projeto}",
-                          caminho=str(dir_projeto))
-
-        pasta = dir_sessao / "subagents"
-        base["sessao"] = dir_sessao.name
-        base["caminho"] = str(pasta)
-        if not pasta.is_dir():
-            return fechar(motivo="pasta_subagentes_inexistente",
-                          erro=f"não existe: {pasta}")
-
-        metas = sorted(pasta.glob("agent-*.meta.json"))
-        if not metas:
-            avisos_iniciais = ["a pasta existe e foi lida, e não há nenhum agente registrado nela"]
+            claude_motivo = "projeto_inexistente"
+            claude_erro = f"não existe a pasta do projeto: {_sanitizar_caminho(str(dir_projeto))}"
+            base["caminho"] = _sanitizar_caminho(str(dir_projeto))
+            avisos.append(claude_erro)
         else:
-            avisos_iniciais = []
+            sessoes_candidatas = [dir_projeto / sessao] if sessao else _sessoes_ativas(dir_projeto, agora)
+            if not sessoes_candidatas:
+                claude_motivo = "nenhuma_sessao_com_subagentes"
+                claude_erro = f"nenhuma sessão com pasta subagents/ dentro de {_sanitizar_caminho(str(dir_projeto))}"
+                base["caminho"] = _sanitizar_caminho(str(dir_projeto))
+                avisos.append(claude_erro)
+            else:
+                base["sessao"] = sessoes_candidatas[0].name
+                base["caminho"] = _sanitizar_caminho(str(sessoes_candidatas[0] / "subagents"))
+                claude_ok = True
+
+                for dir_sessao in sessoes_candidatas:
+                    pasta = dir_sessao / "subagents"
+                    if not pasta.is_dir():
+                        continue
+
+                    metas = sorted(pasta.glob("agent-*.meta.json"))
+                    if not metas and len(sessoes_candidatas) == 1:
+                        avisos.append("a pasta existe e foi lida, e não há nenhum agente registrado nela")
+
+                    for meta_path in metas:
+                        ident = meta_path.name[len("agent-"):-len(".meta.json")]
+                        item = {
+                            "id": ident,
+                            "tipo": None, "motor": "claude", "dono": dono,
+                            "descricao": None, "pai": None, "profundidade": None,
+                            "estado": None, "fase": None, "etapa": None, "etapa_e_description": None,
+                            "ferramenta": None,
+                            "silencio_s": None, "ultima_atividade": None, "inicio": None,
+                            "transcript_bytes": None, "problema": None,
+                        }
+                        try:
+                            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                            if not isinstance(meta, dict):
+                                raise ValueError("meta.json não é um dicionário")
+                            item["tipo"] = meta.get("agentType")
+                            item["descricao"] = meta.get("description")
+                            item["pai"] = meta.get("parentAgentId")
+                            item["profundidade"] = meta.get("spawnDepth")
+                            item["inicio"] = _hora_br(meta_path.stat().st_mtime)
+                            item["inicio_epoch"] = meta_path.stat().st_mtime
+                        except (OSError, ValueError) as e:
+                            item["problema"] = f"meta ilegível: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
+                            avisos.append(f"{ident}: meta ilegível")
+
+                        transcript = pasta / f"agent-{ident}.jsonl"
+                        try:
+                            st = transcript.stat()
+                            item["transcript_bytes"] = st.st_size
+                            silencio = max(0.0, agora - st.st_mtime)
+                            item["silencio_s"] = round(silencio, 1)
+                            item["ultima_atividade"] = _hora_br(st.st_mtime)
+                        except FileNotFoundError:
+                            item["problema"] = (item["problema"] or "") + " sem transcript (agente registrado e nunca escreveu)"
+                            item["estado"] = PARADO
+                            item["fase"] = "sem_transcript"
+                            item["etapa"] = "nunca escreveu no transcript"
+                            agentes.append(item)
+                            avisos.append(f"{ident}: registrado sem transcript")
+                            continue
+                        except OSError as e:
+                            item["problema"] = f"transcript ilegível: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
+                            item["estado"] = None
+                            item["etapa"] = "não foi possível ler"
+                            agentes.append(item)
+                            avisos.append(f"{ident}: transcript ilegível")
+                            continue
+
+                        if silencio > JANELA_CANDIDATO_S:
+                            item["estado"] = PARADO
+                            item["fase"] = "fora_da_janela"
+                            item["etapa"] = "fora da janela de leitura (histórico)"
+                            agentes.append(item)
+                            continue
+
+                        try:
+                            cauda = _analisar_cauda(transcript)
+                        except OSError as e:
+                            item["problema"] = f"falha ao ler a cauda: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
+                            item["estado"] = None
+                            item["etapa"] = "não foi possível ler"
+                            agentes.append(item)
+                            avisos.append(f"{ident}: falha ao ler a cauda do transcript")
+                            continue
+
+                        item.update({
+                            "fase": cauda["fase"],
+                            "etapa": cauda["etapa"],
+                            "etapa_e_description": cauda["etapa_e_description"],
+                            "ferramenta": cauda["ferramenta"],
+                            "estado": _classificar(cauda["fase"], silencio),
+                        })
+                        if cauda.get("problema_api"):
+                            item["problema"] = cauda["problema_api"]
+                        elif cauda["linhas_ilegiveis"]:
+                            item["problema"] = f"{cauda['linhas_ilegiveis']} linha(s) ilegível(is) na cauda"
+                        agentes.append(item)
     except PermissionError as e:
-        return fechar(motivo="sem_permissao", erro=f"sem permissão de leitura: {e}")
+        claude_motivo = "sem_permissao"
+        claude_erro = f"sem permissão de leitura: {_sanitizar_caminho(str(e))}"
+        avisos.append(claude_erro)
     except OSError as e:
-        return fechar(motivo="erro_leitura", erro=f"{type(e).__name__}: {e}")
+        claude_motivo = "erro_leitura"
+        claude_erro = f"{type(e).__name__}: {_sanitizar_caminho(str(e))}"
+        avisos.append(claude_erro)
 
-    agentes: list[dict] = []
-    avisos: list[str] = avisos_iniciais
+    # Leitura Codex sempre executada (não é cancelada por falha do Claude)
+    codex = _codex_recentes(agora, dono=dono, raiz_codex=raiz_codex, coletar_avisos=avisos)
+    if codex:
+        base["sessao"] = base["sessao"] or "codex"
+        pastas_dono = _pastas_codex_do_dono(dono, raiz_explicita=raiz_codex)
+        base["caminho"] = base["caminho"] or (_sanitizar_caminho(str(pastas_dono[0])) if pastas_dono else "codex")
+        agentes.extend(codex)
 
-    for meta_path in metas:
-        ident = meta_path.name[len("agent-"):-len(".meta.json")]
-        item = {
-            "id": ident,
-            "tipo": None, "descricao": None, "pai": None, "profundidade": None,
-            "estado": None, "fase": None, "etapa": None, "etapa_e_description": None,
-            "ferramenta": None,
-            "silencio_s": None, "ultima_atividade": None, "inicio": None,
-            "transcript_bytes": None, "problema": None,
-        }
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            item["tipo"] = meta.get("agentType")
-            item["descricao"] = meta.get("description")
-            item["pai"] = meta.get("parentAgentId")
-            item["profundidade"] = meta.get("spawnDepth")
-            item["inicio"] = _hora_br(meta_path.stat().st_mtime)
-            item["inicio_epoch"] = meta_path.stat().st_mtime
-        except (OSError, json.JSONDecodeError) as e:
-            # O agente EXISTE; foi o meta que nao deu pra ler. Some da tela nao,
-            # entra com o problema escrito: "nao consegui ler" e "nao tem" nao
-            # podem virar a mesma tela.
-            item["problema"] = f"meta ilegível: {type(e).__name__}: {e}"
-            avisos.append(f"{ident}: meta ilegível")
-
-        transcript = pasta / f"agent-{ident}.jsonl"
-        try:
-            st = transcript.stat()
-            item["transcript_bytes"] = st.st_size
-            silencio = max(0.0, agora - st.st_mtime)
-            item["silencio_s"] = round(silencio, 1)
-            item["ultima_atividade"] = _hora_br(st.st_mtime)
-        except FileNotFoundError:
-            item["problema"] = (item["problema"] or "") + " sem transcript (agente registrado e nunca escreveu)"
-            item["estado"] = PARADO
-            item["fase"] = "sem_transcript"
-            item["etapa"] = "nunca escreveu no transcript"
-            agentes.append(item)
-            avisos.append(f"{ident}: registrado sem transcript")
-            continue
-        except OSError as e:
-            item["problema"] = f"transcript ilegível: {type(e).__name__}: {e}"
-            item["estado"] = None
-            item["etapa"] = "não foi possível ler"
-            agentes.append(item)
-            avisos.append(f"{ident}: transcript ilegível")
-            continue
-
-        if silencio > JANELA_CANDIDATO_S:
-            # Historico. Nao abre o arquivo: stat ja respondeu.
-            item["estado"] = PARADO
-            item["fase"] = "fora_da_janela"
-            item["etapa"] = "fora da janela de leitura (histórico)"
-            agentes.append(item)
-            continue
-
-        try:
-            cauda = _analisar_cauda(transcript)
-        except OSError as e:
-            item["problema"] = f"falha ao ler a cauda: {type(e).__name__}: {e}"
-            item["estado"] = None
-            item["etapa"] = "não foi possível ler"
-            agentes.append(item)
-            avisos.append(f"{ident}: falha ao ler a cauda do transcript")
-            continue
-
-        item.update({
-            "fase": cauda["fase"],
-            "etapa": cauda["etapa"],
-            "etapa_e_description": cauda["etapa_e_description"],
-            "ferramenta": cauda["ferramenta"],
-            "estado": _classificar(cauda["fase"], silencio),
-        })
-        if cauda["linhas_ilegiveis"]:
-            item["problema"] = f"{cauda['linhas_ilegiveis']} linha(s) ilegível(is) na cauda"
-        agentes.append(item)
+    # Se Claude funcionou OU se o Codex retornou agentes, a leitura é bem-sucedida
+    sucesso = claude_ok or bool(codex)
+    if not sucesso:
+        return fechar(
+            ok=False,
+            motivo=claude_motivo or "falha_leitura",
+            erro=claude_erro,
+            avisos=avisos,
+        )
 
     historico = sum(a["estado"] == PARADO for a in agentes)
     agentes = [a for a in agentes if a["estado"] != PARADO]
-    if raiz_codex is _CODEX_PADRAO:
-        raiz_codex = RAIZ_CODEX
-    codex = _codex_recentes(agora, raiz_codex) if raiz_codex is not None else []
-    if codex:
-        # A sessão Claude escolhida acima é apenas a fonte do contador
-        # histórico; o retrato vivo veio do motor Codex.
-        base["sessao"] = "codex"
-        base["caminho"] = str(raiz_codex)
-    agentes.extend(codex)
     conta = {TRABALHANDO: 0, SILENCIOSO: 0, PARADO: 0}
     indeterminados = 0
     for a in agentes:
@@ -495,7 +643,7 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
     """Agrega ler_agentes() das três sessões da casa em um único retrato.
 
     Nunca deixa uma sessão que falhou apagar as que funcionaram: erro de
-    uma entra em `avisos`, com o dono nomeado, e as outras duas continuam
+    uma entra em `avisos`, com o dono nomeado, e as outras continuam
     valendo. Cada agente ganha o campo `dono` (luana/renato/bia) — sem
     isso o front não tem como saber de quem é o boneco.
 
@@ -514,19 +662,24 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
     algum_ok = False
 
     for dono, projeto in projetos.items():
-        r = ler_agentes(projeto=projeto, raiz=raiz, raiz_codex=codex.get(dono))
-        if not r.get("ok"):
-            avisos.append(f"{dono}: {r.get('motivo')}: {r.get('erro')}")
-            continue
-        algum_ok = True
-        for a in r.get("agentes", []):
-            a = {**a, "dono": dono}
-            agentes.append(a)
-            if a.get("estado") in conta:
-                conta[a["estado"]] += 1
-        historico_total += r.get("contagem", {}).get("historico") or 0
-        indeterminados_total += r.get("contagem", {}).get("indeterminados") or 0
-        avisos.extend(f"{dono}: {av}" for av in r.get("avisos", []))
+        try:
+            r = ler_agentes(projeto=projeto, raiz=raiz, dono=dono, raiz_codex=codex.get(dono) if codex is not None else _CODEX_PADRAO)
+            if not r.get("ok"):
+                erro_desc = _sanitizar_caminho(str(r.get("erro") or r.get("motivo")))
+                avisos.append(f"{dono}: {r.get('motivo')} — {erro_desc}")
+            else:
+                algum_ok = True
+
+            for a in r.get("agentes", []):
+                a = {**a, "dono": dono}
+                agentes.append(a)
+                if a.get("estado") in conta:
+                    conta[a["estado"]] += 1
+            historico_total += r.get("contagem", {}).get("historico") or 0
+            indeterminados_total += r.get("contagem", {}).get("indeterminados") or 0
+            avisos.extend(f"{dono}: {_sanitizar_caminho(av)}" for av in r.get("avisos", []))
+        except Exception as e:
+            avisos.append(f"{dono}: falha inesperada na sonda: {type(e).__name__}: {_sanitizar_caminho(str(e))}")
 
     agentes.sort(key=lambda a: (a.get("silencio_s") is None, a.get("silencio_s") or 0))
     agora = _agora()
@@ -544,6 +697,7 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
         "agentes": agentes,
         "avisos": avisos,
     }
+
 
 
 # --------------------------------------------------------------------------

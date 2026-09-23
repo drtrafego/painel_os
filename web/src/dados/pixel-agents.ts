@@ -67,18 +67,97 @@ export function encontrarPixelAgent(id: string) {
   return PIXEL_AGENTS.find((agente) => normalizarId(agente.id) === alvo || agente.aliases?.some((alias) => normalizarId(alias) === alvo))
 }
 
-export function mesclarRuntimesNoCatalogo(catalogo: PixelAgent[], runtimes: Array<{ id: string; tipo?: string | null; identidade?: string | null; papel?: string | null; tarefa?: string | null; descricao?: string | null; etapa?: string | null; etapa_e_description?: boolean | null }>) {
+export function mesclarRuntimesNoCatalogo(
+  catalogo: PixelAgent[],
+  runtimes: Array<{
+    id: string
+    dono?: string
+    tipo?: string | null
+    identidade?: string | null
+    papel?: string | null
+    tarefa?: string | null
+    descricao?: string | null
+    motor?: string
+    etapa?: string | null
+    etapa_e_description?: boolean | null
+  }>
+) {
   const resultado = catalogo.map((agente) => ({ ...agente, aliases: agente.aliases ? [...agente.aliases] : undefined }))
+  const donosAssociados = new Map<string, string | undefined>()
+
   runtimes.forEach((runtime, index) => {
     const identidade = runtime.identidade && runtime.identidade !== 'sessao-codex' ? runtime.identidade : null
-    const existente = resultado.find((agente) => (identidade ? normalizarId(agente.id) === normalizarId(identidade) || agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(identidade)) : false) || normalizarId(agente.id) === normalizarId(runtime.id) || agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(runtime.id)))
-    if (existente) return
     const sufixo = runtime.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || String(index + 1)
-    if (runtime.tipo && runtime.tipo !== 'codex') {
-      resultado.push({ id: runtime.id, nome: `${runtime.tipo} · ${sufixo}`, papel: 'Subagente Claude', squad: 'globais', área: 'Sessão viva', abreviação: runtime.tipo.slice(0, 2).toUpperCase(), cor: '#60a5fa', descricao: runtime.descricao || runtime.etapa || 'Subagente sem descrição', aliases: [] })
+    const chave = runtime.dono ? `${runtime.dono}:${runtime.id}` : runtime.id
+    const ehCodex = runtime.tipo === 'codex' || runtime.motor === 'codex' || runtime.id.startsWith('session-') || runtime.id.startsWith('rollout-')
+
+    const existente = resultado.find((agente) => {
+      const match =
+        (identidade
+          ? normalizarId(agente.id) === normalizarId(identidade) ||
+            agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(identidade))
+          : false) ||
+        normalizarId(agente.id) === normalizarId(runtime.id) ||
+        agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(runtime.id))
+      if (!match) return false
+      const donoExistente = donosAssociados.get(agente.id)
+      return donoExistente === undefined || donoExistente === runtime.dono
+    })
+
+    if (existente) {
+      donosAssociados.set(existente.id, runtime.dono)
+      const novaDescricao = runtime.descricao || runtime.tarefa || runtime.etapa
+      if (novaDescricao) {
+        existente.descricao = novaDescricao
+      }
       return
     }
-    resultado.push({ id: runtime.id, nome: `Sessão Codex · ${sufixo}`, papel: runtime.papel || 'Sessão Codex', squad: 'pipeline Codex', área: 'Sessão viva', abreviação: 'CX', cor: '#f472b6', descricao: runtime.tarefa || runtime.etapa || 'Sessão sem identidade operacional catalogada', aliases: [] })
+
+    const baseOriginal = catalogo.find(
+      (agente) =>
+        (identidade
+          ? normalizarId(agente.id) === normalizarId(identidade) ||
+            agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(identidade))
+          : false) ||
+        normalizarId(agente.id) === normalizarId(runtime.id) ||
+        agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(runtime.id))
+    )
+    if (baseOriginal) {
+      const novoId = chave
+      const tagDono = runtime.dono ? ` [${runtime.dono[0].toUpperCase()}]` : ''
+      resultado.push({
+        ...baseOriginal,
+        id: novoId,
+        nome: `${baseOriginal.nome}${tagDono}`,
+        descricao: runtime.descricao || runtime.tarefa || runtime.etapa || baseOriginal.descricao,
+        aliases: [runtime.id],
+      })
+      donosAssociados.set(novoId, runtime.dono)
+      return
+    }
+
+    const nome = ehCodex
+      ? `Sessão Codex · ${sufixo}`
+      : runtime.tipo
+        ? `${runtime.tipo} · ${sufixo}`
+        : `Subagente · ${sufixo}`
+    const squad: PixelAgentSquad = ehCodex ? 'pipeline Codex' : 'globais'
+    const papel = runtime.papel || (ehCodex ? 'Sessão Codex' : 'Subagente Claude')
+    const abreviacao = ehCodex ? 'CX' : runtime.tipo ? runtime.tipo.slice(0, 2).toUpperCase() : 'SA'
+    const cor = ehCodex ? '#f472b6' : '#60a5fa'
+
+    resultado.push({
+      id: chave,
+      nome,
+      papel,
+      squad,
+      área: 'Sessão viva',
+      abreviação: abreviacao,
+      cor,
+      descricao: runtime.descricao || runtime.tarefa || runtime.etapa || (ehCodex ? 'Sessão sem identidade operacional catalogada' : 'Subagente sem descrição'),
+      aliases: [runtime.id],
+    })
+    donosAssociados.set(chave, runtime.dono)
   })
   return resultado
 }

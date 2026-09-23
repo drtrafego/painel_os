@@ -234,6 +234,7 @@ export type AgenteVivo = {
   papel?: string | null
   tarefa?: string | null
   tipo?: string | null
+  motor?: 'claude' | 'codex' | string
   descricao?: string | null
   pai?: string | null
   profundidade?: number | null
@@ -255,6 +256,7 @@ export type AgenteVivo = {
 export type AgentesVivos = {
   ok: boolean
   motivo: string
+  erro?: string | null
   contagem: {
     trabalhando: number
     silencioso: number
