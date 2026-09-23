@@ -70,6 +70,15 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+try:
+    # Quando este arquivo é carregado como módulo pelo servidor/testes, o
+    # pacote está disponível a partir da raiz do painel.
+    from servidor.agentes_vivos import ler_agentes
+except ModuleNotFoundError:
+    # Execução direta (python servidor/servir.py), em que o diretório do
+    # script é a entrada do sys.path.
+    from agentes_vivos import ler_agentes
+
 RAIZ = Path(__file__).resolve().parent.parent
 DIST = RAIZ / "web" / "dist"
 COLETOR = RAIZ / "coletor" / "coletar_estado.py"
@@ -314,6 +323,11 @@ def coletar(limite_espera: float = LIMITE_ESPERA_COLETA) -> bytes:
 def _invalidar_cache() -> None:
     with _coleta_pronta:
         _cache.update(quando=0.0, corpo=b"")
+
+
+def obter_agentes_vivos() -> bytes:
+    """Serializa a leitura da sonda viva no contrato JSON da API."""
+    return json.dumps(ler_agentes(), ensure_ascii=False).encode("utf-8")
 
 
 _cache_vivos = {"quando": 0.0, "corpo": b""}
