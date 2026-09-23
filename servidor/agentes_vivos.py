@@ -58,6 +58,8 @@ CAUDA_BYTES = 256 * 1024
 # So abre o transcript de quem escreveu nas ultimas N horas. Quem nao escreve
 # ha mais que isso e historico: entra na contagem de parados sem custo de I/O.
 JANELA_CANDIDATO_S = 6 * 3600
+RAIZ_CODEX = Path.home() / ".codex-luana" / "sessions"
+JANELA_CODEX_S = 90
 
 # --------------------------------------------------------------------------
 # OS TRES ESTADOS
@@ -191,11 +193,41 @@ def _classificar(fase: str, silencio_s: float) -> str:
 
 
 def _sessao_mais_ativa(dir_projeto: Path) -> Path | None:
-    """A sessao viva e a que tem subagents/ escrito mais recentemente."""
+    """Escolhe pela última evidência dentro da sessão, não pelo diretório."""
     candidatas = [d for d in dir_projeto.iterdir() if d.is_dir() and (d / "subagents").is_dir()]
     if not candidatas:
         return None
-    return max(candidatas, key=lambda d: (d / "subagents").stat().st_mtime)
+    def ultima_evidencia(diretorio: Path) -> float:
+        arquivos = [p for p in (diretorio / "subagents").iterdir() if p.is_file()]
+        return max((p.stat().st_mtime for p in arquivos), default=(diretorio / "subagents").stat().st_mtime)
+    return max(candidatas, key=ultima_evidencia)
+
+
+def _codex_recentes(agora: float) -> list[dict]:
+    """Sessões Codex recentes, sem inventar nome de agente."""
+    if not RAIZ_CODEX.is_dir():
+        return []
+    encontrados = []
+    for caminho in RAIZ_CODEX.rglob("*.jsonl"):
+        try:
+            silencio = max(0.0, agora - caminho.stat().st_mtime)
+        except OSError:
+            continue
+        if silencio <= JANELA_CODEX_S:
+            encontrados.append((caminho, silencio))
+    encontrados.sort(key=lambda par: par[1])
+    agentes = []
+    for caminho, silencio in encontrados[:32]:
+        agentes.append({
+            "id": caminho.stem.removeprefix("rollout-")[-36:], "tipo": "codex",
+            "descricao": None, "pai": None, "profundidade": None,
+            "estado": TRABALHANDO if silencio <= LIMIAR_ATIVO_S else SILENCIOSO,
+            "fase": "atividade_codex", "etapa": "atividade Codex detectada",
+            "etapa_e_description": False, "ferramenta": None,
+            "silencio_s": round(silencio, 1), "ultima_atividade": _hora_br(agora - silencio),
+            "inicio": None, "transcript_bytes": caminho.stat().st_size, "problema": None,
+        })
+    return agentes
 
 
 def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
@@ -217,7 +249,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
         "sessao": None,
         "caminho": None,
         "limiares_s": {"ativo": LIMIAR_ATIVO_S, "janela_candidato": JANELA_CANDIDATO_S},
-        "contagem": {TRABALHANDO: None, SILENCIOSO: None, PARADO: None, "vivos": None, "total": None},
+        "contagem": {TRABALHANDO: None, SILENCIOSO: None, PARADO: None, "vivos": None, "total": None, "historico": None},
         "agentes": [],
         "avisos": [],
     }
@@ -250,16 +282,16 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
 
         metas = sorted(pasta.glob("agent-*.meta.json"))
         if not metas:
-            return fechar(ok=True, motivo="pasta_vazia",
-                          contagem={TRABALHANDO: 0, SILENCIOSO: 0, PARADO: 0, "vivos": 0, "total": 0},
-                          avisos=["a pasta existe e foi lida, e não há nenhum agente registrado nela"])
+            avisos_iniciais = ["a pasta existe e foi lida, e não há nenhum agente registrado nela"]
+        else:
+            avisos_iniciais = []
     except PermissionError as e:
         return fechar(motivo="sem_permissao", erro=f"sem permissão de leitura: {e}")
     except OSError as e:
         return fechar(motivo="erro_leitura", erro=f"{type(e).__name__}: {e}")
 
     agentes: list[dict] = []
-    avisos: list[str] = []
+    avisos: list[str] = avisos_iniciais
 
     for meta_path in metas:
         ident = meta_path.name[len("agent-"):-len(".meta.json")]
@@ -338,6 +370,15 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
             item["problema"] = f"{cauda['linhas_ilegiveis']} linha(s) ilegível(is) na cauda"
         agentes.append(item)
 
+    historico = sum(a["estado"] == PARADO for a in agentes)
+    agentes = [a for a in agentes if a["estado"] != PARADO]
+    codex = _codex_recentes(agora)
+    if codex:
+        # A sessão Claude escolhida acima é apenas a fonte do contador
+        # histórico; o retrato vivo veio do motor Codex.
+        base["sessao"] = "codex"
+        base["caminho"] = str(RAIZ_CODEX)
+    agentes.extend(codex)
     conta = {TRABALHANDO: 0, SILENCIOSO: 0, PARADO: 0}
     indeterminados = 0
     for a in agentes:
@@ -354,7 +395,8 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
         ok=True,
         motivo="leitura_ok",
         contagem={**conta, "vivos": conta[TRABALHANDO] + conta[SILENCIOSO],
-                  "total": len(agentes), "indeterminados": indeterminados},
+                  "total": len(agentes), "historico": historico,
+                  "indeterminados": indeterminados},
         agentes=agentes,
         avisos=avisos,
     )
