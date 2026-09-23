@@ -102,7 +102,7 @@ export function Comando({
         <Kpi
           rotulo="tarefas abertas no GTD"
           valor={tarefasOk ? tarefas?.total_abertas : null}
-          nota={tarefasOk ? `${tarefas?.por_status.doing ?? 0} em andamento · ${tarefas?.por_prazo.sem_prazo ?? 0} sem prazo` : (tarefas?.erro ?? 'fonte ainda não veio no estado')}
+          nota={tarefasOk ? `${tarefas?.por_status.doing ?? 0} em andamento · ${tarefas?.por_prazo.sem_prazo ?? 0} sem prazo` + (tarefas?.total_backlog ? ` · ${tarefas.total_backlog} guardadas` : '') : (tarefas?.erro ?? 'fonte ainda não veio no estado')}
         />
         <Kpi
           rotulo="convocações medidas"

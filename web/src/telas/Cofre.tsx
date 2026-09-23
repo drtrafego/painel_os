@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  arestasDoCaminho, caminhoMaisCurto, corDaArea, diagnosticarLayout, encurtar, escolherRotulos,
+  arestasDoCaminho, caminhoMaisCurto, corDaArea, corDaAreaEscuro, diagnosticarLayout, encurtar, escolherRotulos,
   posicionarCofre, raioDeToque, CAIXA_CELULAR, CAIXA_MESA, FONTE_ROTULO, type Caixa, type Posto,
 } from '../dados/cofre'
 import type { ArestaCofre, NoMemoria } from '../dados/tipos'
@@ -489,7 +489,7 @@ function Mapa({
                 <circle
                   data-ponte-coto key={`coto-${id}`} data-area={area.get(id)}
                   cx={q.x} cy={q.y} r={RAIO_COTO} fill={modoComando ? '#0B0F17' : 'var(--color-carta)'} opacity={0.8}
-                  stroke={corDaArea(area.get(id) ?? '')} strokeWidth={1.3} strokeDasharray="3 2"
+                  stroke={(modoComando ? corDaAreaEscuro : corDaArea)(area.get(id) ?? '')} strokeWidth={1.3} strokeDasharray="3 2"
                 >
                   <title>{`ponte para a área ${area.get(id)}, escondida pelo filtro`}</title>
                 </circle>
@@ -502,7 +502,7 @@ function Mapa({
               if (!q) return null
               const ativo = no.id === escolhido
               const ehAlvo = no.id === alvo
-              const cor = corDaArea(no.area)
+              const cor = (modoComando ? corDaAreaEscuro : corDaArea)(no.area)
 
               return (
                 <g

@@ -21,6 +21,7 @@ import {
   CAIXA_MESA,
   caminhoMaisCurto,
   corDaArea,
+  corDaAreaEscuro,
   cruzam,
   encurtar,
   diagnosticarLayout,
@@ -99,6 +100,10 @@ console.log('\n1. RAIO POR GRAU')
   ok('área desconhecida ganha cor PRÓPRIA, não a de outra área',
     !conhecidas.has(corDaArea('inventada')),
     `${corDaArea('inventada')} contra ${[...conhecidas].join(' ')}`)
+  ok('área operacao tem cor própria em corDaArea', corDaArea('operacao') === 'var(--color-laranja)')
+  ok('área operacao tem cor viva em corDaAreaEscuro', corDaAreaEscuro('operacao') === '#FB923C')
+  const todasAreas = ['transversal', 'conteudo', 'trafego', 'bots', 'mineracao', 'painel', 'agentes', 'vendas', 'engenharia', 'operacao']
+  ok('todas as 10 áreas têm cores escuras distintas entre si', new Set(todasAreas.map(corDaAreaEscuro)).size === todasAreas.length)
 }
 
 console.log('\n2. O LAYOUT COM OS 45 QUE VÊM')

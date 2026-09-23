@@ -5,11 +5,10 @@ import { PixelOffice } from '../ui/PixelOffice'
 import type { PropsTela } from './Vazias'
 import type { AgenteVivo } from '../dados/tipos'
 
-const STATUS: [string, string][] = [
+const STATUS_ATIVAS: [string, string][] = [
   ['todo', 'a fazer'],
   ['doing', 'em andamento'],
   ['waiting', 'aguardando'],
-  ['backlog', 'backlog'],
 ]
 const PRAZOS: [string, string][] = [
   ['atrasadas', 'atrasadas'],
@@ -571,7 +570,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
           )}
 
           {/* Grid de KPIs Pixel Art com Números Grandes */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <PixelKpi
               rotulo="TAREFAS ABERTAS"
               valor={dados?.total_abertas}
@@ -579,20 +578,26 @@ export function Tarefas({ estado, vista }: PropsTela) {
               nota="carteira GTD total ativa"
             />
             <PixelKpi
+              rotulo="BACKLOG · GUARDADAS"
+              valor={dados?.total_backlog ?? dados?.por_status?.backlog}
+              cor="text-slate-400"
+              nota="fora da carteira ativa"
+            />
+            <PixelKpi
               rotulo="EM ANDAMENTO"
-              valor={dados?.por_status.doing}
+              valor={dados?.por_status?.doing}
               cor="text-[#38bdf8]"
               nota="sendo executadas agora"
             />
             <PixelKpi
               rotulo="ATRASADAS"
-              valor={dados?.por_prazo.atrasadas}
-              cor={(dados?.por_prazo.atrasadas ?? 0) > 0 ? 'text-[#f87171]' : 'text-[#a3e635]'}
+              valor={dados?.por_prazo?.atrasadas}
+              cor={(dados?.por_prazo?.atrasadas ?? 0) > 0 ? 'text-[#f87171]' : 'text-[#a3e635]'}
               nota="requerem atenção urgente"
             />
             <PixelKpi
               rotulo="SEM PRAZO"
-              valor={dados?.por_prazo.sem_prazo}
+              valor={dados?.por_prazo?.sem_prazo}
               cor="text-[#fbbf24]"
               nota="não agendadas no calendário"
             />
@@ -600,17 +605,28 @@ export function Tarefas({ estado, vista }: PropsTela) {
 
           {/* 3 Janelas Secundárias de GTD */}
           <div className="grid gap-5 lg:grid-cols-3">
-            <PixelJanela titulo="ESTADO DA CARTEIRA" badge={`${dados?.total_abertas ?? 0} ITENS`}>
+            <PixelJanela titulo="ESTADO DA CARTEIRA" badge={`${dados?.total_abertas ?? 0} ATIVAS`}>
               <div className="space-y-4">
-                {STATUS.map(([chave, nome]) => (
+                {STATUS_ATIVAS.map(([chave, nome]) => (
                   <PixelLinha
                     key={chave}
                     nome={nome}
-                    valor={dados?.por_status[chave]}
+                    valor={dados?.por_status?.[chave]}
                     total={dados?.total_abertas}
                     cor="bg-[#38bdf8]"
                   />
                 ))}
+                <div className="border-t border-slate-700/80 pt-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold uppercase text-slate-400">Backlog · guardadas</span>
+                    <span className="font-black tabular-nums text-slate-300">
+                      {dados?.total_backlog ?? dados?.por_status?.backlog ?? '—'}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-slate-500">
+                    tarefas estagnadas guardadas, fora da carteira ativa
+                  </div>
+                </div>
               </div>
             </PixelJanela>
 

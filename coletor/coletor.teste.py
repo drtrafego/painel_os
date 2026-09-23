@@ -365,6 +365,43 @@ c.NOMES_CLIENTE, c.NEGACAO = guarda
 cofre = _cofre_de_teste([{**BOM, "fonte": "../../../etc/hosts"}])
 conferir("fonte que escapa da raiz é recusada", (len(cofre["nos"]), len(cofre["recusados"])), (0, 1))
 
+# Skills e Ferramentas: injeção catalogada, sem fallback cinza e conectada aos aprendizados
+BOM_APIFY = {
+    **BOM,
+    "id": "trava-apify-timeout",
+    "titulo": "A skill Apify precisa de timeout",
+    "corpo": "Chamadas à API da Apify sem timeout travam a fila de mineração.",
+    "caso": "Apify caiu e a coleta ficou presa por 4 horas.",
+    "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada",
+}
+skills_teste = [
+    {
+        "id": "skill-luana-apify",
+        "nome": "Apify",
+        "tipo": "Skill",
+        "responsavel": "Luana",
+        "sistema": "Apify",
+        "finalidade": "Automação e extração via Apify",
+        "origem": "luana/.claude/skills/apify/SKILL.md",
+        "estado": "disponível",
+        "ultima_verificacao": "2026-09-23T12:00:00+00:00",
+    }
+]
+_cofre_de_teste([BOM_APIFY])
+cofre_com_skills = c.ler_cofre(tmp_cofre / "cofre.json", tmp_cofre, skills_acessos_extras=skills_teste)
+area_op = next((a for a in cofre_com_skills["areas"] if a["id"] == "operacao"), None)
+conferir("área operacao está catalogada sem fallback", (area_op is not None, area_op.get("fallback") if area_op else False), (True, None))
+conferir("nome legível para a área de skills", area_op.get("nome") if area_op else None, "Skills e ferramentas")
+conferir("nenhuma área catalogada fica em fallback cinza", [a["id"] for a in cofre_com_skills["areas"] if a.get("fallback")], [])
+
+# Verificar que a skill tem grau > 0 e ligou ao aprendizado que cita Apify
+no_skill = next((n for n in cofre_com_skills["nos"] if n["id"] == "skill-luana-apify"), None)
+conferir("nó de skill foi injetado", no_skill is not None, True)
+conferir("skill tem grau > 0 amarrada na rede", (no_skill.get("grau") or 0) > 0, True)
+arestas_skill = [a for a in cofre_com_skills["arestas"] if a["de"] == "trava-apify-timeout" or a["para"] == "trava-apify-timeout"]
+conferir("aprendizado que cita Apify ganha aresta para a skill/sistema", len(arestas_skill) > 0, True)
+
+
 # ---------------------------------------------------------------------------
 # AS TRÊS PORTAS QUE O CofRE DEIXAVA ABERTAS (medidas pelo QA em 10/09/2026)
 #
@@ -971,6 +1008,30 @@ conferir("sucesso conta a tarefa", t["total_abertas"], 1)
 conferir("campo legado acompanha o total aberto para bundles em cache", t["total"], t["total_abertas"])
 conferir("o total diz explicitamente que é carteira aberta", (t["escopo"], t["total_abertas"], t["status_excluidos"]), ("abertas", 1, ["done"]))
 conferir("JSON agregado não carrega título, nota nem id", any(k in json.dumps(t) for k in ['title', 'notes', 'segredo-de-teste']), False)
+
+# Teste com 43 ativas e 124 no backlog (organização da carteira em 23/09/2026)
+def urlopen_43_124(req, timeout):
+    status = req.full_url.split("status=")[1].split("&")[0]
+    agora = c.agora_utc().isoformat()
+    if status == "todo":
+        tarefas = [{"id": f"todo-{i}", "status": "todo", "priority": "p2", "projectSlug": "clientes", "dueDate": None, "updatedAt": agora} for i in range(40)]
+    elif status == "doing":
+        tarefas = [{"id": f"doing-{i}", "status": "doing", "priority": "p1", "projectSlug": "clientes", "dueDate": None, "updatedAt": agora} for i in range(2)]
+    elif status == "waiting":
+        tarefas = [{"id": "wait-0", "status": "waiting", "priority": "p3", "projectSlug": "pessoal", "dueDate": None, "updatedAt": agora}]
+    elif status == "backlog":
+        tarefas = [{"id": f"backlog-{i}", "status": "backlog", "priority": "p4", "projectSlug": "charcutaria", "dueDate": None, "updatedAt": agora} for i in range(124)]
+    else:
+        tarefas = []
+    return RespostaFake({"ok": True, "data": {"tasks": tarefas}})
+
+c.urllib.request.urlopen = urlopen_43_124
+t = c.ler_tarefas()
+conferir("43 tarefas ativas e 124 no backlog: total_abertas conta só as 43 ativas", t["total_abertas"], 43)
+conferir("total_backlog isola as 124 guardadas", t["total_backlog"], 124)
+conferir("por_prazo soma exatamente as 43 ativas, excluindo backlog", sum(t["por_prazo"].values()), 43)
+conferir("por_movimento soma exatamente as 43 ativas", sum(t["por_movimento"].values()), 43)
+
 
 def urlopen_falha(req, timeout):
     if "status=doing" in req.full_url: raise c.urllib.error.URLError("fora")

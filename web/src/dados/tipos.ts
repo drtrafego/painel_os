@@ -347,6 +347,7 @@ export type Estado = {
   tarefas?: {
     erro?: string
     total_abertas: number | null
+    total_backlog?: number | null
     por_status: Record<string, number>
     por_prazo: Record<string, number>
     por_movimento: Record<string, number>

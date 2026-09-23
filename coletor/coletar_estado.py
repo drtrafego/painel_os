@@ -61,6 +61,8 @@ SAIDA = RAIZ / "luana/painel_os/data/estado.json"
 TAREFAS_ENV = RAIZ / "luana/.env.tarefas"
 TAREFAS_BASE = "https://tarefas.casaldotrafego.com/api/v1"
 TAREFAS_STATUS = ("todo", "doing", "waiting", "backlog")
+TAREFAS_STATUS_ATIVAS = ("todo", "doing", "waiting")
+TAREFAS_STATUS_GUARDADAS = ("backlog",)
 APROVACOES_JSON = RAIZ / "luana/painel_os/data/aprovacoes.json"
 APROVACAO_ESTADOS = ("aguardando", "aprovado", "reprovado", "cancelado")
 APROVACAO_TIPOS = ("conteudo", "documento", "campanha", "outro")
@@ -380,11 +382,12 @@ def ler_followup(caminho_estado=FOLLOWUP_ESTADO, caminho_log=FOLLOWUP_LOG):
 
 
 def ler_tarefas():
-    """Lê o estoque aberto do GTD e só devolve agregados, nunca texto ou PII.
+    """Lê o estoque do GTD e só devolve agregados, nunca texto ou PII.
 
-    ``todo``, ``doing``, ``waiting`` e ``backlog`` são todos estados abertos.
-    Eles não provam execução por agente e não são histórico: ``done`` fica fora
-    desta leitura. Os quatro precisam responder; falha parcial invalida tudo.
+    ``todo``, ``doing`` e ``waiting`` são os estados abertos ativos da carteira.
+    ``backlog`` representa tarefas estagnadas/guardadas, medidas separadamente.
+    ``done`` fica fora desta leitura. Os quatro estados precisam responder da API;
+    falha parcial invalida tudo.
     """
     vazio = {
         "erro": None,
@@ -399,6 +402,7 @@ def ler_tarefas():
         # quem ainda tem o validador anterior no navegador.
         "total": None,
         "total_abertas": None,
+        "total_backlog": None,
         "por_status": {},
         "por_prioridade": {},
         "por_prazo": {},
@@ -442,9 +446,11 @@ def ler_tarefas():
     try:
         for tarefa in tarefas.values():
             status = tarefa.get("status")
-            prioridade = tarefa.get("priority")
             if status in por_status:
                 por_status[status] += 1
+            if status not in TAREFAS_STATUS_ATIVAS:
+                continue
+            prioridade = tarefa.get("priority")
             if prioridade in por_prioridade:
                 por_prioridade[prioridade] += 1
             slug = tarefa.get("projectSlug")
@@ -468,11 +474,15 @@ def ler_tarefas():
         vazio["erro"] = "API devolveu prazo inválido; contagens indisponíveis"
         return vazio
 
+    total_ativas = sum(por_status.get(s, 0) for s in TAREFAS_STATUS_ATIVAS)
+    total_backlog = por_status.get("backlog", 0)
+
     return {
         **vazio,
         "coletado_em": agora_utc().isoformat(),
-        "total": len(tarefas),
-        "total_abertas": len(tarefas),
+        "total": total_ativas,
+        "total_abertas": total_ativas,
+        "total_backlog": total_backlog,
         "por_status": por_status,
         "por_prioridade": por_prioridade,
         "por_prazo": por_prazo,
@@ -640,7 +650,7 @@ def _cofre_recusa(motivo: str) -> str:
     return _texto_de_tela(motivo)
 
 
-def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
+def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, skills_acessos_extras: list = None):
     """O Cofre é o que a operação APRENDEU, não a estante de arquivos.
 
     Cada nó é um aprendizado declarado em `painel_os/data/cofre.json`, e o
@@ -676,6 +686,14 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
         familias = {f["id"]: f for f in bruto.get("familias", []) if isinstance(f, dict) and f.get("id")}
         if not areas or not familias:
             raise ValueError("catálogo de áreas ou de famílias ausente")
+        if "operacao" not in areas:
+            areas["operacao"] = {"id": "operacao", "nome": "Skills e ferramentas", "sempre_visivel": False}
+        if "ferramentas" not in familias:
+            familias["ferramentas"] = {"id": "ferramentas", "nome": "Ferramentas e automações"}
+        if "agentes" not in familias:
+            familias["agentes"] = {"id": "agentes", "nome": "Agentes da operação"}
+        if "sistemas" not in familias:
+            familias["sistemas"] = {"id": "sistemas", "nome": "Sistemas integrados"}
     except (OSError, ValueError, TypeError, KeyError) as e:
         return {**vazio, "erro": f"registro do Cofre inválido ou ausente ({type(e).__name__})"}
 
@@ -794,60 +812,32 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
                 # fonte, na linha de cima: a prova precisa do original.
                 arestas.append({"de": origem, "para": destino, "porque": _cofre_razao(porque)})
 
-    # A PONTE: aresta que sai de uma área e cai em outra. É ela que carrega o
-    # conhecimento caro (o mesmo defeito num bot, num anúncio e numa fila de
-    # conteúdo), então o filtro de área tem que PRESERVAR ponte, nunca esconder.
-    area_de = {n["id"]: n["area"] for n in nos}
-    for a in arestas:
-        a["ponte"] = area_de[a["de"]] != area_de[a["para"]]
 
-    # Grau para o tamanho do nó e para a lista lateral ordenada. Conta os dois
-    # sentidos: quem só recebe ligação é tão central quanto quem só emite, e a
-    # cabeça de família é sempre quem só recebe.
-    grau = {n["id"]: 0 for n in nos}
-    for a in arestas:
-        grau[a["de"]] += 1
-        grau[a["para"]] += 1
-    for n in nos:
-        n["grau"] = grau[n["id"]]
-
-    # Cobertura aqui é OUTRA coisa que na versão de arquivos: é quantos
-    # aprendizados estão amarrados a algum outro. Densidade dirigida sobre
-    # dezenas de nós nasceria vermelha pra sempre, e vermelho permanente ensina
-    # a casa a ignorar o painel.
-    ligados = {i for i, g in grau.items() if g}
-    cobertura = round(len(ligados) / len(nos) * 100, 1) if nos else None
-
-    avisos = []
-
-    def _agrupar(campo, catalogo):
-        contagem = {}
-        for n in nos:
-            contagem[n[campo]] = contagem.get(n[campo], 0) + 1
-        saida = []
-        for chave, total in sorted(contagem.items(), key=lambda kv: (-kv[1], kv[0])):
-            item = catalogo.get(chave)
-            if item is None:
-                eixo = "área" if campo == "area" else "família"
-                item = {"id": chave, "nome": f"{eixo.capitalize()} não catalogada ({chave})",
-                        "fallback": True}
-                avisos.append(_cofre_recusa(f"{eixo} {chave!r} não está no catálogo; exibida em fallback"))
-                catalogo[chave] = item
-            saida.append({**item, "total": total})
-        return saida
-
-    # Injeção dinâmica de Nós e Arestas de Skills & Acessos no Cofre (skill -> agente -> sistema)
+    # Injeção dinâmica de Nós e Arestas de Skills & Acessos no Cofre
     try:
-        # A injeção representa a operação desta casa e só deve acontecer na
-        # raiz real. Fontes sintéticas dos testes não podem ganhar nós globais
-        # de skills/acessos e contaminar suas asserções de contrato.
-        ferr = ler_ferramentas(raiz=raiz_fonte) if Path(raiz_fonte).resolve() == COFRE_RAIZ_FONTE.resolve() else {}
-        skills_acessos = ferr.get("skills_acessos", [])
+        if skills_acessos_extras is not None:
+            skills_acessos = list(skills_acessos_extras)
+        elif Path(raiz_fonte).resolve() == COFRE_RAIZ_FONTE.resolve():
+            ferr = ler_ferramentas(raiz=raiz_fonte)
+            skills_acessos = ferr.get("skills_acessos", [])
+        else:
+            skills_acessos = []
+
         if skills_acessos:
+            palavras_ignoradas = {
+                "skill", "skills", "conexao", "conexoes", "acesso", "acessos",
+                "sistema", "sistemas", "agente", "agentes", "runtime", "claude",
+                "codex", "padrao", "padroes", "ajuda", "geral", "para", "com",
+                "pelo", "pela", "onde", "quando", "como", "auto", "manual",
+                "script", "scripts", "componente", "operacional", "de", "do", "da",
+            }
+            termos_por_no = {}
+
             for sa in skills_acessos:
                 no_skill_id = sa["id"]
                 no_agente_id = f"agente-{sa['responsavel'].lower()}"
-                no_sistema_id = f"sistema-{_chave(sa['sistema']).replace(' ', '-')[:30]}"
+                sistema_slug = _chave(sa['sistema']).replace(' ', '-')[:30]
+                no_sistema_id = f"sistema-{sistema_slug}"
 
                 if no_skill_id not in ids:
                     ids.add(no_skill_id)
@@ -910,21 +900,103 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
                         "grau": 0
                     })
 
-                if (no_skill_id, no_agente_id) not in vistas:
+                if (no_skill_id, no_agente_id) not in vistas and (no_agente_id, no_skill_id) not in vistas:
                     vistas.add((no_skill_id, no_agente_id))
-                    arestas.append({"de": no_skill_id, "para": no_agente_id, "porque": f"Skill {sa['nome']} pertence a {sa['responsavel']}", "ponte": False})
-                if (no_agente_id, no_sistema_id) not in vistas:
+                    arestas.append({
+                        "de": no_skill_id,
+                        "para": no_agente_id,
+                        "porque": f"Skill {sa['nome']} pertence a {sa['responsavel']}",
+                        "ponte": False,
+                    })
+                if (no_agente_id, no_sistema_id) not in vistas and (no_sistema_id, no_agente_id) not in vistas:
                     vistas.add((no_agente_id, no_sistema_id))
-                    arestas.append({"de": no_agente_id, "para": no_sistema_id, "porque": f"Agente {sa['responsavel']} acessa {sa['sistema']}", "ponte": False})
+                    arestas.append({
+                        "de": no_agente_id,
+                        "para": no_sistema_id,
+                        "porque": f"Agente {sa['responsavel']} acessa {sa['sistema']}",
+                        "ponte": False,
+                    })
 
-            grau = {n["id"]: 0 for n in nos}
-            for a in arestas:
-                if a["de"] in grau: grau[a["de"]] += 1
-                if a["para"] in grau: grau[a["para"]] += 1
-            for n in nos:
-                n["grau"] = grau[n["id"]]
+                # Extrair termos para busca nos aprendizados
+                candidatos = []
+                nome_limpo = re.sub(r"^(?:skill|conexão|conexao)\s+", "", sa.get("nome", ""), flags=re.I).strip()
+                if nome_limpo:
+                    candidatos.append(nome_limpo)
+                    candidatos.extend(nome_limpo.split())
+                if sa.get("sistema"):
+                    candidatos.append(sa["sistema"].strip())
+                    candidatos.extend(sa["sistema"].strip().split())
+                slug_skill = sa["id"].split("-", 2)[-1] if sa["id"].startswith("skill-") else ""
+                if slug_skill:
+                    candidatos.append(slug_skill)
+                    candidatos.extend(slug_skill.split("-"))
+
+                termos_validos = {
+                    c.lower() for c in candidatos
+                    if len(c) >= 3 and c.lower() not in palavras_ignoradas
+                }
+                if termos_validos:
+                    termos_por_no[no_skill_id] = termos_validos
+                    termos_por_no[no_sistema_id] = termos_validos
+
+            # Conectar aprendizados existentes aos nós de skill/sistema que eles citam
+            aprendizados = [n for n in nos if n.get("area") != "operacao"]
+            for apr in aprendizados:
+                texto_apr = f"{apr.get('rotulo', '')} {apr.get('corpo', '')} {apr.get('caso', '')} {apr.get('id', '')}".lower()
+                for no_destino, termos in termos_por_no.items():
+                    if apr["id"] == no_destino:
+                        continue
+                    if any(re.search(rf"\b{re.escape(t)}\b", texto_apr) for t in termos):
+                        par = (apr["id"], no_destino)
+                        inverso = (no_destino, apr["id"])
+                        if par not in vistas and inverso not in vistas:
+                            vistas.add(par)
+                            rotulo_alvo = next((n["rotulo"] for n in nos if n["id"] == no_destino), no_destino)
+                            arestas.append({
+                                "de": apr["id"],
+                                "para": no_destino,
+                                "porque": f"Aprendizado cita {rotulo_alvo}",
+                                "ponte": apr.get("area") != "operacao",
+                            })
     except Exception:
         pass
+
+    # A PONTE: aresta que sai de uma área e cai em outra. Atualizado com todos os nós.
+    area_de = {n["id"]: n.get("area") for n in nos}
+    for a in arestas:
+        a["ponte"] = area_de.get(a["de"]) != area_de.get(a["para"])
+
+    # Grau para o tamanho do nó e para a lista lateral ordenada.
+    grau = {n["id"]: 0 for n in nos}
+    for a in arestas:
+        if a["de"] in grau:
+            grau[a["de"]] += 1
+        if a["para"] in grau:
+            grau[a["para"]] += 1
+    for n in nos:
+        n["grau"] = grau.get(n["id"], 0)
+
+    # Cobertura: aprendizados e nós amarrados a algum outro na rede.
+    ligados = {i for i, g in grau.items() if g}
+    cobertura = round(len(ligados) / len(nos) * 100, 1) if nos else None
+
+    avisos = []
+
+    def _agrupar(campo, catalogo):
+        contagem = {}
+        for n in nos:
+            contagem[n[campo]] = contagem.get(n[campo], 0) + 1
+        saida = []
+        for chave, total in sorted(contagem.items(), key=lambda kv: (-kv[1], kv[0])):
+            item = catalogo.get(chave)
+            if item is None:
+                eixo = "área" if campo == "area" else "família"
+                item = {"id": chave, "nome": f"{eixo.capitalize()} não catalogada ({chave})",
+                        "fallback": True}
+                avisos.append(_cofre_recusa(f"{eixo} {chave!r} não está no catálogo; exibida em fallback"))
+                catalogo[chave] = item
+            saida.append({**item, "total": total})
+        return saida
 
     return {
         "erro": None,
@@ -933,7 +1005,7 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
         "arestas": arestas,
         "arquivos": len({n["arquivo"].split(":")[0].split(" em ")[-1] for n in nos}) or None,
         "conexoes": len(arestas),
-        "cobertura": round(len({i for i, g in grau.items() if g}) / len(nos) * 100, 1) if nos else None,
+        "cobertura": cobertura,
         "areas": _agrupar("area", areas),
         "familias": _agrupar("familia", familias),
         "grau_medio": round(2 * len(arestas) / len(nos), 1) if nos else None,

@@ -79,6 +79,11 @@ export function corDaArea(area: string): string {
     case 'engenharia':
     case 'dev':
       return 'var(--color-pervinca)'
+    case 'operacao':
+    case 'operação':
+    case 'skills':
+    case 'skills e ferramentas':
+      return 'var(--color-laranja)'
     default:
       return 'var(--color-tinta-3)'
   }
@@ -117,6 +122,11 @@ export function corDaAreaEscuro(area: string): string {
     case 'engenharia':
     case 'dev':
       return '#818CF8' // índigo vivo
+    case 'operacao':
+    case 'operação':
+    case 'skills':
+    case 'skills e ferramentas':
+      return '#FB923C' // laranja neon
     default:
       return '#94A3B8' // cinza-azulado neutro, nunca igual a outra área
   }
