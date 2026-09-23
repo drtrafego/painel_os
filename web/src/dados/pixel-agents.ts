@@ -67,13 +67,17 @@ export function encontrarPixelAgent(id: string) {
   return PIXEL_AGENTS.find((agente) => normalizarId(agente.id) === alvo || agente.aliases?.some((alias) => normalizarId(alias) === alvo))
 }
 
-export function mesclarRuntimesNoCatalogo(catalogo: PixelAgent[], runtimes: Array<{ id: string; identidade?: string | null; papel?: string | null; tarefa?: string | null; etapa?: string | null; etapa_e_description?: boolean | null }>) {
+export function mesclarRuntimesNoCatalogo(catalogo: PixelAgent[], runtimes: Array<{ id: string; tipo?: string | null; identidade?: string | null; papel?: string | null; tarefa?: string | null; descricao?: string | null; etapa?: string | null; etapa_e_description?: boolean | null }>) {
   const resultado = catalogo.map((agente) => ({ ...agente, aliases: agente.aliases ? [...agente.aliases] : undefined }))
   runtimes.forEach((runtime, index) => {
     const identidade = runtime.identidade && runtime.identidade !== 'sessao-codex' ? runtime.identidade : null
     const existente = resultado.find((agente) => (identidade ? normalizarId(agente.id) === normalizarId(identidade) || agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(identidade)) : false) || normalizarId(agente.id) === normalizarId(runtime.id) || agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(runtime.id)))
     if (existente) return
     const sufixo = runtime.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || String(index + 1)
+    if (runtime.tipo && runtime.tipo !== 'codex') {
+      resultado.push({ id: runtime.id, nome: `${runtime.tipo} · ${sufixo}`, papel: 'Subagente Claude', squad: 'globais', área: 'Sessão viva', abreviação: runtime.tipo.slice(0, 2).toUpperCase(), cor: '#60a5fa', descricao: runtime.descricao || runtime.etapa || 'Subagente sem descrição', aliases: [] })
+      return
+    }
     resultado.push({ id: runtime.id, nome: `Sessão Codex · ${sufixo}`, papel: runtime.papel || 'Sessão Codex', squad: 'pipeline Codex', área: 'Sessão viva', abreviação: 'CX', cor: '#f472b6', descricao: runtime.tarefa || runtime.etapa || 'Sessão sem identidade operacional catalogada', aliases: [] })
   })
   return resultado
