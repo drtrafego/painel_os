@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AgenteVivo } from '../dados/tipos'
-import { mesclarRuntimesNoCatalogo, normalizarId, PIXEL_AGENTS, PIXEL_AGENT_SQUADS, type PixelAgent, type PixelAgentSquad } from '../dados/pixel-agents'
+import { boundsDoCatalogo, mesclarRuntimesNoCatalogo, normalizarId, PIXEL_AGENTS, PIXEL_AGENT_SQUADS, type PixelAgent, type PixelAgentSquad, zoomParaEnquadrar } from '../dados/pixel-agents'
 
 interface PixelOfficeProps { agentes: AgenteVivo[]; catalogo?: PixelAgent[]; aoSelecionarAgente?: (agenteId: string) => void; agenteSelecionadoId?: string | null }
 type Posicao = { x: number; y: number }
@@ -10,13 +10,6 @@ const ZOOM_MAX = 3
 const posicaoDe = (i: number): Posicao => ({ x: 80 + (i % 6) * 155, y: 112 + Math.floor(i / 6) * 100 })
 function estadoDe(agente: AgenteVivo | undefined): EstadoVisual { return !agente ? 'fora' : agente.estado === 'trabalhando' ? 'executando' : 'ocioso' }
 function arredondarZoom(valor: number) { return Number(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, valor)).toFixed(2)) }
-function zoomParaEnquadrar(largura: number, altura: number, quantidade: number) {
-  const linhas = Math.max(8, Math.ceil(quantidade / 6))
-  const cenaLargura = 960
-  const cenaAltura = linhas * 120
-  return arredondarZoom(Math.min(1.35, (largura * 0.94) / cenaLargura, (altura * 0.88) / cenaAltura))
-}
-
 /** Escritório pixel-art: catálogo estático + presença exclusivamente medida pela sonda. */
 export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgente, agenteSelecionadoId }: PixelOfficeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -64,7 +57,8 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
       const container = containerRef.current
       if (container && (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight)) { canvas.width = container.clientWidth; canvas.height = container.clientHeight }
       ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save()
-      ctx.translate(canvas.width / 2 + pan.x, canvas.height / 2 + pan.y); ctx.scale(zoom, zoom); ctx.translate(-480, -450)
+      const centro = boundsDoCatalogo(visiveis.length)
+      ctx.translate(canvas.width / 2 + pan.x, canvas.height / 2 + pan.y); ctx.scale(zoom, zoom); ctx.translate(-centro.centroX, -centro.centroY)
       const colunas = 6; const linhas = Math.max(8, Math.ceil(visiveis.length / colunas))
       for (let row = 0; row < linhas * 5; row += 1) for (let col = 0; col < 40; col += 1) { ctx.fillStyle = (row + col) % 2 ? '#24324a' : '#1a263b'; ctx.fillRect(col * 24, row * 24, 24, 24) }
       ctx.fillStyle = '#0b1324'; ctx.fillRect(0, 0, 600, 34); ctx.fillStyle = '#334155'; ctx.fillRect(0, 34, 600, 4)
@@ -88,7 +82,8 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
 
   const selecionarNoCanvas = (evento: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current; if (!canvas) return; const rect = canvas.getBoundingClientRect()
-    const mundoX = (evento.clientX - rect.left - canvas.width / 2 - pan.x) / zoom + 480; const mundoY = (evento.clientY - rect.top - canvas.height / 2 - pan.y) / zoom + 450
+    const centro = boundsDoCatalogo(visiveis.length)
+    const mundoX = (evento.clientX - rect.left - canvas.width / 2 - pan.x) / zoom + centro.centroX; const mundoY = (evento.clientY - rect.top - canvas.height / 2 - pan.y) / zoom + centro.centroY
     const encontrado = visiveis.find((_agente, index) => { const pos = posicaoDe(index); return Math.abs(pos.x - mundoX) < 58 && Math.abs(pos.y - mundoY) < 42 })
     setFoco(encontrado?.id ?? null); if (encontrado) aoSelecionarAgente?.(agentesPorCatalogo.get(encontrado.id)?.id ?? encontrado.id)
   }

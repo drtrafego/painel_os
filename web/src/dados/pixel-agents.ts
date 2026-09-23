@@ -17,6 +17,21 @@ export type PixelAgent = {
   descricao?: string
 }
 
+export function boundsDoCatalogo(quantidade: number) {
+  const colunas = Math.min(6, Math.max(1, quantidade))
+  const linhas = Math.max(1, Math.ceil(Math.max(1, quantidade) / 6))
+  const esquerda = 22
+  const direita = 80 + (colunas - 1) * 155 + 58
+  const topo = 90
+  const baixo = 112 + (linhas - 1) * 100 + 42
+  return { largura: direita - esquerda, altura: baixo - topo, centroX: (esquerda + direita) / 2, centroY: (topo + baixo) / 2 }
+}
+
+export function zoomParaEnquadrar(largura: number, altura: number, quantidade: number) {
+  const bounds = boundsDoCatalogo(quantidade)
+  return Number(Math.min(2.2, (largura * 0.94) / bounds.largura, (altura * 0.82) / bounds.altura).toFixed(2))
+}
+
 export const PIXEL_AGENT_SQUADS: Array<{ id: PixelAgentSquad; nome: string; cor: string }> = [
   { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#c084fc' },
   { id: 'radar', nome: 'RADAR', cor: '#38bdf8' },
