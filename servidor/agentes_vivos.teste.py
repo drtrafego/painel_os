@@ -237,6 +237,19 @@ def testar_agentes_vivos():
         conferir("ok=False quando todas falham", casa_zero["ok"], False)
         conferir("motivo correto de falha total", casa_zero["motivo"], "todas_as_sessoes_falharam")
 
+        print("\n--- Teste 6b: Codex entra uma vez só, com o dono da própria pasta")
+        codex_luana = tmp / "codex-luana" / "2026"
+        codex_luana.mkdir(parents=True)
+        (codex_luana / "rollout-abc.jsonl").write_text(json.dumps({"type": "session_meta", "payload": {
+            "agent_role": "cont_copy"}}) + "\n")
+        codex_vazio = tmp / "codex-renato-vazio"
+        casa_codex = ler_agentes_da_casa(projetos=projetos_teste, raiz=tmp,
+                                         codex={"luana": tmp / "codex-luana", "renato": codex_vazio})
+        sessoes_codex = [a for a in casa_codex["agentes"] if a.get("tipo") == "codex"]
+        conferir("sessão Codex aparece uma vez só (não triplica)", len(sessoes_codex), 1)
+        conferir("sessão Codex carimbada com o dono certo", [a.get("dono") for a in sessoes_codex], ["luana"])
+        conferir("total = 4 Claude + 1 Codex", len(casa_codex["agentes"]), 5)
+
         print("\n--- Teste 7: Identidade Codex lida só do session_meta, sem vazar agent_path")
         meta_codex = tmp / "rollout-teste.jsonl"
         meta_codex.write_text(json.dumps({

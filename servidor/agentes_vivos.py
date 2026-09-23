@@ -68,6 +68,15 @@ CAUDA_BYTES = 256 * 1024
 # ha mais que isso e historico: entra na contagem de parados sem custo de I/O.
 JANELA_CANDIDATO_S = 6 * 3600
 RAIZ_CODEX = Path.home() / ".codex-luana" / "sessions"
+# Cada sessão da casa tem o próprio CODEX_HOME. Sem este mapa, a agregação
+# chamava ler_agentes() três vezes e as sessões Codex da Luana apareciam
+# triplicadas, carimbadas como luana, renato e bia.
+CODEX_DA_CASA: dict[str, Path] = {
+    "luana": RAIZ_CODEX,
+    "renato": Path.home() / ".codex-renato" / "sessions",
+    "bia": Path.home() / ".codex-bia" / "sessions",
+}
+_CODEX_PADRAO = object()
 JANELA_CODEX_S = 90
 
 # Identidades operacionais são deliberadamente uma allowlist. O conteúdo de
@@ -275,12 +284,13 @@ def _sessao_mais_ativa(dir_projeto: Path) -> Path | None:
     return max(candidatas, key=ultima_evidencia)
 
 
-def _codex_recentes(agora: float) -> list[dict]:
+def _codex_recentes(agora: float, raiz_codex: Path | None = None) -> list[dict]:
     """Sessões Codex recentes, sem inventar nome de agente."""
-    if not RAIZ_CODEX.is_dir():
+    raiz_codex = raiz_codex or RAIZ_CODEX
+    if not raiz_codex.is_dir():
         return []
     encontrados = []
-    for caminho in RAIZ_CODEX.rglob("*.jsonl"):
+    for caminho in raiz_codex.rglob("*.jsonl"):
         try:
             silencio = max(0.0, agora - caminho.stat().st_mtime)
         except OSError:
@@ -306,7 +316,7 @@ def _codex_recentes(agora: float) -> list[dict]:
 
 
 def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
-                sessao: str | None = None) -> dict:
+                sessao: str | None = None, raiz_codex: object = _CODEX_PADRAO) -> dict:
     """Retrato dos agentes desta sessao, agora.
 
     SEMPRE devolve dict com `ok` e `motivo`. Nunca levanta pra quem chama e
@@ -447,12 +457,14 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
 
     historico = sum(a["estado"] == PARADO for a in agentes)
     agentes = [a for a in agentes if a["estado"] != PARADO]
-    codex = _codex_recentes(agora)
+    if raiz_codex is _CODEX_PADRAO:
+        raiz_codex = RAIZ_CODEX
+    codex = _codex_recentes(agora, raiz_codex) if raiz_codex is not None else []
     if codex:
         # A sessão Claude escolhida acima é apenas a fonte do contador
         # histórico; o retrato vivo veio do motor Codex.
         base["sessao"] = "codex"
-        base["caminho"] = str(RAIZ_CODEX)
+        base["caminho"] = str(raiz_codex)
     agentes.extend(codex)
     conta = {TRABALHANDO: 0, SILENCIOSO: 0, PARADO: 0}
     indeterminados = 0
@@ -478,14 +490,20 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
 
 
 def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
-                         raiz: Path | None = None) -> dict:
+                         raiz: Path | None = None,
+                         codex: dict[str, Path] | None = None) -> dict:
     """Agrega ler_agentes() das três sessões da casa em um único retrato.
 
     Nunca deixa uma sessão que falhou apagar as que funcionaram: erro de
     uma entra em `avisos`, com o dono nomeado, e as outras duas continuam
     valendo. Cada agente ganha o campo `dono` (luana/renato/bia) — sem
     isso o front não tem como saber de quem é o boneco.
+
+    Codex: cada dono lê só o próprio CODEX_HOME (`codex`). Com `projetos`
+    explícito e sem `codex`, nenhuma sessão Codex entra (leitura isolada).
     """
+    if codex is None:
+        codex = CODEX_DA_CASA if projetos is None else {}
     projetos = projetos or PROJETOS_DA_CASA
     t0 = time.perf_counter()
     agentes: list[dict] = []
@@ -496,9 +514,9 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
     algum_ok = False
 
     for dono, projeto in projetos.items():
-        r = ler_agentes(projeto=projeto, raiz=raiz)
+        r = ler_agentes(projeto=projeto, raiz=raiz, raiz_codex=codex.get(dono))
         if not r.get("ok"):
-            avisos.append(f"{dono}: {r.get('motivo')} — {r.get('erro')}")
+            avisos.append(f"{dono}: {r.get('motivo')}: {r.get('erro')}")
             continue
         algum_ok = True
         for a in r.get("agentes", []):
