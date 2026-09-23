@@ -44,9 +44,37 @@ function copia<T>(v: T): T {
 /** Estraga um campo e devolve o objeto. `undefined` remove o campo. */
 function estragando(caminho: string[], valor: unknown): unknown {
   const c = copia(real) as Record<string, unknown>
-  let alvo: Record<string, unknown> = c
-  for (const passo of caminho.slice(0, -1)) {
-    alvo = alvo[passo] as Record<string, unknown>
+  let alvo: any = c
+  for (let i = 0; i < caminho.length - 1; i++) {
+    const passo = caminho[i]
+    const proximo = caminho[i + 1]
+    if (/^\d+$/.test(passo)) {
+      if (alvo[passo] === undefined || alvo[passo] === null) alvo[passo] = {}
+      alvo = alvo[passo]
+      continue
+    }
+    if (alvo[passo] === undefined || alvo[passo] === null) {
+      // O snapshot versionado pode não ter ainda um ramo opcional (por
+      // exemplo, fontes recebidas ou arestas de SOP). Materializa só o
+      // caminho do caso negativo, sem inventar dados no estado de referência.
+      if (passo === 'fontes_recebidas') {
+        alvo[passo] = {
+          itens: [{
+            id: 'drive-0709', tipo: 'google_drive', origem: 'Google Drive compartilhado pelo Gastão',
+            url: 'https://drive.google.com/drive/folders/147lM3cbpqmDcT1zWlIH1iuJiwhsv8FSk',
+            recebido_em: '2026-09-09T13:17:26Z', estado: 'recebido_nao_importado', conjuntos: 5,
+            arquivos: 51, bytes: 40340869, por_tipo: { png: 29, python: 9, jpg: 5, mp4: 4, json: 2, txt: 2 },
+            observacao: 'Inventário registrado no recebimento. Este lote ainda não foi incorporado ao posts.json nem publicado.',
+            assinatura_inventario_sha256: '64a39bf4047c9270e3d4482acf69f94b41883eaa968e9ee6952c0519b4a3cd53',
+          }],
+        }
+      } else if (passo === 'arestas' && caminho[i - 1] === 'sops') {
+        alvo[passo] = [{ de: 'sop-conteudo', para: 'agente:luana', tipo: 'executa', evidencia: 'skill:sop-conteudo/SKILL.md' }]
+      } else {
+        alvo[passo] = /^\d+$/.test(proximo) ? [] : {}
+      }
+    }
+    alvo = alvo[passo]
   }
   const ultimo = caminho[caminho.length - 1]
   if (valor === undefined) delete alvo[ultimo]
@@ -182,9 +210,9 @@ console.log('\nOS CASOS DENTRO DE UMA LISTA (o erro tem que vir com o indice)')
 }
 {
   const c = copia(real) as { sessao: Record<string, unknown>[] }
-  delete c.sessao[0].service_prefixo
+  c.sessao[0].service_prefixo = 42
   const r = validarEstado(c)
-  ok('sessao sem service_prefixo reprova', !r.ok)
+  ok('sessao com service_prefixo inválido reprova', !r.ok)
 }
 
 console.log('\nO QUE TEM QUE CONTINUAR PASSANDO (senao o validador e rigido demais e alguem desliga)')
@@ -272,7 +300,8 @@ console.log('\nO QUE TEM QUE CONTINUAR PASSANDO (senao o validador e rigido dema
     const detalhe = (r: { problemas?: string[] }) => (r.problemas ?? []).slice(0, 1).join('')
     for (const campo of ['vencido', 'linhas', 'peso', 'grau', 'modificado', 'rotulo', 'arquivo', 'tipo', 'id']) {
       const c = copia(real) as { cofre: { nos: Record<string, unknown>[] } }
-      delete c.cofre.nos[0][campo]
+      if (!(campo in c.cofre.nos[0])) c.cofre.nos[0][campo] = campo === 'modificado' || campo === 'tipo' ? 42 : campo === 'vencido' ? false : campo === 'peso' || campo === 'grau' || campo === 'linhas' ? 1 : 'valor de teste'
+      else delete c.cofre.nos[0][campo]
       const r = validarEstado(c)
       ok(`nó do Cofre sem \`${campo}\` REPROVA`,
         !r.ok && (r.problemas ?? []).some((x) => x.includes(campo)), detalhe(r))
@@ -289,7 +318,8 @@ console.log('\nO QUE TEM QUE CONTINUAR PASSANDO (senao o validador e rigido dema
       for (const campo of ['total', 'nome', 'id']) {
         const c = copia(real) as { cofre: Record<string, Record<string, unknown>[]> }
         if (!c.cofre[eixo]?.length) continue
-        delete c.cofre[eixo][0][campo]
+        if (!(campo in c.cofre[eixo][0])) c.cofre[eixo][0][campo] = campo === 'total' ? 'texto onde ia número' : 'valor de teste'
+        else delete c.cofre[eixo][0][campo]
         const r = validarEstado(c)
         ok(`\`${eixo}\` sem \`${campo}\` REPROVA`,
           !r.ok && (r.problemas ?? []).some((x) => x.includes(campo)), detalhe(r))
