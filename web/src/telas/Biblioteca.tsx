@@ -21,20 +21,6 @@ export function Biblioteca({ estado, vista }: PropsTela) {
   return (
     <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       <TituloDaTela titulo="Biblioteca." pergunta={vista.pergunta} direita={<span className="rotulo">índice de {new Date(biblioteca.atualizado_em).toLocaleString('pt-BR', { timeZone: 'UTC', hour12: false })} utc</span>} />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi rotulo="itens no índice" valor={biblioteca.total} nota="é a lista inteira abaixo" />
-        <Kpi rotulo="pastas no acervo" valor={biblioteca.por_origem.acervo} nota="entradas atuais de out/" />
-        <Kpi rotulo="atalhos prontos" valor={biblioteca.por_origem.pronto + biblioteca.por_origem.cliente} nota="PRONTOS e PRONTOS-CLIENTES" />
-        <Kpi rotulo="atalhos quebrados" valor={biblioteca.atalhos_quebrados} cor={biblioteca.atalhos_quebrados ? 'text-vermelho' : 'text-verde'} nota="destino inexistente no disco" />
-      </div>
-      <section className="carta mt-3 overflow-hidden">
-        <div className="border-b border-linha px-4 pt-4"><Cabecalho cor="var(--color-lima)" meta={`${biblioteca.itens.length} itens`}>índice do acervo</Cabecalho></div>
-        <div className="grid grid-cols-[minmax(0,1fr)_70px] gap-3 border-b border-linha px-4 py-2 sm:grid-cols-[minmax(0,1fr)_170px_100px_90px]">
-          <span className="rotulo">item</span><span className="rotulo hidden sm:block">origem</span><span className="rotulo hidden sm:block">alterado</span><span className="rotulo text-right">arquivos</span>
-        </div>
-        <ul className="max-h-[600px] overflow-y-auto">{biblioteca.itens.map((item) => <Linha key={item.id} item={item} />)}</ul>
-        <p className="border-t border-linha px-4 py-3 text-[10.5px] leading-relaxed text-tinta-3">Itens de clientes aparecem sem nome e sem caminho. A tela é um índice de leitura: não há botão de abrir, baixar ou publicar porque nenhuma referência mostrou essas ações na Biblioteca.</p>
-      </section>
       <section className="carta mt-3 overflow-hidden" aria-labelledby="mapas-operacao">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-linha px-4 py-4">
           <div>
@@ -56,6 +42,20 @@ export function Biblioteca({ estado, vista }: PropsTela) {
           />
         </div>
         <p className="border-t border-linha px-4 py-3 text-[10.5px] leading-relaxed text-tinta-3">O mapa é um artefato versionado da Biblioteca. Use o link para abrir a leitura completa, com tema, foco e exportação do próprio Archify.</p>
+      </section>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi rotulo="itens no índice" valor={biblioteca.total} nota="é a lista inteira abaixo" />
+        <Kpi rotulo="pastas no acervo" valor={biblioteca.por_origem.acervo} nota="entradas atuais de out/" />
+        <Kpi rotulo="atalhos prontos" valor={biblioteca.por_origem.pronto + biblioteca.por_origem.cliente} nota="PRONTOS e PRONTOS-CLIENTES" />
+        <Kpi rotulo="atalhos quebrados" valor={biblioteca.atalhos_quebrados} cor={biblioteca.atalhos_quebrados ? 'text-vermelho' : 'text-verde'} nota="destino inexistente no disco" />
+      </div>
+      <section className="carta mt-3 overflow-hidden">
+        <div className="border-b border-linha px-4 pt-4"><Cabecalho cor="var(--color-lima)" meta={`${biblioteca.itens.length} itens`}>índice do acervo</Cabecalho></div>
+        <div className="grid grid-cols-[minmax(0,1fr)_70px] gap-3 border-b border-linha px-4 py-2 sm:grid-cols-[minmax(0,1fr)_170px_100px_90px]">
+          <span className="rotulo">item</span><span className="rotulo hidden sm:block">origem</span><span className="rotulo hidden sm:block">alterado</span><span className="rotulo text-right">arquivos</span>
+        </div>
+        <ul className="max-h-[600px] overflow-y-auto">{biblioteca.itens.map((item) => <Linha key={item.id} item={item} />)}</ul>
+        <p className="border-t border-linha px-4 py-3 text-[10.5px] leading-relaxed text-tinta-3">Itens de clientes aparecem sem nome e sem caminho. A tela é um índice de leitura: não há botão de abrir, baixar ou publicar porque nenhuma referência mostrou essas ações na Biblioteca.</p>
       </section>
     </div>
   )

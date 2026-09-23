@@ -80,7 +80,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
   const listaVivos = vivos?.agentes ?? []
   const catalogoPixel = useMemo(() => montarCatalogoPixel(estado.agentes, estado.sessao), [estado.agentes, estado.sessao])
 
-  const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal'>('office')
+  const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal' | 'squad'>('office')
   const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
 
   const agenteSelecionado: AgenteVivo | undefined = listaVivos.find((a) => a.id === agenteInspecionado) ?? (() => {
@@ -116,11 +116,12 @@ export function Tarefas({ estado, vista }: PropsTela) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {/* Alternador de Visualização: Virtual Office vs Terminal Cards */}
-            <div className="flex items-center border-2 border-black bg-[#0f172a] p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            {/* Alternador de Visualização: Virtual Office, Terminal Cards e mapa do squad */}
+            <div className="flex flex-wrap items-center border-2 border-black bg-[#0f172a] p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" aria-label="Visualização dos agentes">
               <button
                 type="button"
                 onClick={() => setModoExibicao('office')}
+                aria-pressed={modoExibicao === 'office'}
                 className={`px-3 py-1.5 text-xs font-black uppercase transition-all ${
                   modoExibicao === 'office'
                     ? 'bg-[#a3e635] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
@@ -132,6 +133,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
               <button
                 type="button"
                 onClick={() => setModoExibicao('terminal')}
+                aria-pressed={modoExibicao === 'terminal'}
                 className={`px-3 py-1.5 text-xs font-black uppercase transition-all ${
                   modoExibicao === 'terminal'
                     ? 'bg-[#38bdf8] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
@@ -139,6 +141,18 @@ export function Tarefas({ estado, vista }: PropsTela) {
                 }`}
               >
                 📟 TERMINAL CRT
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoExibicao('squad')}
+                aria-pressed={modoExibicao === 'squad'}
+                className={`px-3 py-1.5 text-xs font-black uppercase transition-all ${
+                  modoExibicao === 'squad'
+                    ? 'bg-[#facc15] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🗺️ MAPA DO SQUAD
               </button>
             </div>
 
@@ -199,7 +213,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
             </div>
           )}
         </section>
-      ) : (
+      ) : modoExibicao === 'terminal' ? (
         /* Modo Terminal CRT Cards */
         <PixelJanela
           titulo="⚡ SONDA DE AGENTES AO VIVO NA TAREFA"
@@ -263,6 +277,38 @@ export function Tarefas({ estado, vista }: PropsTela) {
               Nenhum agente em execução ativa neste instante. Monitorando transcripts e processos a cada 10s.
             </div>
           )}
+        </PixelJanela>
+      ) : (
+        <PixelJanela
+          titulo="🗺️ ESTRUTURA DO SQUAD"
+          subtitulo="Fluxo novo do conteúdo, com gates e destinos de distribuição"
+          badge="ARCHIFY"
+          corBadge="text-[#facc15]"
+        >
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 border-b-2 border-slate-700 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-black uppercase text-[#facc15]">Estrutura nova do conteúdo</h2>
+                <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-300">
+                  Nova/Vega → Suri → aprovação do Gastão → Theo → Cleo → Dani → Corretor → Guardião → destino → D+3/D+7
+                </p>
+              </div>
+              <a
+                className="shrink-0 border-2 border-black bg-[#38bdf8] px-3 py-2 text-center text-[11px] font-black uppercase text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+                href="/mapas/pipeline-conteudo.html"
+                target="_blank"
+                rel="noreferrer"
+              >
+                abrir mapa completo ↗
+              </a>
+            </div>
+            <iframe
+              className="h-[min(72vw,620px)] min-h-[420px] w-full rounded border-2 border-black bg-[#101215]"
+              src="/mapas/pipeline-conteudo.html"
+              title="Estrutura nova do conteúdo, mapa interativo do pipeline"
+              loading="lazy"
+            />
+          </div>
         </PixelJanela>
       )}
 
