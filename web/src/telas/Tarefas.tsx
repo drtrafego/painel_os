@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
+import { montarCatalogoPixel } from '../dados/pixel-agents'
 import { PixelOffice } from '../ui/PixelOffice'
 import type { PropsTela } from './Vazias'
+import type { AgenteVivo } from '../dados/tipos'
 
 const STATUS: [string, string][] = [
   ['todo', 'a fazer'],
@@ -76,11 +78,16 @@ export function Tarefas({ estado, vista }: PropsTela) {
   const ativos = vivos?.contagem?.trabalhando ?? 0
   // A sonda é a única fonte de presença; o catálogo do escritório completa o restante.
   const listaVivos = vivos?.agentes ?? []
+  const catalogoPixel = useMemo(() => montarCatalogoPixel(estado.agentes, estado.sessao), [estado.agentes, estado.sessao])
 
   const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal'>('office')
   const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
 
-  const agenteSelecionado = listaVivos.find((a) => a.id === agenteInspecionado)
+  const agenteSelecionado = listaVivos.find((a) => a.id === agenteInspecionado) ?? (() => {
+    const ficha = catalogoPixel.find((agente) => agente.id === agenteInspecionado || agente.aliases?.includes(agenteInspecionado ?? ''))
+    if (!ficha) return undefined
+    return { id: ficha.id, estado: 'parado', fase: ficha.área, etapa: ficha.papel, etapa_e_description: ficha.descricao, ferramenta: null, silencio_s: 0, arquivo: 'catálogo operacional' } satisfies AgenteVivo
+  })()
 
   return (
     <div className="w-full max-w-none space-y-6 px-3 py-4 font-mono sm:px-6 lg:px-8 xl:px-10">
@@ -137,6 +144,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
         <section className="space-y-3">
           <PixelOffice
             agentes={listaVivos}
+            catalogo={catalogoPixel}
             aoSelecionarAgente={(id) => setAgenteInspecionado(id)}
             agenteSelecionadoId={agenteInspecionado}
           />
@@ -151,7 +159,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
                     AGENTE INSPECCIONADO: {agenteSelecionado.id.toUpperCase()}
                   </span>
                   <span className="border border-black bg-[#1e293b] px-2 py-0.5 text-[10px] text-[#38bdf8]">
-                    {agenteSelecionado.estado === 'trabalhando' ? 'EM EXECUÇÃO' : 'OCIOSO'}
+                    {agenteSelecionado.arquivo === 'catálogo operacional' ? 'FORA DA EXECUÇÃO' : agenteSelecionado.estado === 'trabalhando' ? 'EM EXECUÇÃO' : 'OCIOSO'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-300">
