@@ -229,7 +229,8 @@ export type AgenteVivo = {
   id: string
   fase: string
   etapa: string
-  etapa_e_description?: string
+  /** Indica que a etapa veio da descrição de uma tool, não é texto de UI. */
+  etapa_e_description?: boolean | null
   ferramenta?: string | null
   silencio_s: number
   estado: 'trabalhando' | 'silencioso' | 'parado'

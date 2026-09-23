@@ -52,13 +52,13 @@ export function encontrarPixelAgent(id: string) {
   return PIXEL_AGENTS.find((agente) => normalizarId(agente.id) === alvo || agente.aliases?.some((alias) => normalizarId(alias) === alvo))
 }
 
-export function mesclarRuntimesNoCatalogo(catalogo: PixelAgent[], runtimes: Array<{ id: string; etapa?: string; etapa_e_description?: string }>) {
+export function mesclarRuntimesNoCatalogo(catalogo: PixelAgent[], runtimes: Array<{ id: string; etapa?: string | null; etapa_e_description?: boolean | null }>) {
   const resultado = catalogo.map((agente) => ({ ...agente, aliases: agente.aliases ? [...agente.aliases] : undefined }))
   runtimes.forEach((runtime, index) => {
     const existente = resultado.find((agente) => normalizarId(agente.id) === normalizarId(runtime.id) || agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(runtime.id)))
     if (existente) return
     const sufixo = runtime.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || String(index + 1)
-    resultado.push({ id: runtime.id, nome: `Sessão Codex · ${sufixo}`, papel: 'Sessão observada pelo runtime', squad: 'pipeline Codex', área: 'Sessão viva', abreviação: 'CX', cor: '#f472b6', descricao: runtime.etapa_e_description ?? runtime.etapa ?? 'Atividade retornada pela sonda, sem papel catalogado', aliases: [] })
+    resultado.push({ id: runtime.id, nome: `Sessão Codex · ${sufixo}`, papel: 'Sessão observada pelo runtime', squad: 'pipeline Codex', área: 'Sessão viva', abreviação: 'CX', cor: '#f472b6', descricao: runtime.etapa || 'Atividade retornada pela sonda, sem papel catalogado', aliases: [] })
   })
   return resultado
 }

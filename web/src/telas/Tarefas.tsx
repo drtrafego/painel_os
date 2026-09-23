@@ -86,7 +86,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
   const agenteSelecionado = listaVivos.find((a) => a.id === agenteInspecionado) ?? (() => {
     const ficha = catalogoPixel.find((agente) => agente.id === agenteInspecionado || agente.aliases?.includes(agenteInspecionado ?? ''))
     if (!ficha) return undefined
-    return { id: ficha.id, estado: 'parado', fase: ficha.área, etapa: ficha.papel, etapa_e_description: ficha.descricao, ferramenta: null, silencio_s: 0, arquivo: 'catálogo operacional' } satisfies AgenteVivo
+    return { id: ficha.id, estado: 'parado', fase: ficha.área, etapa: ficha.descricao ?? ficha.papel, etapa_e_description: false, ferramenta: null, silencio_s: 0, arquivo: 'catálogo operacional' } satisfies AgenteVivo
   })()
 
   return (
@@ -163,7 +163,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
                   </span>
                 </div>
                 <p className="text-xs text-slate-300">
-                  {agenteSelecionado.etapa_e_description ?? agenteSelecionado.etapa ?? 'Sem descrição da tarefa atual'}
+                  {agenteSelecionado.etapa ?? 'Sem descrição da tarefa atual'}
                 </p>
                 <div className="text-[10.5px] text-slate-400">
                   Ferramenta ativa: <span className="text-[#a3e635]">{agenteSelecionado.ferramenta ?? 'Nenhuma'}</span> · Fase: {agenteSelecionado.fase} · Silêncio: {agenteSelecionado.silencio_s ?? 0}s
@@ -209,7 +209,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
                     </div>
                     <div
                       className="mt-2.5 border-l-2 border-[#38bdf8] pl-2 text-xs text-slate-200 line-clamp-3 leading-relaxed"
-                      title={ag.etapa_e_description ?? ag.etapa}
+                      title={ag.etapa ?? 'Etapa não informada'}
                     >
                       {ag.etapa ?? 'ETAPA EM ANDAMENTO'}
                     </div>
