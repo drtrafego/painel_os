@@ -128,12 +128,15 @@ def main() -> int:
     headers = cabecalhos(porta, (USUARIO, SENHA))
     confere("conteúdo não pode ser interpretado como outro MIME",
             headers.get("x-content-type-options"), "nosniff")
-    confere("painel não pode ser embutido em frame",
-            headers.get("x-frame-options"), "DENY")
+    confere("painel permite frame somente na mesma origem",
+            headers.get("x-frame-options"), "SAMEORIGIN")
     confere("referência não vaza URL do painel",
             headers.get("referrer-policy"), "no-referrer")
-    confere("política de conteúdo existe na própria aplicação",
-            bool(headers.get("content-security-policy")), True)
+    politica = headers.get("content-security-policy", "")
+    confere("política de conteúdo existe na própria aplicação", bool(politica), True)
+    confere("CSP permite somente frame same-origin",
+            "frame-ancestors 'self'" in politica and "frame-ancestors 'none'" not in politica,
+            True)
     confere("servidor não expõe versão do Python",
             headers.get("server"), "PainelOS")
 

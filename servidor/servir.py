@@ -878,11 +878,13 @@ class Manipulador(SimpleHTTPRequestHandler):
         # mesmas defesas depois do TLS; proteção não pode depender de uma rota.
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("X-Frame-Options", "DENY")
+        # A Biblioteca usa um mapa HTML servido pelo próprio painel. SAMEORIGIN
+        # libera somente esse embedding; a CSP continua vedando terceiros.
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
+            "default-src 'self'; base-uri 'none'; frame-ancestors 'self'; "
             "form-action 'self'; object-src 'none'; img-src 'self' data:; "
             "font-src 'self' https://fonts.gstatic.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
