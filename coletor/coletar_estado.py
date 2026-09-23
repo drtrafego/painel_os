@@ -949,7 +949,10 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
 # explícita no playbook indicado. O coletor NÃO tenta transformar prosa livre em
 # workflow: um parser "inteligente" acabaria inventando gatilhos e autonomia.
 SOPS_DECLARADOS = [
-    {"id": "conteudo", "nome": "Produção de conteúdo", "objetivo": "Produzir e publicar conteúdo orgânico a partir de um brief", "gatilho": "Pedido de post, carrossel, reel, vídeo, legenda, publicação ou agendamento", "agentes": ["vega-radar", "suri-estrategista", "theo-criador", "cleo-produtor", "dani-designer", "guardiao", "maestro"], "ferramentas": ["Produtor de conteúdo"], "entradas": ["brief aprovado", "manual de tom e visual"], "saidas": ["peça produzida", "peça validada", "publicação ou agendamento autorizado"], "frequencia": None, "autonomia": "publicação exige ordem explícita do Gastão", "conexao": "conteudo.md", "memorias": ["MEMORY.md"]},
+    # O diretório é `conteudo`, mas o manifesto do playbook foi renomeado para
+    # `orquestrar-conteudo-anuncios`. O catálogo público mantém o id curto;
+    # fonte e identidade são conferidas separadamente contra o disco.
+    {"id": "conteudo", "pasta": "conteudo", "manifesto": "orquestrar-conteudo-anuncios", "nome": "Produção de conteúdo", "objetivo": "Produzir e publicar conteúdo orgânico a partir de um brief", "gatilho": "Pedido de post, carrossel, reel, vídeo, legenda, publicação ou agendamento", "agentes": ["suri-estrategista", "theo-criador", "guardiao", "analista"], "ferramentas": ["Produtor de conteúdo"], "entradas": ["brief aprovado", "manual de tom e visual"], "saidas": ["peça produzida", "peça validada", "publicação ou agendamento autorizado"], "frequencia": None, "autonomia": "publicação exige ordem explícita do Gastão", "conexao": None, "memorias": ["MEMORY.md"]},
     {"id": "curso", "nome": "Conteúdo do curso", "objetivo": "Produzir conteúdo de topo de funil do curso a partir das fontes vigentes", "gatilho": "Pedido sobre curso, tela preta, IA para iniciantes ou conteúdo de topo", "agentes": ["suri-estrategista", "theo-criador", "cleo-produtor", "dani-designer", "guardiao"], "ferramentas": ["Produtor de conteúdo"], "entradas": ["tema ou pedido do produtor", "oferta e currículo vigentes", "especificação visual"], "saidas": ["peça conferida para Instagram e LinkedIn"], "frequencia": None, "autonomia": "publicação exige ordem explícita do Gastão", "conexao": "curso.md", "memorias": ["MEMORY.md"]},
     {"id": "trafego", "nome": "Gestão de tráfego", "objetivo": "Diagnosticar e operar campanhas do Meta Ads na conta isolada correta", "gatilho": "Pedido sobre campanha, anúncio, verba, público ou desempenho de mídia", "agentes": ["gestor", "analista"], "ferramentas": ["Meta Ads"], "entradas": ["conta autorizada", "período e objetivo da análise"], "saidas": ["diagnóstico de mídia", "alteração conferida quando autorizada"], "frequencia": None, "autonomia": "alterar verba ou pausar exige confirmação do Gastão", "conexao": "trafego.md", "memorias": ["MEMORY.md"]},
     {"id": "dashboard", "nome": "Métricas da agência", "objetivo": "Consultar métricas e vendas na organização correta", "gatilho": "Pedido de número de campanha, ROAS, CPA, vendas, leads ou situação de cliente", "agentes": [], "ferramentas": ["Dashboard da agência", "Meta Ads", "Google Ads"], "entradas": ["organização descoberta pela API", "período e métrica"], "saidas": ["métricas calculadas na moeda da organização"], "frequencia": "sincronização automática às 8h, 12h e 20h de São Paulo", "autonomia": "consulta livre; sincronização forçada somente quando a atualização imediata for necessária", "conexao": "dashboard.md", "memorias": []},
@@ -973,12 +976,21 @@ def ler_sops(agentes=None, pasta_skills: Path = SKILLS_RAIZ,
     itens, arestas = [], []
     try:
         for d in SOPS_DECLARADOS:
-            skill = pasta_skills / d["id"] / "SKILL.md"
+            pasta_skill = d.get("pasta", d["id"])
+            fonte_skill = f"skill:{pasta_skill}/SKILL.md"
+            skill = pasta_skills / pasta_skill / "SKILL.md"
             if not skill.is_file():
                 raise ValueError(f"playbook ausente: {d['id']}")
-            texto_skill = skill.read_text(encoding="utf-8", errors="strict")
+            # Referências Markdown do pacote fazem parte do playbook. O
+            # manifesto raiz aponta para elas, e ignorá-las tornava agentes
+            # reais invisíveis ao catálogo.
+            fontes_skill = [skill] + sorted(
+                (p for p in skill.parent.rglob("*.md") if p != skill),
+                key=lambda p: str(p),
+            )
+            texto_skill = "\n".join(p.read_text(encoding="utf-8", errors="strict") for p in fontes_skill)
             frontmatter, _ = ler_frontmatter(skill)
-            if frontmatter.get("name") != d["id"]:
+            if frontmatter.get("name") != d.get("manifesto", d["id"]):
                 raise ValueError(f"identidade do playbook divergente: {d['id']}")
             conexao = d["conexao"]
             if conexao and not (pasta_conexoes / conexao).is_file():
@@ -988,28 +1000,35 @@ def ler_sops(agentes=None, pasta_skills: Path = SKILLS_RAIZ,
             faltantes = [a for a in d["agentes"] if a not in agentes_ids]
             if faltantes:
                 raise ValueError(f"agente citado não existe: {d['id']}")
-            if any(a.casefold() not in texto_skill.casefold() for a in d["agentes"]):
+            texto_skill_busca = "".join(
+                c for c in unicodedata.normalize("NFKD", texto_skill.casefold())
+                if not unicodedata.combining(c)
+            )
+            def citado(agente):
+                aliases = (agente, agente.split("-", 1)[0], agente.replace("-", " "))
+                return any(alias in texto_skill_busca for alias in aliases)
+            if any(not citado(a) for a in d["agentes"]):
                 raise ValueError(f"agente sem citação no playbook: {d['id']}")
             memorias = [m for m in d["memorias"] if (pasta_memoria / m).is_file()]
             if len(memorias) != len(d["memorias"]):
                 raise ValueError(f"memória citada ausente: {d['id']}")
             for memoria in memorias:
                 texto_memoria = (pasta_memoria / memoria).read_text(encoding="utf-8", errors="strict")
-                marcador = d["id"].removesuffix("-google")
+                marcador = pasta_skill.removesuffix("-google")
                 memoria_normalizada = "".join(c for c in unicodedata.normalize("NFKD", texto_memoria.casefold()) if not unicodedata.combining(c))
                 if marcador not in memoria_normalizada:
                     raise ValueError(f"memória sem referência ao SOP: {d['id']}")
             item = {k: d[k] for k in ("id", "nome", "objetivo", "gatilho", "agentes", "ferramentas", "entradas", "saidas", "frequencia", "autonomia")}
             item["responsavel"] = "luana"
-            item["fontes"] = [f"skill:{d['id']}/SKILL.md"] + ([f"conexao:{conexao}"] if conexao else [])
+            item["fontes"] = [fonte_skill] + ([f"conexao:{conexao}"] if conexao else [])
             itens.append(item)
             for memoria in memorias:
                 arestas.append({"de": f"memoria:{memoria}", "para": f"sop:{d['id']}", "tipo": "fundamenta", "evidencia": f"memoria:{memoria}"})
-            arestas.append({"de": f"sop:{d['id']}", "para": "agente:luana", "tipo": "responsável", "evidencia": f"skill:{d['id']}/SKILL.md"})
+            arestas.append({"de": f"sop:{d['id']}", "para": "agente:luana", "tipo": "responsável", "evidencia": fonte_skill})
             for agente in d["agentes"]:
-                arestas.append({"de": f"sop:{d['id']}", "para": f"agente:{agente}", "tipo": "executa", "evidencia": f"skill:{d['id']}/SKILL.md"})
+                arestas.append({"de": f"sop:{d['id']}", "para": f"agente:{agente}", "tipo": "executa", "evidencia": fonte_skill})
             for ferramenta in d["ferramentas"]:
-                arestas.append({"de": f"sop:{d['id']}", "para": f"ferramenta:{ferramenta}", "tipo": "usa", "evidencia": f"skill:{d['id']}/SKILL.md"})
+                arestas.append({"de": f"sop:{d['id']}", "para": f"ferramenta:{ferramenta}", "tipo": "usa", "evidencia": fonte_skill})
         return {"status": "pronto", "erro": None, "total": len(itens), "itens": itens, "arestas": arestas}
     except (OSError, ValueError, TypeError) as exc:
         return {**vazio, "erro": f"catálogo de SOPs indisponível ({type(exc).__name__}); nenhuma relação publicada"}
