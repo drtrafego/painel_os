@@ -870,7 +870,7 @@ class Manipulador(SimpleHTTPRequestHandler):
         self._json(codigo, resposta)
 
     def end_headers(self):
-        caminho = getattr(self, "path", "")
+        caminho = urlsplit(getattr(self, "path", "")).path
         if getattr(self, "_sem_cache", False) or caminho.endswith(".html") or caminho == "/":
             self.send_header("Cache-Control", "no-store")
             self._sem_cache = False  # não duplicar o header
@@ -882,14 +882,20 @@ class Manipulador(SimpleHTTPRequestHandler):
         # libera somente esse embedding; a CSP continua vedando terceiros.
         self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        self.send_header(
-            "Content-Security-Policy",
+        politica = (
             "default-src 'self'; base-uri 'none'; frame-ancestors 'self'; "
             "form-action 'self'; object-src 'none'; img-src 'self' data:; "
             "font-src 'self' https://fonts.gstatic.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "script-src 'self'; connect-src 'self'",
+            "script-src 'self'; connect-src 'self'"
         )
+        if caminho.startswith("/mapas/") and caminho.endswith(".html"):
+            # O Archify versionado é um documento autocontido com scripts
+            # inline e fontes embutidas. O relaxamento não alcança o painel.
+            politica = politica.replace(
+                "font-src 'self' https://fonts.gstatic.com", "font-src 'self' data: https://fonts.gstatic.com"
+            ).replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")
+        self.send_header("Content-Security-Policy", politica)
         super().end_headers()
 
     def log_message(self, formato, *args):

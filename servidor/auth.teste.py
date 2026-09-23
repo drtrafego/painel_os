@@ -66,6 +66,14 @@ def cabecalhos(porta: int, credencial: tuple[str, str]) -> dict[str, str]:
         return {k.lower(): v for k, v in resposta.headers.items()}
 
 
+def cabecalhos_rota(porta: int, rota: str, credencial: tuple[str, str]) -> dict[str, str]:
+    req = urllib.request.Request(f"http://127.0.0.1:{porta}{rota}")
+    cru = f"{credencial[0]}:{credencial[1]}".encode()
+    req.add_header("Authorization", "Basic " + b64encode(cru).decode())
+    with urllib.request.urlopen(req, timeout=20) as resposta:
+        return {k.lower(): v for k, v in resposta.headers.items()}
+
+
 def confere(nome: str, obtido, esperado, registrar: list | None = None) -> bool:
     ok = obtido == esperado
     saida = falhas if registrar is None else registrar
@@ -136,6 +144,16 @@ def main() -> int:
     confere("política de conteúdo existe na própria aplicação", bool(politica), True)
     confere("CSP permite somente frame same-origin",
             "frame-ancestors 'self'" in politica and "frame-ancestors 'none'" not in politica,
+            True)
+    mapa = cabecalhos_rota(porta, "/mapas/pipeline-conteudo.html", (USUARIO, SENHA))
+    politica_mapa = mapa.get("content-security-policy", "")
+    confere("CSP do mapa permite somente inline e fontes data necessárias",
+            "script-src 'self' 'unsafe-inline'" in politica_mapa
+            and "font-src 'self' data:" in politica_mapa,
+            True)
+    confere("CSP estrita não é relaxada na raiz",
+            "script-src 'self' 'unsafe-inline'" not in politica
+            and "font-src 'self' data:" not in politica,
             True)
     confere("servidor não expõe versão do Python",
             headers.get("server"), "PainelOS")
