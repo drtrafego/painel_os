@@ -336,9 +336,13 @@ conferir("o grau conta os dois sentidos: quem só recebe é tão central quanto 
 conferir("a barra lateral só lista área que tem registro, nunca cluster vazio",
          [(a["id"], a["total"]) for a in cofre["areas"]],
          [("bots", 1), ("transversal", 1)])
-# área fora do catálogo não passa: cluster novo se cadastra num lugar só.
+# área fora do catálogo não derruba o mapa: fica visível em fallback e alerta
+# para o catálogo ser atualizado sem esconder o registro real.
 recusa = _cofre_de_teste([{**BOM, "area": "inventada"}])
-conferir("área fora do catálogo é recusada", (len(recusa["nos"]), len(recusa["recusados"])), (0, 1))
+conferir("área fora do catálogo permanece visível em fallback",
+         (len(recusa["nos"]), recusa["areas"][0]["id"], recusa["areas"][0].get("fallback")),
+         (1, "inventada", True))
+conferir("área fora do catálogo gera aviso explícito", len(recusa["avisos"]) > 0, True)
 cofre = _cofre_de_teste([{**BOM, "conecta": [
     {"para": "padrao-zero-calado", "porque": "os dois falam de coisa parecida"}]}, HUB])
 conferir("ligação que não está escrita na fonte é RECUSADA", cofre["conexoes"], 0)
@@ -432,8 +436,8 @@ sem_pessoa("e o destino cru não viaja no motivo", recusa["arestas_recusadas"][0
 # CONTROLE: sanear não pode virar apagar. O motivo tem que continuar servindo
 # pra alguém consertar o registro.
 recusa = _cofre_de_teste([{**BOM, "area": "inventada"}])
-conferir("motivo limpo continua legível, com o valor que reprovou",
-         "área fora do catálogo" in recusa["recusados"][0] and "inventada" in recusa["recusados"][0],
+conferir("aviso limpo continua legível, com o valor que acionou fallback",
+         "área" in recusa["avisos"][0] and "inventada" in recusa["avisos"][0],
          True)
 c.NOMES_CLIENTE, c.NEGACAO = guarda
 

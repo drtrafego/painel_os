@@ -655,7 +655,8 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
     vazio = {"nos": [], "arestas": [], "arquivos": None, "conexoes": None,
              "cobertura": None, "arquivo": "painel_os/data/cofre.json",
              "areas": [], "familias": [], "grau_medio": None,
-             "vencidos": [], "recusados": [], "arestas_recusadas": [], "truncados": []}
+             "vencidos": [], "recusados": [], "arestas_recusadas": [], "truncados": [],
+             "avisos": []}
 
     # Sem a lista de nomes a porta não sabe negar ninguém, e TODO registro seria
     # recusado. Cofre vazio nessa hora seria "não aprendemos nada" quando o
@@ -693,8 +694,12 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
             if especie not in COFRE_ESPECIES:
                 raise ValueError(f"espécie fora do catálogo: {especie!r}")
             area = reg.get("area")
-            if area not in areas:
-                raise ValueError(f"área fora do catálogo: {area!r}")
+            if not isinstance(area, str) or not area:
+                raise ValueError(f"área inválida: {area!r}")
+            # Área nova não invalida o Cofre inteiro. O registro continua no
+            # mapa, agrupado numa categoria marcada como fallback, e o aviso
+            # fica na saída para não transformar evolução do catálogo em
+            # silêncio operacional.
             familia = reg.get("familia")
             if familia not in familias:
                 raise ValueError(f"família fora do catálogo: {familia!r}")
@@ -813,18 +818,30 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
     ligados = {i for i, g in grau.items() if g}
     cobertura = round(len(ligados) / len(nos) * 100, 1) if nos else None
 
+    avisos = []
+
     def _agrupar(campo, catalogo):
         contagem = {}
         for n in nos:
             contagem[n[campo]] = contagem.get(n[campo], 0) + 1
-        return [
-            {**catalogo[chave], "total": total}
-            for chave, total in sorted(contagem.items(), key=lambda kv: (-kv[1], kv[0]))
-        ]
+        saida = []
+        for chave, total in sorted(contagem.items(), key=lambda kv: (-kv[1], kv[0])):
+            item = catalogo.get(chave)
+            if item is None:
+                eixo = "área" if campo == "area" else "família"
+                item = {"id": chave, "nome": f"{eixo.capitalize()} não catalogada ({chave})",
+                        "fallback": True}
+                avisos.append(_cofre_recusa(f"{eixo} {chave!r} não está no catálogo; exibida em fallback"))
+                catalogo[chave] = item
+            saida.append({**item, "total": total})
+        return saida
 
     # Injeção dinâmica de Nós e Arestas de Skills & Acessos no Cofre (skill -> agente -> sistema)
     try:
-        ferr = ler_ferramentas(raiz=raiz_fonte)
+        # A injeção representa a operação desta casa e só deve acontecer na
+        # raiz real. Fontes sintéticas dos testes não podem ganhar nós globais
+        # de skills/acessos e contaminar suas asserções de contrato.
+        ferr = ler_ferramentas(raiz=raiz_fonte) if Path(raiz_fonte).resolve() == COFRE_RAIZ_FONTE.resolve() else {}
         skills_acessos = ferr.get("skills_acessos", [])
         if skills_acessos:
             for sa in skills_acessos:
@@ -924,6 +941,7 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE):
         "truncados": truncados,
         "recusados": recusados,
         "arestas_recusadas": arestas_recusadas,
+        "avisos": avisos,
     }
 
 

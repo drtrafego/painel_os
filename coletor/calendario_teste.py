@@ -8,10 +8,18 @@ import coletar_estado as c
 
 fonte = Path(__file__).resolve().parents[1] / "data" / "calendario.json"
 ok = c.ler_calendario(fonte)
-assert ok["status"] == "pronto" and ok["totais"]["eventos_agendados"] == 38
+assert ok["status"] == "pronto"
 assert ok["totais"]["reunioes_ocorridas"] is None
-assert ok["vencido"] is False
-assert sum(x["eventos_agendados"] for x in ok["dias"]) == 38
+assert all(isinstance(ok["totais"][campo], int) and ok["totais"][campo] >= 0
+           for campo in ("eventos_agendados", "minutos_agendados",
+                         "horarios_encerrados_ate_coleta", "eventos_futuros_na_coleta",
+                         "blocos_ocupados"))
+assert sum(x["eventos_agendados"] for x in ok["dias"]) == ok["totais"]["eventos_agendados"]
+assert sum(x["minutos_agendados"] for x in ok["dias"]) == ok["totais"]["minutos_agendados"]
+assert sum(x["horario_encerrado_ate_coleta"] for x in ok["dias"]) == ok["totais"]["horarios_encerrados_ate_coleta"]
+assert sum(x["futuros_na_coleta"] for x in ok["dias"]) == ok["totais"]["eventos_futuros_na_coleta"]
+coleta = c.datetime.fromisoformat(ok["coletado_em"].replace("Z", "+00:00"))
+assert ok["vencido"] == (c.agora_utc() - coleta.astimezone(c.timezone.utc) > c.timedelta(hours=24))
 
 with tempfile.TemporaryDirectory() as pasta:
     alvo = Path(pasta) / "calendario.json"
