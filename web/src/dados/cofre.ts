@@ -84,6 +84,44 @@ export function corDaArea(area: string): string {
   }
 }
 
+// ‼️ 21/09/2026: achado dele com print real, "área não tem todas as cores,
+// coloque mais fluor". Causa raiz medida em index.css: `--color-lima`,
+// `--color-ambar` E `--color-tinta-3` são LITERALMENTE o mesmo hex
+// (`#7a4a0f`), e `--color-pervinca` é quase igual (`#7a6a57`) — a paleta é
+// desenhada pra ter bom contraste no fundo CREME, não pra distinguir 7
+// identidades num fundo quase preto. Paleta separada, só pro modo escuro,
+// com hex direto (não `var()`, não precisa resolver) e saturação alta de
+// propósito ("fluor" = o pedido dele).
+export function corDaAreaEscuro(area: string): string {
+  switch (area.toLowerCase()) {
+    case 'transversal':
+      return '#A3E635' // lima neon
+    case 'conteúdo':
+    case 'conteudo':
+      return '#22D3EE' // ciano vivo
+    case 'tráfego':
+    case 'trafego':
+      return '#FBBF24' // âmbar vivo
+    case 'bots':
+      return '#C084FC' // violeta vivo
+    case 'mineração':
+    case 'mineracao':
+      return '#34D399' // esmeralda vivo
+    case 'painel':
+      return '#F472B6' // rosa vivo
+    case 'agentes':
+      return '#60A5FA' // azul vivo
+    case 'vendas':
+    case 'comercial':
+      return '#F87171' // vermelho vivo
+    case 'engenharia':
+    case 'dev':
+      return '#818CF8' // índigo vivo
+    default:
+      return '#94A3B8' // cinza-azulado neutro, nunca igual a outra área
+  }
+}
+
 export function encurtar(texto: string, limite?: number): string {
   if (!texto) return ''
   if (!limite || texto.length <= limite) return texto

@@ -5,9 +5,10 @@ import {
 } from '../dados/cofre'
 import type { ArestaCofre, NoMemoria } from '../dados/tipos'
 import { Parcial } from '../ui/SemDado'
-import { Cabecalho, Kpi, Pilula, TituloDaTela } from '../ui/primitivos'
+import { Cabecalho, TituloDaTela } from '../ui/primitivos'
 import type { PropsTela } from './Vazias'
 import { Grafo3DCofre } from '../ui/Grafo3DCofre'
+import { PainelInstrumentoCofre } from '../ui/PainelInstrumentoCofre'
 
 /**
  * Hook para medir quadros por segundo (FPS) ao vivo via requestAnimationFrame.
@@ -191,7 +192,15 @@ function Mapa({
 
     if (modoLayout === 'hierarquia') {
       // Agrupamento vertical/horizontal por espécie de aprendizado
-      const especies = ['regra', 'dor', 'gancho', 'métrica', 'decisão', 'conceito', 'sinal', 'alerta', 'lead']
+      // ‼️ CORRIGIDO 21/09/2026: EU TINHA DITO NO README QUE ISSO JÁ ESTAVA
+      // CORRIGIDO "NOS DOIS LUGARES" e não estava — só arrumei o
+      // Grafo3DCofre.tsx (3D), esqueci esta cópia local do 2D. Achado só
+      // porque ele mandou PRINT REAL do resultado (todos os 46 nós caindo
+      // no bucket "outro", coluna única, círculos se encostando, o mapa
+      // desistiu e caiu pro modo lista). Mesma lista errada, mesmo defeito:
+      // zero overlap com as espécies reais (correcao/defeito/medicao/
+      // ordem/padrao/trava, medido em data/cofre.json).
+      const especies = ['padrao', 'ordem', 'trava', 'correcao', 'defeito', 'medicao']
       const colunas = new Map<string, NoMemoria[]>()
       nos.forEach((n) => {
         const esp = especies.includes(n.especie.toLowerCase()) ? n.especie.toLowerCase() : 'outro'
@@ -682,7 +691,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
   if (!cofre || cofre.erro || cofre.conexoes === null || !nos.length) {
     return (
       <div className="mx-auto max-w-[1180px] px-4 py-5 sm:px-6">
-        <TituloDaTela titulo="Cofre de conhecimento." pergunta={vista.pergunta} />
+        <TituloDaTela titulo="Cofre de conhecimento." pergunta={vista.pergunta} mostrarSeletorData={false} />
         <div className="carta p-5 text-sm text-tinta-2">
           Não consegui medir o Cofre. {cofre?.erro ?? 'O estado ainda não tem a fonte dos aprendizados.'}
         </div>
@@ -710,11 +719,23 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
       .map((a) => `${nome(a.de)} → ${nome(a.para)}: ${a.porque}`)
       .join(' · ')
 
-  const autores = [...nos.reduce((m, n) => m.set(n.autor, (m.get(n.autor) ?? 0) + 1), new Map<string, number>())]
-    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
-
-  const sempreVisiveis = cofre.areas.filter((a) => a.sempre_visivel === true || a.id === 'transversal').map((a) => a.id)
-  const ordemAreas = cofre.areas.map((a) => a.id)
+  // ‼️ CORRIGIDO 21/09/2026: autores/sempreVisiveis/ordemAreas eram arrays
+  // NOVOS a cada render (mesmo problema já achado em Grafo3DCofre.graphData:
+  // o useFps sozinho já causa ~1 render/segundo). sempreVisiveis e ordemAreas
+  // alimentam o useMemo do graphData e do Mapa 2D — sem memoizar ESTAS aqui
+  // também, aquele useMemo recomputava do mesmo jeito (dependência sempre
+  // "nova" por referência), o que explica o "2D Multi-Anel ainda está
+  // piscando" mesmo depois do primeiro conserto.
+  const autores = useMemo(
+    () => [...nos.reduce((m, n) => m.set(n.autor, (m.get(n.autor) ?? 0) + 1), new Map<string, number>())]
+      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)),
+    [nos],
+  )
+  const sempreVisiveis = useMemo(
+    () => cofre.areas.filter((a) => a.sempre_visivel === true || a.id === 'transversal').map((a) => a.id),
+    [cofre.areas],
+  )
+  const ordemAreas = useMemo(() => cofre.areas.map((a) => a.id), [cofre.areas])
   const escolher = (id: string) => { setEscolhido(id); setAlvo(null) }
   const ligar = (id: string) => setAlvo((antigo) => (antigo === id || id === escolhido ? null : id))
 
@@ -723,6 +744,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
       modoComando ? 'text-slate-100' : 'text-tinta'
     }`}>
       <TituloDaTela
+        mostrarSeletorData={false}
         titulo="Cofre de conhecimento."
         pergunta="O que a operação aprendeu, quem aprendeu, e o que se liga a quê pela ligação escrita na fonte."
         direita={
@@ -733,378 +755,71 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
         }
       />
 
-      {/* BARRA HUD DE CENTRO DE COMANDO (Estilo Kimi Concept Map / JARVIS) */}
-      <div className={`mb-4 overflow-hidden rounded-lg border p-3 shadow-lg backdrop-blur-md transition-all ${
-        modoComando
-          ? 'border-sky-500/40 bg-[#0B0F17]/90 text-slate-200 shadow-sky-950/40'
-          : 'border-linha bg-carta text-tinta'
-      }`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Status Operacional & FPS ao vivo */}
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 font-mono text-[10px] font-semibold tracking-wider text-emerald-400">
-              <span className="size-2 rounded-full bg-emerald-400 animate-ping" />
-              SISTEMA OPERACIONAL
-            </span>
-            <span className="font-mono text-[11px] font-bold text-sky-400">
-              {fps} <span className="text-[9px] text-slate-400">FPS</span>
-            </span>
-            <span className="hidden font-mono text-[10px] text-slate-400 sm:inline">
-              | {nos.length} NÓS VISÍVEIS · {cofre.conexoes} ARESTAS · GRAU MÉDIO {cofre.grau_medio}
-            </span>
-          </div>
-
-          {/* Campo de Busca Rápida */}
-          <div className="relative min-w-[200px] flex-1 max-w-xs">
-            <input
-              type="text"
-              value={termoBusca}
-              onChange={(e) => setTermoBusca(e.target.value)}
-              placeholder="🔍 Buscar nó, autor ou caso..."
-              className={`w-full rounded border px-3 py-1 font-mono text-[11px] transition-all outline-none ${
-                modoComando
-                  ? 'border-sky-500/40 bg-slate-900/90 text-slate-100 placeholder-slate-500 focus:border-sky-400'
-                  : 'border-linha bg-white/80 text-tinta placeholder-tinta-3 focus:border-linha-forte'
-              }`}
-            />
-            {nosFiltradosBusca.length > 0 && (
-              <ul className={`absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded border p-1 shadow-xl backdrop-blur-md ${
-                modoComando ? 'border-sky-500/40 bg-slate-900 text-slate-200' : 'border-linha bg-carta text-tinta'
-              }`}>
-                {nosFiltradosBusca.map((n) => (
-                  <li key={n.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        escolher(n.id)
-                        setTermoBusca('')
-                      }}
-                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[11px] hover:bg-white/10"
-                    >
-                      <span className="truncate font-medium">{n.rotulo}</span>
-                      <span className="font-mono text-[9px] opacity-70">{n.area}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+      <PainelInstrumentoCofre
+        fps={fps}
+        cofre={cofre}
+        nos={nos}
+        termoBusca={termoBusca}
+        setTermoBusca={setTermoBusca}
+        nosFiltradosBusca={nosFiltradosBusca}
+        escolher={escolher}
+        modoComando={modoComando}
+        modoLayout={modoLayout}
+        setModoLayout={setModoLayout}
+        animarSinal={animarSinal}
+        setAnimarSinal={setAnimarSinal}
+        alternarModoComando={alternarModoComando}
+        baixa={baixa}
+        areasAbertas={areasAbertas}
+        alternarAreasAbertas={alternarAreasAbertas}
+        areas={cofre.areas}
+        areaFoco={areaFoco}
+        setAreaFoco={setAreaFoco}
+        autores={autores}
+        atual={atual}
+        areaAtual={areaAtual}
+        familia={familia}
+        truncado={truncado}
+        caminho={caminho}
+        alvoNo={alvoNo}
+        entram={entram}
+        saem={saem}
+        nome={nome}
+        curto={curto}
+        porqueDoSalto={porqueDoSalto}
+        setAlvo={setAlvo}
+        grafo={
+          <>
+            <Cabecalho cor="var(--color-lima)" meta={`${cofre.conexoes} ligações · ${modoComando ? '3D Force Graph' : '2D SVG'}`}>
+              mapa dos aprendizados
+            </Cabecalho>
+            {modoComando ? (
+              <Grafo3DCofre
+                nos={nos}
+                arestas={cofre.arestas}
+                escolhido={atual.id}
+                alvo={alvo}
+                areaFoco={areaFoco}
+                sempreVisiveis={sempreVisiveis}
+                caminho={caminho}
+                modoLayout={modoLayout}
+                animarSinal={animarSinal}
+                modoComando={modoComando}
+                aoEscolher={escolher}
+                aoLigar={ligar}
+              />
+            ) : (
+              <Mapa
+                nos={nos} arestas={cofre.arestas} caixa={estreito ? CAIXA_CELULAR : CAIXA_MESA}
+                ordemAreas={ordemAreas}
+                escolhido={atual.id} alvo={alvo} areaFoco={areaFoco} sempreVisiveis={sempreVisiveis}
+                caminho={caminho} modoLayout={modoLayout} animarSinal={animarSinal} modoComando={modoComando}
+                aoEscolher={escolher} aoLigar={ligar}
+              />
             )}
-          </div>
-
-          {/* Controles de Modo & Tema */}
-          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
-            {/* Seletor de Modo Layout */}
-            <div className="flex items-center rounded border border-linha/40 p-0.5">
-              {(['multi-anel', 'orbita', 'hierarquia'] as ModoLayout[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setModoLayout(m)}
-                  className={`rounded px-2 py-0.5 capitalize transition-all ${
-                    modoLayout === m
-                      ? (modoComando ? 'bg-sky-500 text-slate-950 font-bold' : 'bg-lima/30 text-tinta font-bold')
-                      : 'opacity-70 hover:opacity-100'
-                  }`}
-                >
-                  {m === 'multi-anel' ? '2D Multi-Anel' : m === 'orbita' ? 'Órbita' : 'Camadas'}
-                </button>
-              ))}
-            </div>
-
-            {/* Alternador de Animação do Feixe de Luz */}
-            <button
-              type="button"
-              onClick={() => setAnimarSinal((a) => !a)}
-              className={`rounded border px-2 py-1 transition-all ${
-                animarSinal
-                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-semibold'
-                  : 'border-linha/40 opacity-60'
-              }`}
-            >
-              {animarSinal ? '⚡ Sinal: ON' : '⚡ Sinal: OFF'}
-            </button>
-
-            {/* Alternador de Tema Centro de Comando Noturno */}
-            <button
-              type="button"
-              onClick={alternarModoComando}
-              className={`rounded border px-2.5 py-1 font-bold transition-all ${
-                modoComando
-                  ? 'border-sky-400 bg-sky-500/20 text-sky-300 shadow-[0_0_10px_rgba(56,189,248,0.3)]'
-                  : 'border-linha bg-carta-forte text-tinta'
-              }`}
-            >
-              {modoComando ? '🌙 Modo Comando (Dark)' : '☀️ Modo Sépia'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {baixa && (
-        <div data-cobertura-baixa className="mb-3 rounded-lg border border-ambar/30 bg-ambar/8 px-3 py-2.5 text-[11px] leading-relaxed text-tinta-2">
-          <span className="font-mono uppercase tracking-[.16em] text-ambar">Cobertura baixa.</span> Só {cofre.cobertura}% dos aprendizados estão amarrados a algum outro. O mapa mostra essa lacuna, não completa por semelhança.
-        </div>
-      )}
-
-      {(cofre.vencidos.length > 0 || cofre.recusados.length > 0
-        || cofre.truncados.length > 0 || cofre.arestas_recusadas.length > 0) && (
-        <div data-cofre-vencidos className="mb-3 rounded-lg border border-vermelho/30 bg-vermelho/8 px-3 py-2.5 text-[11px] leading-relaxed text-tinta-2">
-          <span className="font-mono uppercase tracking-[.16em] text-vermelho">Conferência.</span>{' '}
-          {cofre.vencidos.length > 0 && `${cofre.vencidos.length} registro(s) com âncora que não confere mais na fonte; ficam no mapa em traço interrompido. `}
-          {cofre.recusados.length > 0 && `${cofre.recusados.length} registro(s) recusado(s) na leitura. `}
-          {cofre.truncados.length > 0 && `${cofre.truncados.length} bloco(s) bateram no teto de 60 linhas. `}
-          {cofre.arestas_recusadas.length > 0 && `${cofre.arestas_recusadas.length} ligação(ões) declarada(s) e recusada(s).`}
-        </div>
-      )}
-
-      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        <Kpi rotulo="aprendizados" valor={nos.length} nota={cofre.arquivos === null ? undefined : `de ${cofre.arquivos} arquivo(s) de origem`} />
-        <Kpi rotulo="ligações" valor={cofre.conexoes} nota={`declaradas na fonte · ${cofre.arestas.filter((a) => a.ponte).length} atravessam áreas`} />
-        <Kpi rotulo="grau médio" valor={cofre.grau_medio} nota="ligações por aprendizado" />
-        <Kpi rotulo="famílias" valor={cofre.familias.length} nota={`${cofre.areas.length} áreas`} />
-        <Kpi rotulo="amarrados" valor={cofre.cobertura === null ? null : `${cofre.cobertura}%`} cor={baixa ? 'text-ambar' : 'text-verde'} nota="têm ao menos uma ligação" />
-      </div>
-
-      <div className={`grid items-start gap-3 transition-[grid-template-columns] duration-200 ${areasAbertas ? 'lg:grid-cols-[168px_minmax(0,1fr)_280px]' : 'lg:grid-cols-[40px_minmax(0,1fr)_280px]'}`}>
-        {/* Coluna Esquerda: Filtro de Áreas & Quem Aprendeu — recolhida por padrão, o grafo é a parte principal da tela */}
-        <aside className={`carta transition-colors ${areasAbertas ? 'p-3.5' : 'p-1.5'} ${modoComando ? 'bg-[#0B0F17]/90 border-sky-500/30' : ''}`}>
-          <button
-            type="button"
-            data-toggle-areas
-            onClick={alternarAreasAbertas}
-            title={areasAbertas ? 'recolher áreas' : 'expandir áreas'}
-            className={`flex w-full items-center rounded-md py-1 text-[10px] font-mono uppercase tracking-[.14em] opacity-80 hover:opacity-100 ${areasAbertas ? 'justify-between px-1' : 'justify-center'}`}
-          >
-            {areasAbertas ? <><span>áreas</span><span>{areaFoco ? 'filtrando' : '«'}</span></> : <span>»</span>}
-          </button>
-
-          {areasAbertas ? (
-            <>
-              <ul className="space-y-1">
-                {cofre.areas.map((a) => {
-                  const fixa = a.sempre_visivel === true || a.id === 'transversal'
-                  const so = areaFoco === a.id
-                  return (
-                    <li key={a.id}>
-                      <button
-                        type="button"
-                        data-filtro-area={fixa ? undefined : ''} data-area={a.id}
-                        aria-pressed={so}
-                        disabled={fixa}
-                        title={fixa ? 'transversal nunca é filtrada' : so ? 'mostrar o mapa inteiro' : 'ver só esta área'}
-                        onClick={() => !fixa && setAreaFoco(so ? null : a.id)}
-                        className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors duration-200 ${so ? 'border-lima/45 bg-lima/10' : 'border-transparent hover:border-linha'} ${fixa ? 'cursor-default opacity-90' : ''}`}
-                      >
-                        <span className="size-2 shrink-0 rounded-full" style={{ background: corDaArea(a.id) }} />
-                        <span className="min-w-0 flex-1 truncate text-[11px]">{a.nome}</span>
-                        <span className="font-mono text-[10px] opacity-70">{a.total}</span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-              <p className="mt-2 font-mono text-[9px] leading-relaxed opacity-70">
-                Clique numa área para ver só ela. Transversal fica sempre e pontes mantêm anéis vazados.
-              </p>
-
-              <div className="mt-4 border-t border-linha pt-3">
-                <Cabecalho cor="var(--color-ciano)">quem aprendeu</Cabecalho>
-                <ul className="space-y-1">
-                  {autores.map(([quem, quantos]) => (
-                    <li key={quem} className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[11px]">{quem}</span>
-                      <span className="font-mono text-[10px] opacity-70">{quantos}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </>
-          ) : (
-            <ul className="mt-1 space-y-1.5">
-              {cofre.areas.map((a) => {
-                const so = areaFoco === a.id
-                const fixa = a.sempre_visivel === true || a.id === 'transversal'
-                return (
-                  <li key={a.id}>
-                    <button
-                      type="button"
-                      data-filtro-area-recolhido data-area={a.id}
-                      aria-pressed={so}
-                      disabled={fixa}
-                      title={`${a.nome} · ${a.total}`}
-                      onClick={() => !fixa && setAreaFoco(so ? null : a.id)}
-                      className={`mx-auto flex size-5 items-center justify-center rounded-full border transition-colors ${so ? 'border-lima/60' : 'border-transparent hover:border-linha'}`}
-                    >
-                      <span className="size-2 shrink-0 rounded-full" style={{ background: corDaArea(a.id) }} />
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </aside>
-
-        {/* Coluna Central: O Grafo Interativo 3D / 2D com Fundo Sináptico — a parte mais importante da tela */}
-        <section className={`carta overflow-hidden p-3 transition-colors ${modoComando ? 'bg-[#0B0F17]/90 border-sky-500/30' : ''}`}>
-          <Cabecalho cor="var(--color-lima)" meta={`${cofre.conexoes} ligações · ${modoComando ? '3D Force Graph' : '2D SVG'}`}>
-            mapa dos aprendizados
-          </Cabecalho>
-          {modoComando ? (
-            <Grafo3DCofre
-              nos={nos}
-              arestas={cofre.arestas}
-              escolhido={atual.id}
-              alvo={alvo}
-              areaFoco={areaFoco}
-              sempreVisiveis={sempreVisiveis}
-              caminho={caminho}
-              modoLayout={modoLayout}
-              animarSinal={animarSinal}
-              modoComando={modoComando}
-              aoEscolher={escolher}
-              aoLigar={ligar}
-            />
-          ) : (
-            <Mapa
-              nos={nos} arestas={cofre.arestas} caixa={estreito ? CAIXA_CELULAR : CAIXA_MESA}
-              ordemAreas={ordemAreas}
-              escolhido={atual.id} alvo={alvo} areaFoco={areaFoco} sempreVisiveis={sempreVisiveis}
-              caminho={caminho} modoLayout={modoLayout} animarSinal={animarSinal} modoComando={modoComando}
-              aoEscolher={escolher} aoLigar={ligar}
-            />
-          )}
-        </section>
-
-        {/* Coluna Direita: Ficha do Aprendizado (Com Relações Dirigidas PRE & NEXT Clicáveis) */}
-        <aside data-ficha-cofre className={`carta p-4 transition-colors ${modoComando ? 'bg-[#0B0F17]/90 border-sky-500/30' : ''}`}>
-          <Cabecalho cor="var(--color-ciano)" meta={<span data-ficha-especie>{atual.especie}</span>}>
-            ficha do aprendizado
-          </Cabecalho>
-          <h2 className="font-serif text-[22px] leading-tight font-bold">{atual.rotulo}</h2>
-
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span data-ficha-autor className="text-[12px]">
-              <span className="rotulo mr-1.5">quem</span>{atual.autor}
-            </span>
-            <span data-ficha-quando className="font-mono text-[10px] opacity-70">
-              {atual.quando.split('-').reverse().join('/')}
-            </span>
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <span data-ficha-area className="inline-flex items-center gap-1.5 rounded-full border border-linha-forte px-2 py-[3px]">
-              <span className="size-[5px] rounded-full" style={{ background: corDaArea(atual.area) }} />
-              <span className="font-mono text-[9px] leading-none uppercase tracking-[0.14em] opacity-80">{areaAtual?.nome ?? atual.area}</span>
-            </span>
-            <span data-ficha-familia><Pilula tom="lima">{familia?.nome ?? atual.familia}</Pilula></span>
-            {atual.vencido && <Pilula tom="vermelho">âncora vencida</Pilula>}
-          </div>
-
-          <div className="my-3.5 grid grid-cols-3 gap-2">
-            <div data-ficha-peso className="poco p-2.5">
-              <div className="rotulo mb-1.5">peso</div>
-              <div className="font-serif text-xl">{atual.peso}<span className="text-[11px] opacity-70">/5</span></div>
-            </div>
-            <div className="poco p-2.5">
-              <div className="rotulo mb-1.5">ligações</div>
-              <div className="font-serif text-xl">{atual.grau}</div>
-            </div>
-            <div className="poco p-2.5">
-              <div className="rotulo mb-1.5">linhas</div>
-              <div className="font-serif text-xl">
-                {atual.linhas || '—'}
-                {truncado && <span className="ml-1 text-[10px] text-ambar" title="o bloco bateu no teto de 60 linhas">no teto</span>}
-              </div>
-            </div>
-          </div>
-
-          <p data-ficha-corpo className="text-[12px] leading-relaxed opacity-90">{atual.corpo}</p>
-          <div data-ficha-caso className="mt-3 rounded-md border border-linha bg-white/5 p-2.5">
-            <div className="rotulo mb-1.5">o caso</div>
-            <p className="text-[11px] leading-relaxed opacity-85">{atual.caso}</p>
-          </div>
-          <p className="mt-2 break-all font-mono text-[10px] opacity-60">{atual.arquivo}</p>
-
-          {/* ROTA / CAMINHO SELECIONADO */}
-          {caminho !== null && alvoNo && (
-            <div data-caminho-cofre className="mt-3.5 rounded-md border border-vermelho/30 bg-vermelho/10 p-2.5">
-              <div className="rotulo mb-1.5 text-vermelho">caminho até {alvoNo.rotulo}</div>
-              <ol className="space-y-1.5">
-                {caminho.slice(1).map((id, i) => (
-                  <li data-caminho-salto key={id} className="text-[11px] leading-relaxed">
-                    <button type="button" className="text-left font-medium underline underline-offset-2" onClick={() => escolher(id)}>
-                      {nome(id)}
-                    </button>
-                    <span className="block font-mono text-[9px] opacity-70">porque: {porqueDoSalto(caminho[i], id)}</span>
-                  </li>
-                ))}
-              </ol>
-              <button type="button" className="rotulo mt-2 underline underline-offset-2" onClick={() => setAlvo(null)}>limpar caminho</button>
-            </div>
-          )}
-
-          {/* RELAÇÕES DIRIGIDAS ESTILO KIMI (PRE: ANTECEDENTES -> NEXT: DESTRAVA) */}
-          <div className="mt-4 space-y-3.5 border-t border-linha pt-3">
-            {/* PRE / ANTECEDENTES */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="rotulo flex items-center gap-1">
-                  <span className="rounded bg-amber-500/20 px-1 font-bold text-amber-400">PRE</span>
-                  antecedentes (de onde veio)
-                </span>
-                <span className="font-mono text-[10px] opacity-60">{entram.length}</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {entram.length ? entram.map((a) => (
-                  <button
-                    type="button"
-                    key={`${a.de}:${a.para}`}
-                    title={`PRE: ${a.porque}`}
-                    onClick={() => escolher(a.de)}
-                    className="group transition-transform active:scale-95"
-                  >
-                    <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-left font-mono text-[10.5px] hover:border-amber-400">
-                      <span className="size-1.5 rounded-full" style={{ background: corDaArea(nos.find((n) => n.id === a.de)?.area ?? '') }} />
-                      <span className="truncate max-w-[190px]">{curto(a.de)}</span>
-                    </span>
-                  </button>
-                )) : <span className="text-xs opacity-50">nenhum antecedente declarado</span>}
-              </div>
-            </div>
-
-            {/* NEXT / DESTRAVA */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="rotulo flex items-center gap-1">
-                  <span className="rounded bg-sky-500/20 px-1 font-bold text-sky-400">NEXT</span>
-                  destrava / consequências
-                </span>
-                <span className="font-mono text-[10px] opacity-60">{saem.length}</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {saem.length ? saem.map((a) => (
-                  <button
-                    type="button"
-                    key={`${a.de}:${a.para}`}
-                    title={`NEXT: ${a.porque}`}
-                    onClick={() => escolher(a.para)}
-                    className="group transition-transform active:scale-95"
-                  >
-                    <span className="inline-flex items-center gap-1.5 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-left font-mono text-[10.5px] hover:border-sky-400">
-                      <span className="size-1.5 rounded-full" style={{ background: corDaArea(nos.find((n) => n.id === a.para)?.area ?? '') }} />
-                      <span className="truncate max-w-[190px]">{curto(a.para)}</span>
-                    </span>
-                  </button>
-                )) : <span className="text-xs opacity-50">não destrava outro registro diretamente</span>}
-              </div>
-            </div>
-
-            {/* Nota de Privacidade & Auditoria */}
-            <div className="border-t border-linha pt-3 font-mono text-[10px] leading-relaxed opacity-60">
-              Registro auditado na fonte. Título, corpo, caso e autor passam pela trava sanitizadora de PII do coletor.
-            </div>
-          </div>
-        </aside>
-      </div>
+          </>
+        }
+      />
 
       <Parcial dado={vista.dado} />
     </div>

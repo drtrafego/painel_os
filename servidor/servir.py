@@ -91,7 +91,7 @@ ENDERECO = os.environ.get(
 # A credencial mora FORA de painel_os, no mesmo lugar dos outros segredos da
 # casa, com modo 600. Formato: uma linha "usuario:senha".
 CREDENCIAL = Path("/opt/gastaomatos/luana/.painel_os.credencial")
-SENHA_MINIMA = 16
+SENHA_MINIMA = 12  # baixado de 16 pra 12 por pedido dele em 21/09/2026
 # Custo por tentativa errada. Não é proteção séria (a senha é longa), é só para
 # tornar caro varrer a porta. Cada requisição roda na própria thread.
 ATRASO_FALHA = 0.4

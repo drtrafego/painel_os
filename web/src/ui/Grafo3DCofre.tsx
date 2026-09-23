@@ -1,7 +1,16 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import ForceGraph3D from '3d-force-graph'
 import * as THREE from 'three'
-import { corDaArea, RAIO_MINIMO_CLICAVEL } from '../dados/cofre'
+import { corDaAreaEscuro, RAIO_MINIMO_CLICAVEL } from '../dados/cofre'
+
+// ‼️ 21/09/2026: `corDaArea()` (o original) devolve `var(--color-nome)`, que
+// só CSS/SVG resolvem sozinhos — THREE.Color não entende essa sintaxe e
+// falhava em silêncio (warning "Unknown color model", caindo num cinza
+// default). Este componente é SEMPRE modo escuro (só existe quando
+// `modoComando=true`), então usa `corDaAreaEscuro()`, que já devolve hex
+// direto, sem `var()` — resolve os dois problemas de uma vez (cor errada E
+// paleta que tinha 3 áreas com o MESMO hex, achado dele: "área não tem
+// todas as cores").
 import type { ArestaCofre, NoMemoria } from '../dados/tipos'
 
 type PropsGrafo3D = {
@@ -36,59 +45,76 @@ export function Grafo3DCofre({
   const containerRef = useRef<HTMLDivElement>(null)
   const fgRef = useRef<any>(null)
 
-  // Conjuntos auxiliares de visibilidade e seleção
+  // Conjuntos auxiliares de visibilidade e seleção (para os callbacks de
+  // estilo, recalculado toda hora, é barato: Set/Map pequenos)
   const noCaminho = new Set(caminho ?? [])
-  const area = new Map(nos.map((n) => [n.id, n.area]))
-  
-  const visivel = (id: string) =>
-    areaFoco === null ||
-    area.get(id) === areaFoco ||
-    sempreVisiveis.includes(area.get(id) ?? '') ||
-    noCaminho.has(id)
 
-  const arestasVisiveis = arestas.filter((a) => {
-    const deVis = visivel(a.de)
-    const paraVis = visivel(a.para)
-    if (deVis && paraVis) return true
-    if (noCaminho.has(a.de) && noCaminho.has(a.para)) return true
-    return a.ponte && (area.get(a.de) === areaFoco || area.get(a.para) === areaFoco)
-  })
+  // ‼️ CORRIGIDO 21/09/2026: "o grafo fica mudando toda hora, não é fixo"
+  // (achado dele, olhando a tela ao vivo). Causa raiz: `graphData` era um
+  // objeto literal novo A CADA RENDER (referência sempre diferente, mesmo
+  // com o mesmo conteúdo), e o efeito abaixo que chama `fg.graphData(...)`
+  // tinha `[graphData, ...]` nas deps — então TODA vez que Cofre.tsx
+  // re-renderizava por qualquer motivo (o `useFps` sozinho já causa 1
+  // render/segundo), a simulação de física do 3d-force-graph recebia os
+  // dados de novo e reaquecia (`d3ReheatSimulation`), fazendo os nós
+  // tremerem/se reposicionarem sem parar. `useMemo` com dependências nos
+  // dados REAIS (não a referência do objeto) resolve: só reconstrói quando
+  // nós/arestas/área/caminho realmente mudam.
+  const graphData = useMemo(() => {
+    const area = new Map(nos.map((n) => [n.id, n.area]))
+    const noCaminhoMemo = new Set(caminho ?? [])
 
-  // ‼️ CAUSA RAIZ CORRIGIDA 20/09/2026: uma aresta "ponte" podia entrar em
-  // arestasVisiveis com uma ponta fora da área filtrada (por desenho: "pontes
-  // mantêm anéis vazados"), mas o node dessa ponta nunca entrava em
-  // graphData.nodes, porque só olhava visivel(n.id). O 3d-force-graph (d3-force)
-  // exige que todo link.source/target exista no array de nodes, senão lança
-  // "node not found: <id>" e quebra o grafo inteiro. Achado ao clicar num
-  // filtro de área: qualquer clique nos botões de área (recolhidos ou não)
-  // reproduzia. Correção: todo endpoint de uma aresta visível entra no
-  // conjunto de nós, mesmo quando sua própria área está fora do foco.
-  const idsPorPonte = new Set<string>()
-  for (const a of arestasVisiveis) {
-    if (!visivel(a.de)) idsPorPonte.add(a.de)
-    if (!visivel(a.para)) idsPorPonte.add(a.para)
-  }
+    const visivel = (id: string) =>
+      areaFoco === null ||
+      area.get(id) === areaFoco ||
+      sempreVisiveis.includes(area.get(id) ?? '') ||
+      noCaminhoMemo.has(id)
 
-  // Converte nós e arestas para formato do 3d-force-graph
-  const graphData = {
-    nodes: nos.filter((n) => visivel(n.id) || idsPorPonte.has(n.id)).map((n) => ({
-      id: n.id,
-      rotulo: n.rotulo,
-      especie: n.especie,
-      autor: n.autor,
-      area: n.area,
-      grau: n.grau,
-      peso: n.peso,
-      vencido: n.vencido,
-      val: Math.max(RAIO_MINIMO_CLICAVEL, 2 + Math.sqrt(n.grau) * 2.5),
-    })),
-    links: arestasVisiveis.map((a) => ({
-      source: a.de,
-      target: a.para,
-      porque: a.porque,
-      ponte: a.ponte,
-    })),
-  }
+    const arestasVisiveis = arestas.filter((a) => {
+      const deVis = visivel(a.de)
+      const paraVis = visivel(a.para)
+      if (deVis && paraVis) return true
+      if (noCaminhoMemo.has(a.de) && noCaminhoMemo.has(a.para)) return true
+      return a.ponte && (area.get(a.de) === areaFoco || area.get(a.para) === areaFoco)
+    })
+
+    // ‼️ CAUSA RAIZ CORRIGIDA 20/09/2026: uma aresta "ponte" podia entrar em
+    // arestasVisiveis com uma ponta fora da área filtrada (por desenho: "pontes
+    // mantêm anéis vazados"), mas o node dessa ponta nunca entrava em
+    // graphData.nodes, porque só olhava visivel(n.id). O 3d-force-graph (d3-force)
+    // exige que todo link.source/target exista no array de nodes, senão lança
+    // "node not found: <id>" e quebra o grafo inteiro. Achado ao clicar num
+    // filtro de área: qualquer clique nos botões de área (recolhidos ou não)
+    // reproduzia. Correção: todo endpoint de uma aresta visível entra no
+    // conjunto de nós, mesmo quando sua própria área está fora do foco.
+    const idsPorPonte = new Set<string>()
+    for (const a of arestasVisiveis) {
+      if (!visivel(a.de)) idsPorPonte.add(a.de)
+      if (!visivel(a.para)) idsPorPonte.add(a.para)
+    }
+
+    // Converte nós e arestas para formato do 3d-force-graph
+    return {
+      nodes: nos.filter((n) => visivel(n.id) || idsPorPonte.has(n.id)).map((n) => ({
+        id: n.id,
+        rotulo: n.rotulo,
+        especie: n.especie,
+        autor: n.autor,
+        area: n.area,
+        grau: n.grau,
+        peso: n.peso,
+        vencido: n.vencido,
+        val: Math.max(RAIO_MINIMO_CLICAVEL, 2 + Math.sqrt(n.grau) * 2.5),
+      })),
+      links: arestasVisiveis.map((a) => ({
+        source: a.de,
+        target: a.para,
+        porque: a.porque,
+        ponte: a.ponte,
+      })),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nos, arestas, areaFoco, sempreVisiveis, caminho])
 
   // Inicializa o ForceGraph3D
   useEffect(() => {
@@ -107,6 +133,15 @@ export function Grafo3DCofre({
       .nodeRelSize(4)
       .nodeId('id')
       .nodeVal('val')
+      // ‼️ 21/09/2026: modo "multi-anel" (o default, sem fx/fy/fz fixo) nunca
+      // parava de tremer, mesmo depois de memoizar graphData, porque o
+      // default do d3AlphaMin é ~0.0001 (a simulação nunca se considera
+      // "resolvida"). Órbita/Camadas fixam fx/fy/fz por nó e por isso já
+      // pareciam parados. Subir o alphaMin faz a simulação DESLIGAR sozinha
+      // quando o movimento já é imperceptível, em vez de rodar pra sempre.
+      // `as any` porque o accessor existe em runtime mas não está nos
+      // typings do pacote (confirmado lendo o .mjs compilado).
+      ;(Graph as any).d3AlphaMin(0.02)
 
     // Estilo dos Nós (Objetos 3D customizados com Three.js)
     Graph.nodeThreeObject((node: any) => {
@@ -120,7 +155,7 @@ export function Grafo3DCofre({
       const radius = isChosen ? 7 : isTarget || isInPath ? 6 : Math.max(3, 2 + Math.sqrt(node.grau) * 1.5)
       const geometry = new THREE.SphereGeometry(radius, 16, 16)
       
-      const colorHex = corDaArea(node.area)
+      const colorHex = corDaAreaEscuro(node.area)
       const material = new THREE.MeshLambertMaterial({
         color: isChosen ? '#A3E635' : isTarget || isInPath ? '#EF4444' : colorHex,
         transparent: true,
@@ -236,12 +271,19 @@ export function Grafo3DCofre({
       })
     } else if (modoLayout === 'hierarquia') {
       // Disposição em Camadas / Tiers por Espécie
-      const especies = ['regra', 'dor', 'gancho', 'métrica', 'decisão', 'conceito', 'sinal', 'alerta', 'lead']
+      // ‼️ CORRIGIDO 21/09/2026: esta lista tinha espécies de OUTRO domínio
+      // (regra/dor/gancho/métrica/decisão/conceito/sinal/alerta/lead, que
+      // parecem categorias de copywriting) e ZERO overlap com as espécies
+      // reais do Cofre (medido em data/cofre.json: correcao, defeito,
+      // medicao, ordem, padrao, trava). Todo nó caía em indexOf === -1, ou
+      // seja, TODOS na mesma camada — achado dele: "o gráfico de camadas
+      // está ruim", e era isso: layout plano disfarçado de hierarquia.
+      const especies = ['padrao', 'ordem', 'trava', 'correcao', 'defeito', 'medicao']
       nos.forEach((n, i) => {
         const node3d = fg.graphData().nodes.find((x: any) => x.id === n.id)
         if (!node3d) return
         const layerIdx = especies.indexOf(n.especie.toLowerCase())
-        node3d.fy = (layerIdx - 4) * 60
+        node3d.fy = ((layerIdx === -1 ? especies.length : layerIdx) - especies.length / 2) * 60
         node3d.fx = ((i % 6) - 2.5) * 55
         node3d.fz = (Math.floor(i / 6) - 2) * 40
       })

@@ -112,10 +112,12 @@ export function TituloDaTela({
   titulo,
   pergunta,
   direita,
+  mostrarSeletorData = true,
 }: {
   titulo: string
   pergunta: string
   direita?: ReactNode
+  mostrarSeletorData?: boolean
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-end justify-between gap-x-5 gap-y-2">
@@ -124,7 +126,7 @@ export function TituloDaTela({
         <p className="rotulo mt-1.5">{pergunta}</p>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2">
-        <SeletorDeData />
+        {mostrarSeletorData && <SeletorDeData />}
         {direita}
       </div>
     </div>

@@ -616,6 +616,154 @@ aprendizado novo: dependem de declarar ligação entre os 46 que já estão lá.
 Fazer o resto antes disso produz uma tela cheia de controle sem nada para
 controlar.
 
+### 3.2.1 Feedback dele em 21/09/2026, layout (ainda projeto congelado, só documentar)
+
+Por Telegram, olhando a tela do Cofre ao vivo (print anexado, mês Setembro
+2026, 46 aprendizados/46 ligações/grau médio 2/8 famílias/97,8% amarrados),
+literal:
+
+*"não precisa ter 2 seletores de data deixa só o de cima, cofre está errado
+ele fica dando erro no grafo, outra coisa no notebook ela deveria aparecer
+maior o centro de comando do grafo pode ficar dentro dele como é no kimi, a
+barra lateral direita achei sem sentido se fizer sentido ela que fique
+dinâmica dentro do grafo, na parte cofre de conhecimento o grafo funcionando
+deve ser a tela principal tudo que for de informação ela deve ser integrada
+na tela do grafo"*
+
+Traduzindo item a item, contra o que o print mostra:
+
+1. **Dois seletores de data redundantes no topo** (`Setembro 2026` e
+   `01/09/26 — 30/09/26`, lado a lado). Ele quer só o de cima (o mês).
+2. **A faixa amarela "CONFERÊNCIA: 3 registro(s) com âncora que não confere
+   mais na fonte" aparece como erro pra ele.** Não sei ainda se é alarme
+   legítimo (âncora quebrada de verdade) ou UI ruim mostrando isso como
+   se fosse falha do sistema — precisa investigar antes de mexer.
+3. **"O notebook"** = a ficha lateral direita ("A ficha do aprendizado",
+   hoje ocupa uma faixa estreita fixa). Ele quer ela MAIOR.
+4. **"O centro de comando do grafo pode ficar dentro dele como é no Kimi"**
+   = os controles (busca, filtro, modos de layout, etc., hoje espalhados
+   em cima/nas laterais) deveriam morar DENTRO da área do grafo, não em
+   painéis separados ao redor — é literalmente o padrão do Kimi já
+   documentado acima (coluna esquerda E direita dele vivem coladas no
+   grafo, não como blocos isolados).
+5. **A barra lateral direita "sem sentido"**: ele não está pedindo pra
+   tirar, está pedindo pra ela ficar DINÂMICA dentro do grafo (não fixa
+   num painel separado) SE fizer sentido manter.
+6. **Direção geral: o grafo vira a tela principal inteira**, e todo o
+   resto (métricas do topo, ficha, seletores) se integra NELE, em vez de
+   coexistir como caixas separadas ao redor. É uma mudança de arquitetura
+   de layout, não um ajuste pontual.
+
+**DESCONGELADO em 21/09/2026, ordem dele:** "pode ir fazendo tudo que eu pedi
+hoje" + "use o codex mais fraco/operacional pra fazer essa parte dos códigos
+do grafo". Executado com Codex CLI (`codex exec -s workspace-write -c
+model_reasoning_effort=high`, sem `-m` porque `gpt-5.1-codex-max` não é
+suportado nesta conta ChatGPT — o default com reasoning alto funciona).
+**IMPORTANTE: `codex exec` trava lendo stdin se não fechar com `< /dev/null`
+explícito** (aconteceu uma vez, matei o processo e relancei — mesma família
+do `iniciar.sh` do painel, que já usa `< /dev/null` por esse motivo).
+
+Progresso, cada item CONFERIDO ao vivo com Playwright + credencial real
+(nunca só `tsc --noEmit`):
+1. ✅ **Seletor duplicado removido.** `TituloDaTela` (primitivos.tsx) ganhou
+   prop `mostrarSeletorData?: boolean` (default `true`, zero impacto nas
+   outras 12 telas, confirmado por grep). Cofre.tsx passa `false` nas 2
+   chamadas.
+2. ✅ **As 2 âncoras reanexáveis do Cofre, corrigidas** (ver seção acima).
+   Confirmado rodando o coletor de novo: 3 vencidos → 1 (o terceiro
+   precisa de decisão humana, ficou com `nota_curadoria`).
+3. ✅ **Ficha e coluna de áreas extraídas** pra `web/src/ui/FichaCofre.tsx`
+   e `web/src/ui/ColunaAreasCofre.tsx`, extração pura (mesmos `data-*`,
+   mesma lógica), testado clicando de verdade no navegador (expandir área,
+   trocar nó selecionado, sem erro de JS).
+4. ✅ **Ficha mais larga**: coluna direita 280px → 400px, chips PRE/NEXT
+   `max-w-190px` → `max-w-280px`. Screenshot real confirma texto com mais
+   espaço, nada cortado torto.
+5. ✅ **`PainelInstrumentoCofre.tsx` montado**, controles + KPIs + banners
+   (agora pílulas expansíveis, `useState` por pílula) dentro do mesmo
+   `carta` do grafo, colunas DOCKADAS lado a lado (nunca overlay sobre o
+   canvas WebGL, seguindo a decisão do arquiteto). Testado de verdade:
+   clique na pílula "âncora vencida" expande o texto (`data-cofre-vencidos`
+   preservado), clique em "Órbita" no rodapé muda o modo do grafo e marca
+   `aria-pressed`, zero erro de console.
+   ⚠️ **Ajuste feito depois do primeiro build:** as colunas de áreas e da
+   ficha não tinham altura combinada com o grafo (`h-[680px]` só nele),
+   deixando um vão vazio grande antes do rodapé quando a ficha tinha pouco
+   conteúdo. Corrigido dando `lg:h-[680px] lg:overflow-y-auto` às três
+   colunas, cada uma rola por dentro em vez de esticar a linha inteira.
+6. ✅ **"Fica mudando toda hora, não é fixo"** (achado dele, olhando a tela
+   ao vivo, DOIS bugs reais, não um): (a) `graphData` em `Grafo3DCofre.tsx`
+   era objeto novo a cada render, e o `useFps` já causa ~1 render/segundo
+   sozinho — cada render reenviava os dados pra física do 3d-force-graph e
+   reaquecia a simulação. Corrigido com `useMemo` nas dependências reais
+   (nós/arestas/área/caminho), não a referência do objeto. (b) o modo "2D
+   Multi-Anel" (o único sem `fx/fy/fz` fixo por nó) nunca tinha motivo pra
+   PARAR de simular: o `d3AlphaMin` default (~0,0001) faz a simulação achar
+   que nunca "resolveu". Subido pra `0,02` (`Graph.d3AlphaMin(0.02)`, `as
+   any` porque o accessor existe em runtime mas não está nos typings do
+   pacote). Órbita/Camadas já pareciam parados porque fixam posição por nó.
+
+**Rodada 2 de feedback dele, mesmo dia, olhando o resultado ao vivo (print
+real com números ilegíveis, mais 3 reclamações por texto):**
+
+7. ✅ **Contraste ilegível nos cards peso/ligações/linhas em modo escuro**
+   (achado no PRINT dele, não só relato). Causa: esses cards usam o
+   utilitário `.poco` (`index.css`), que só tem cor pensada pro tema claro
+   (fundo creme) — nunca foi adaptado pra `modoComando`, que é estado local
+   de componente, não um `data-theme` de verdade. `FichaCofre.tsx` agora
+   troca pra `bg-slate-900/70 text-slate-100` quando `modoComando`.
+8. ✅ **Modo "Camadas" (hierarquia) "está ruim"**: a lista de espécies no
+   código (`regra/dor/gancho/métrica/decisão/conceito/sinal/alerta/lead`)
+   tinha **zero overlap** com as espécies reais do Cofre (medido em
+   `data/cofre.json`: `correcao/defeito/medicao/ordem/padrao/trava`). Todo
+   nó caía em `indexOf === -1`, ou seja, TODOS na mesma camada — layout
+   plano disfarçado de "camadas". Lista trocada pras espécies reais, com
+   fallback seguro (nunca mais `-1` fixo) pra espécie desconhecida futura.
+   ⚠️ **Documentei aqui "corrigido nos dois lugares" e era MENTIRA, não
+   verificada** — só tinha corrigido `Grafo3DCofre.tsx` (3D). A cópia local
+   do modo Camadas em `Cofre.tsx` (2D, usada no tema claro) ficou com a
+   lista velha. Resultado real, visto por ELE em print, não achado por
+   mim: os 46 nós caindo todos no bucket "outro" (coluna única), círculos
+   se encostando, e o próprio mapa desistindo e caindo pro modo lista de
+   emergência ("this tamanho de tela não comporta 46 aprendizados").
+   **Corrigido de verdade agora nos dois arquivos**, reconferido ao vivo
+   nos dois (screenshot do 2D em modo Camadas mostrando colunas separadas,
+   não mais uma bolha). Lição: "corrigido nos X lugares" exige abrir os X
+   arquivos de novo depois, não só lembrar que a intenção era essa.
+9. ✅ **"2D Multi-Anel ainda está piscando"**: raiz igual ao item 6, num
+   lugar que eu não tinha olhado ainda — `autores`, `sempreVisiveis` e
+   `ordemAreas` em `Cofre.tsx` eram arrays **novos a cada render** (mesmo
+   sem `useMemo`), e `sempreVisiveis`/`ordemAreas` alimentam o cálculo de
+   posição do mapa 2D E o `useMemo` do `graphData` do 3D — então mesmo
+   depois do conserto do item 6, esse `useMemo` continuava invalidando
+   (dependência "nova" por referência) a cada tick do `useFps`. Os três
+   agora usam `useMemo` com dependência real (`[nos]`/`[cofre.areas]`).
+   **Medido, não só assumido**: `MutationObserver` no `<svg>` por 4s deu
+   **zero mutações** depois do conserto (antes, cada render do FPS
+   redesenhava o mapa inteiro — é literalmente o que "piscando" descreve).
+
+**Rodada 3, print real dele mostrando os nós TODOS BRANCOS no modo escuro:**
+
+10. ✅ **Cor de área não chegava no grafo 3D** (achado por print real dele,
+    confirmado com `console` do navegador: dezenas de warnings `THREE.Color:
+    Unknown color model var(--color-X)`). Causa: `corDaArea()` devolve
+    `var(--color-nome)`, formato que só CSS/SVG resolvem sozinhos — o
+    `THREE.MeshLambertMaterial` recebia essa string crua, falhava em
+    silêncio e caía num branco/cinza default. **E junto**, medido em
+    `index.css`: `--color-lima`, `--color-ambar` e `--color-tinta-3` são o
+    **mesmo hex** (`#7a4a0f`), então mesmo se resolvesse, 3 áreas
+    diferentes teriam a cor idêntica — é o "área não tem todas as cores"
+    que ele via na coluna de áreas também. **Solução:** `corDaAreaEscuro()`
+    nova em `dados/cofre.ts`, paleta separada só pro modo escuro, hex
+    direto (sem `var()`, sem ambiguidade), saturação alta de propósito
+    ("mais fluor", pedido dele). Aplicada em `Grafo3DCofre.tsx` (sempre
+    escuro), e condicionalmente (`modoComando ? corDaAreaEscuro :
+    corDaArea`) em `ColunaAreasCofre.tsx` e `FichaCofre.tsx`, que servem os
+    dois temas. O `Mapa` 2D (SVG) não precisou mexer, só roda no tema
+    claro, onde a paleta original já funciona. Verificado: zero warnings de
+    `THREE.Color` no console depois do conserto, screenshot real do grafo
+    mostrando 6+ cores distintas nos nós.
+
 ## 3.3 Terceira referência: **BENNETT OS**
 
 Em `referencias/nievas-os-painel/reel-9418-bennett-os/`, com vídeo, transcrição
