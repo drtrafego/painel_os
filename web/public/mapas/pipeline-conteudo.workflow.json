@@ -28,13 +28,12 @@
     "output": "web/public/mapas/pipeline-conteudo.html"
   },
   "lanes": [
-    { "id": "pipeline", "label": "Pipeline de conteúdo" },
-    { "id": "fechamento", "label": "Qualidade e distribuição" }
+    { "id": "pipeline", "label": "Pipeline de conteúdo" }
   ],
   "phases": [
     { "id": "descoberta", "label": "Descoberta", "fromCol": 0, "toCol": 0 },
     { "id": "decisao", "label": "Decisão", "fromCol": 1, "toCol": 1, "variant": "emphasis" },
-    { "id": "producao", "label": "Produção", "fromCol": 2, "toCol": 2 }
+    { "id": "producao", "label": "Produção", "fromCol": 2, "toCol": 3 }
   ],
   "groups": [],
   "mainPath": ["origem", "suri", "gastao", "theo", "producao", "corretor", "guardiao", "destino", "ciclo"],
@@ -55,11 +54,11 @@
     { "id": "suri", "lane": "pipeline", "col": 1, "type": "backend", "label": "Suri", "sublabel": "plano", "tag": "estratégia", "width": 120 },
     { "id": "gastao", "lane": "pipeline", "col": 2, "type": "security", "label": "Gastão", "sublabel": "aprovação", "tag": "gate humano", "width": 124 },
     { "id": "theo", "lane": "pipeline", "col": 3, "type": "backend", "label": "Theo", "sublabel": "conceito", "width": 120 },
-    { "id": "producao", "lane": "pipeline", "col": 4, "type": "backend", "label": "Cleo + Dani", "sublabel": "produção", "tag": "texto e design", "width": 128 },
-    { "id": "corretor", "lane": "pipeline", "col": 4, "type": "security", "label": "Corretor", "sublabel": "revisão", "width": 120, "yOffset": 92 },
-    { "id": "guardiao", "lane": "fechamento", "col": 5, "type": "security", "label": "Guardião", "sublabel": "PASSA", "tag": "trava final", "width": 124 },
-    { "id": "destino", "lane": "fechamento", "col": 5, "type": "backend", "label": "Publicador ou Gestor", "sublabel": "publica", "width": 152, "yOffset": 80 },
-    { "id": "ciclo", "lane": "fechamento", "col": 5, "type": "database", "label": "D+3 e D+7", "sublabel": "aprendizado", "tag": "ciclo à parte", "width": 124, "yOffset": 160 }
+    { "id": "producao", "lane": "pipeline", "col": 3, "type": "backend", "label": "Cleo + Dani", "sublabel": "produção", "tag": "texto e design", "width": 128, "yOffset": 82 },
+    { "id": "corretor", "lane": "pipeline", "col": 4, "type": "security", "label": "Corretor", "sublabel": "revisão", "width": 120 },
+    { "id": "guardiao", "lane": "pipeline", "col": 5, "type": "security", "label": "Guardião", "sublabel": "PASSA", "tag": "trava final", "width": 124 },
+    { "id": "destino", "lane": "pipeline", "col": 5, "type": "backend", "label": "Publicador ou Gestor", "sublabel": "publica", "width": 152, "yOffset": 82 },
+    { "id": "ciclo", "lane": "pipeline", "col": 5, "type": "database", "label": "D+3 e D+7", "sublabel": "aprendizado", "tag": "ciclo à parte", "width": 124, "yOffset": 164 }
   ],
   "edges": [
     { "id": "origem-suri", "from": "origem", "to": "suri", "label": "sinal", "variant": "default", "role": "main" },
