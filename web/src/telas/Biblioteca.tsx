@@ -35,6 +35,28 @@ export function Biblioteca({ estado, vista }: PropsTela) {
         <ul className="max-h-[600px] overflow-y-auto">{biblioteca.itens.map((item) => <Linha key={item.id} item={item} />)}</ul>
         <p className="border-t border-linha px-4 py-3 text-[10.5px] leading-relaxed text-tinta-3">Itens de clientes aparecem sem nome e sem caminho. A tela é um índice de leitura: não há botão de abrir, baixar ou publicar porque nenhuma referência mostrou essas ações na Biblioteca.</p>
       </section>
+      <section className="carta mt-3 overflow-hidden" aria-labelledby="mapas-operacao">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-linha px-4 py-4">
+          <div>
+            <Cabecalho cor="var(--color-ciano)" meta="workflow interativo">Mapas da operação</Cabecalho>
+            <p id="mapas-operacao" className="mt-1 max-w-2xl text-[12px] leading-relaxed text-tinta-2">
+              Pipeline vigente de conteúdo, da pesquisa ao ciclo D+3 e D+7. Gastão aparece como gate humano obrigatório.
+            </p>
+          </div>
+          <a className="shrink-0 rounded-md border border-linha px-3 py-2 text-[11px] text-ciano transition-colors hover:border-ciano/60 hover:bg-ciano/10" href="/mapas/pipeline-conteudo.html" target="_blank" rel="noreferrer">
+            abrir mapa completo
+          </a>
+        </div>
+        <div className="bg-black/10 p-2 sm:p-3">
+          <iframe
+            className="h-[min(68vw,520px)] min-h-[360px] w-full rounded-lg border border-linha bg-[#101215]"
+            src="/mapas/pipeline-conteudo.html"
+            title="Mapa interativo do pipeline de conteúdo da operação"
+            loading="lazy"
+          />
+        </div>
+        <p className="border-t border-linha px-4 py-3 text-[10.5px] leading-relaxed text-tinta-3">O mapa é um artefato versionado da Biblioteca. Use o link para abrir a leitura completa, com tema, foco e exportação do próprio Archify.</p>
+      </section>
     </div>
   )
 }
