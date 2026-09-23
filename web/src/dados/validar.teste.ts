@@ -15,13 +15,17 @@
  * coletor escreve. Validador que so passa em objeto de laboratorio nao prova
  * nada sobre o arquivo que a tela usa.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { validarEstado } from './validar.ts'
 
 const aqui = dirname(fileURLToPath(import.meta.url))
 const real: unknown = JSON.parse(readFileSync(join(aqui, 'estado.json'), 'utf8'))
+const caminhoOperacional = join(aqui, '../../../data/estado.json')
+const operacional: unknown | null = existsSync(caminhoOperacional)
+  ? JSON.parse(readFileSync(caminhoOperacional, 'utf8'))
+  : null
 
 let passou = 0
 let falhou = 0
@@ -42,8 +46,8 @@ function copia<T>(v: T): T {
 }
 
 /** Estraga um campo e devolve o objeto. `undefined` remove o campo. */
-function estragando(caminho: string[], valor: unknown): unknown {
-  const c = copia(real) as Record<string, unknown>
+function estragando(caminho: string[], valor: unknown, base: unknown = real): unknown {
+  const c = copia(base) as Record<string, unknown>
   let alvo: any = c
   for (let i = 0; i < caminho.length - 1; i++) {
     const passo = caminho[i]
@@ -86,6 +90,10 @@ console.log('\nO CASO BOM: o estado.json de verdade')
 {
   const r = validarEstado(real)
   ok('o estado real passa', r.ok, r.ok ? '' : (r.problemas ?? []).slice(0, 4).join(' | '))
+}
+if (operacional !== null) {
+  const r = validarEstado(operacional)
+  ok('o estado operacional real passa', r.ok, r.ok ? '' : (r.problemas ?? []).slice(0, 4).join(' | '))
 }
 
 console.log('\nOS CASOS QUE TEM QUE REPROVAR (se algum passar, o validador parou de olhar)')
@@ -137,6 +145,29 @@ for (const [nome, objeto, esperado] of RUINS) {
   const disseOMotivo = !r.ok && (r.problemas ?? []).some((p) => p.includes(esperado))
   ok(`${nome}: reprova`, reprovou)
   if (reprovou) ok(`${nome}: diz onde ("${esperado}")`, disseOMotivo, (r as { problemas: string[] }).problemas.slice(0, 3).join(' | '))
+}
+
+if (operacional !== null) {
+  console.log('\nNULOS DECLARADOS PELO COLETOR (passam; número e objeto não passam)')
+  const nulosPermitidos: string[][] = [
+    ['sessao', '0', 'verificador', 'erro_leitura'],
+    ['verificadores', 'luana', 'erro_leitura'],
+    ['cron', 'jobs', '0', 'dono'],
+    ['cron', 'negacao', 'erro'],
+    ['pecas', 'erro'],
+    ['pecas', 'lista', '0', 'capa_url'],
+    ['pecas', 'lista', '0', 'agendado_para'],
+    ['pecas', 'lista', '0', 'data'],
+    ['pecas', 'fontes_recebidas', 'erro'],
+  ]
+  for (const caminho of nulosPermitidos) {
+    const nome = caminho.join('.')
+    ok(`${nome}: null permitido`, validarEstado(estragando(caminho, null, operacional)).ok)
+    for (const valor of [42, {}]) {
+      const r = validarEstado(estragando(caminho, valor, operacional))
+      ok(`${nome}: ${typeof valor} reprova`, !r.ok && (r.problemas ?? []).some((p) => p.includes(nome.split('.').pop()!)))
+    }
+  }
 }
 
 console.log('\nOS CASOS DENTRO DE UMA LISTA (o erro tem que vir com o indice)')
