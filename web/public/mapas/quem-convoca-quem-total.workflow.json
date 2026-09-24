@@ -1,0 +1,168 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Quem convoca quem (Total histórico)",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "janela": "total",
+    "total_convocacoes": 455,
+    "output": "quem-convoca-quem-total.html"
+  },
+  "lanes": [
+    {
+      "id": "diretoria",
+      "label": "Diretoria"
+    },
+    {
+      "id": "operacao",
+      "label": "Operação e Especialistas"
+    }
+  ],
+  "phases": [
+    {
+      "id": "comando",
+      "label": "Diretoria",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "global",
+      "label": "Orquestração",
+      "fromCol": 1,
+      "toCol": 1
+    },
+    {
+      "id": "conteudo",
+      "label": "Conteúdo e Tráfego",
+      "fromCol": 2,
+      "toCol": 2
+    },
+    {
+      "id": "pipeline",
+      "label": "Execução Especializada",
+      "fromCol": 3,
+      "toCol": 4
+    }
+  ],
+  "nodes": [
+    {
+      "id": "luana",
+      "lane": "diretoria",
+      "col": 0,
+      "type": "director",
+      "label": "Luana",
+      "sublabel": "CEO Operacional",
+      "width": 136,
+      "yOffset": -100
+    },
+    {
+      "id": "renato",
+      "lane": "diretoria",
+      "col": 0,
+      "type": "director",
+      "label": "Renato",
+      "sublabel": "CRO Comercial",
+      "width": 136,
+      "yOffset": -10
+    },
+    {
+      "id": "bia",
+      "lane": "diretoria",
+      "col": 0,
+      "type": "director",
+      "label": "Bia",
+      "sublabel": "Tráfego & IA",
+      "width": 136,
+      "yOffset": 80
+    },
+    {
+      "id": "dev",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "Dev Engenheiro",
+      "sublabel": "global",
+      "width": 130,
+      "yOffset": -120
+    },
+    {
+      "id": "qa",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "QA Verificador",
+      "sublabel": "global",
+      "width": 130,
+      "yOffset": -50
+    },
+    {
+      "id": "copy",
+      "lane": "operacao",
+      "col": 2,
+      "type": "backend",
+      "label": "Copywriter Sênior",
+      "sublabel": "conteudo",
+      "width": 130,
+      "yOffset": -120
+    },
+    {
+      "id": "closer",
+      "lane": "operacao",
+      "col": 3,
+      "type": "backend",
+      "label": "Closer de Vendas",
+      "sublabel": "pipeline-luana",
+      "width": 130,
+      "yOffset": -120
+    }
+  ],
+  "edges": [
+    {
+      "id": "luana-dev",
+      "from": "luana",
+      "to": "dev",
+      "label": "140 chamadas",
+      "variant": "emphasis",
+      "role": "main",
+      "calls": 140
+    },
+    {
+      "id": "luana-copy",
+      "from": "luana",
+      "to": "copy",
+      "label": "110 chamadas",
+      "variant": "emphasis",
+      "role": "main",
+      "calls": 110
+    },
+    {
+      "id": "luana-qa",
+      "from": "luana",
+      "to": "qa",
+      "label": "85 chamadas",
+      "variant": "emphasis",
+      "role": "main",
+      "calls": 85
+    },
+    {
+      "id": "renato-closer",
+      "from": "renato",
+      "to": "closer",
+      "label": "75 chamadas",
+      "variant": "emphasis",
+      "role": "main",
+      "calls": 75
+    },
+    {
+      "id": "dev-qa",
+      "from": "dev",
+      "to": "qa",
+      "label": "45 chamadas",
+      "variant": "emphasis",
+      "role": "main",
+      "calls": 45
+    }
+  ]
+}

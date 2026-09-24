@@ -1245,5 +1245,43 @@ di = carregar_diretiva(arquivo_di)
 conferir("diretiva inválida falha fechado", (di["status"], di["objetivo"], bool(di["erro"])), ("erro", None, True))
 shutil.rmtree(pasta_di)
 
+print("\n--- janelas de convocações e mapa interativo")
+agora_ref = datetime.datetime(2026, 9, 24, 15, 0, 0, tzinfo=c.FUSO_SP)
+chamadas_teste = [
+    # Hoje (2h atrás)
+    ("luana", "agente", "copywriter", (agora_ref - datetime.timedelta(hours=2)).isoformat()),
+    # 3 dias atrás
+    ("renato", "agente", "designer", (agora_ref - datetime.timedelta(days=3)).isoformat()),
+    # 15 dias atrás
+    ("bia", "agente", "estrategista", (agora_ref - datetime.timedelta(days=15)).isoformat()),
+    # 45 dias atrás
+    ("luana", "agente", "copywriter", (agora_ref - datetime.timedelta(days=45)).isoformat()),
+]
+ids_casa = {"luana", "renato", "bia", "copywriter", "designer", "estrategista"}
+janelas = c.agregar_janelas_convocacoes(chamadas_teste, ids_casa, agora_referencia=agora_ref)
+
+conferir("hoje conta menos que total no resumo", janelas["hoje"]["total"] < janelas["total"]["total"], True)
+conferir("hoje conta menos que total no por_agente", janelas["hoje"]["por_agente"]["copywriter"] < janelas["total"]["por_agente"]["copywriter"], True)
+conferir("hoje tem menos arestas que total", len(janelas["hoje"]["arestas"]) < len(janelas["total"]["arestas"]), True)
+conferir("janelas passa na trava de privacidade sem vazar", c.auditar_estado_publico(janelas), [])
+
+agentes_teste = [
+    {"id": "luana", "nome": "Luana", "papel": "CEO"},
+    {"id": "renato", "nome": "Renato", "papel": "CRO"},
+    {"id": "bia", "nome": "Bia", "papel": "Diretora"},
+    {"id": "copywriter", "nome": "Copywriter", "papel": "Copy", "squad": "conteudo"},
+    {"id": "designer", "nome": "Designer", "papel": "Artes", "squad": "design"},
+]
+squads_teste = {
+    "conteudo": {"nome": "Conteúdo"},
+    "design": {"nome": "Design"},
+}
+wf_hoje = c.gerar_workflow_quem_convoca_quem("hoje", janelas["hoje"], agentes_teste, squads_teste)
+conferir("workflow schema_version é 2", wf_hoje.get("schema_version"), 2)
+conferir("arestas sem chamadas não aparecem no workflow", all(e.get("calls", 0) > 0 for e in wf_hoje.get("edges", [])), True)
+html_hoje = c.renderizar_html_workflow_quem_convoca_quem(wf_hoje)
+conferir("mapa html gerado é documento válido", "<!DOCTYPE html>" in html_hoje and "<svg" in html_hoje, True)
+
 print("\n" + ("TODOS PASSARAM" if falhas == 0 else f"{falhas} FALHA(S)"))
 sys.exit(0 if falhas == 0 else 1)
+

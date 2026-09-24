@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quem convoca quem (Últimos 7 dias)</title>
+  <style>
+    :root {
+      --bg: #0e1117;
+      --card-bg: #161b22;
+      --card-border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --edge: #8b949e;
+      --edge-emphasis: #7ee787;
+      --badge-bg: #21262d;
+      --header-bg: rgba(22, 27, 34, 0.85);
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    }
+    [data-theme="light"] {
+      --bg: #f6f8fa;
+      --card-bg: #ffffff;
+      --card-border: #d0d7de;
+      --text: #1f2328;
+      --text-muted: #656d76;
+      --edge: #656d76;
+      --edge-emphasis: #1a7f37;
+      --badge-bg: #eaeef2;
+      --header-bg: rgba(255, 255, 255, 0.85);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .toolbar {
+      height: 48px;
+      padding: 0 16px;
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--card-border);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .title-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .title {
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pill {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: var(--badge-bg);
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+      white-space: nowrap;
+    }
+    .btn {
+      background: var(--badge-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn:hover {
+      border-color: var(--text-muted);
+    }
+    .canvas-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      position: relative;
+      background-image: radial-gradient(var(--card-border) 1px, transparent 1px);
+      background-size: 24px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    svg {
+      display: block;
+      min-width: 100%;
+      min-height: 100%;
+    }
+    .card-bg {
+      fill: var(--card-bg);
+      transition: fill 0.2s, stroke 0.2s;
+    }
+    .node-group:hover .card-bg {
+      stroke-width: 2.2px;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.15));
+    }
+    .node-title {
+      font-size: 13px;
+      font-weight: 600;
+      fill: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .node-sub {
+      font-size: 10.5px;
+      fill: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .node-badge {
+      font-size: 9px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+    .edge-path {
+      fill: none;
+      stroke: var(--edge);
+      stroke-opacity: 0.65;
+      transition: stroke 0.2s, stroke-width 0.2s;
+    }
+    .edge-path.emphasis {
+      stroke: var(--edge-emphasis);
+      stroke-opacity: 0.85;
+    }
+    .edge-path.dashed {
+      stroke-dasharray: 4, 4;
+    }
+    .edge-group:hover .edge-path {
+      stroke-opacity: 1;
+      stroke: #7ee787;
+    }
+    .edge-label-bg {
+      fill: var(--card-bg);
+      stroke: var(--card-border);
+      stroke-width: 1px;
+    }
+    .edge-label-text {
+      font-size: 9px;
+      font-family: var(--font-mono);
+      fill: var(--text-muted);
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="title-area">
+      <span class="title">⚡ Quem convoca quem (Últimos 7 dias)</span>
+      <span class="pill">95 chamadas</span>
+    </div>
+    <div>
+      <button class="btn" id="theme-btn" type="button" title="Alternar tema">🌓 Tema</button>
+      <button class="btn" id="reset-btn" type="button" title="Centralizar">⛶ Centralizar</button>
+    </div>
+  </div>
+  <div class="canvas-container" id="container">
+    <svg viewBox="0 0 1040 550" width="1040" height="550">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--edge)"/>
+        </marker>
+      </defs>
+      
+        <g class="edge-group">
+          <path d="M 200 90.0 C 240.0 90.0, 240.0 90.0, 280 90.0" 
+                class="edge-path emphasis" stroke-width="4" marker-end="url(#arrow)"/>
+          <g transform="translate(240.0, 90.0)">
+            <rect x="-32" y="-9" width="64" height="18" rx="4" class="edge-label-bg"/>
+            <text x="0" y="3.5" class="edge-label-text" text-anchor="middle">40 chamadas</text>
+          </g>
+        </g>
+        
+        <g class="edge-group">
+          <path d="M 200 90.0 C 360.0 90.0, 360.0 90.0, 520 90.0" 
+                class="edge-path emphasis" stroke-width="3.0" marker-end="url(#arrow)"/>
+          <g transform="translate(360.0, 90.0)">
+            <rect x="-32" y="-9" width="64" height="18" rx="4" class="edge-label-bg"/>
+            <text x="0" y="3.5" class="edge-label-text" text-anchor="middle">30 chamadas</text>
+          </g>
+        </g>
+        
+        <g class="edge-group">
+          <path d="M 200 90.0 C 240.0 90.0, 240.0 175.0, 280 175.0" 
+                class="edge-path emphasis" stroke-width="2.5" marker-end="url(#arrow)"/>
+          <g transform="translate(240.0, 132.5)">
+            <rect x="-32" y="-9" width="64" height="18" rx="4" class="edge-label-bg"/>
+            <text x="0" y="3.5" class="edge-label-text" text-anchor="middle">25 chamadas</text>
+          </g>
+        </g>
+        
+      
+        <g class="node-group" id="node-luana" transform="translate(40, 60)">
+          <rect width="160" height="60" rx="8" class="card-bg" stroke="#7ee787" stroke-width="1.5"/>
+          <text x="12" y="24" class="node-title">Luana</text>
+          <text x="12" y="44" class="node-sub">CEO Operacional</text>
+          <rect x="118" y="8" width="34" height="18" rx="4" fill="rgba(126, 231, 135, 0.15)"/>
+          <text x="135" y="21" class="node-badge" fill="#7ee787" text-anchor="middle">DIR</text>
+        </g>
+        
+        <g class="node-group" id="node-renato" transform="translate(40, 145)">
+          <rect width="160" height="60" rx="8" class="card-bg" stroke="#7ee787" stroke-width="1.5"/>
+          <text x="12" y="24" class="node-title">Renato</text>
+          <text x="12" y="44" class="node-sub">CRO Comercial</text>
+          <rect x="118" y="8" width="34" height="18" rx="4" fill="rgba(126, 231, 135, 0.15)"/>
+          <text x="135" y="21" class="node-badge" fill="#7ee787" text-anchor="middle">DIR</text>
+        </g>
+        
+        <g class="node-group" id="node-bia" transform="translate(40, 230)">
+          <rect width="160" height="60" rx="8" class="card-bg" stroke="#7ee787" stroke-width="1.5"/>
+          <text x="12" y="24" class="node-title">Bia</text>
+          <text x="12" y="44" class="node-sub">Tráfego & IA</text>
+          <rect x="118" y="8" width="34" height="18" rx="4" fill="rgba(126, 231, 135, 0.15)"/>
+          <text x="135" y="21" class="node-badge" fill="#7ee787" text-anchor="middle">DIR</text>
+        </g>
+        
+        <g class="node-group" id="node-dev" transform="translate(280, 60)">
+          <rect width="160" height="60" rx="8" class="card-bg" stroke="#58a6ff" stroke-width="1.5"/>
+          <text x="12" y="24" class="node-title">Dev Engenheiro</text>
+          <text x="12" y="44" class="node-sub">global</text>
+          <rect x="118" y="8" width="34" height="18" rx="4" fill="rgba(88, 166, 255, 0.15)"/>
+          <text x="135" y="21" class="node-badge" fill="#58a6ff" text-anchor="middle">BAC</text>
+        </g>
+        
+        <g class="node-group" id="node-qa" transform="translate(280, 145)">
+          <rect width="160" height="60" rx="8" class="card-bg" stroke="#58a6ff" stroke-width="1.5"/>
+          <text x="12" y="24" class="node-title">QA Verificador</text>
+          <text x="12" y="44" class="node-sub">global</text>
+          <rect x="118" y="8" width="34" height="18" rx="4" fill="rgba(88, 166, 255, 0.15)"/>
+          <text x="135" y="21" class="node-badge" fill="#58a6ff" text-anchor="middle">BAC</text>
+        </g>
+        
+        <g class="node-group" id="node-copy" transform="translate(520, 60)">
+          <rect width="160" height="60" rx="8" class="card-bg" stroke="#58a6ff" stroke-width="1.5"/>
+          <text x="12" y="24" class="node-title">Copywriter Sênior</text>
+          <text x="12" y="44" class="node-sub">conteudo</text>
+          <rect x="118" y="8" width="34" height="18" rx="4" fill="rgba(88, 166, 255, 0.15)"/>
+          <text x="135" y="21" class="node-badge" fill="#58a6ff" text-anchor="middle">BAC</text>
+        </g>
+        
+        <g class="node-group" id="node-closer" transform="translate(760, 60)">
+          <rect width="160" height="60" rx="8" class="card-bg" stroke="#58a6ff" stroke-width="1.5"/>
+          <text x="12" y="24" class="node-title">Closer de Vendas</text>
+          <text x="12" y="44" class="node-sub">pipeline-luana</text>
+          <rect x="118" y="8" width="34" height="18" rx="4" fill="rgba(88, 166, 255, 0.15)"/>
+          <text x="135" y="21" class="node-badge" fill="#58a6ff" text-anchor="middle">BAC</text>
+        </g>
+        
+    </svg>
+  </div>
+  <script>
+    const themeBtn = document.getElementById('theme-btn');
+    if (themeBtn) {
+      themeBtn.addEventListener('click', () => {
+        const html = document.documentElement;
+        const cur = html.getAttribute('data-theme') || 'dark';
+        html.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+      });
+    }
+    const resetBtn = document.getElementById('reset-btn');
+    const container = document.getElementById('container');
+    if (resetBtn && container) {
+      resetBtn.addEventListener('click', () => {
+        container.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+      });
+    }
+  </script>
+</body>
+</html>

@@ -7,6 +7,7 @@ import { useRota } from './nav/useRota'
 import { POR_ID } from './nav/rotas'
 import type { FiltroId } from './ui/Acoes'
 import type { Agente } from './dados/tipos'
+import { obterFaixaPadrao, type FaixaDeData } from './ui/SeletorDeData'
 
 // Cada tela vira um chunk próprio. A moldura, a autenticação e o estado ficam
 // no bundle inicial; só o conteúdo da rota escolhida é baixado depois. O
@@ -57,6 +58,7 @@ export default function App() {
   const { estado, origem, erro, problemas, medidoEm } = useEstado()
   const { rota, ir } = useRota()
   const [filtro, setFiltro] = useState<FiltroId | null>(null)
+  const [faixa, setFaixa] = useState<FaixaDeData>(obterFaixaPadrao)
   // Fica acima da tela para sobreviver enquanto a ficha ocupa o drawer. Ao
   // fechar, a pessoa volta exatamente ao departamento que estava examinando.
   const [departamento, setDepartamento] = useState<'todos' | Agente['squad']>('todos')
@@ -142,7 +144,7 @@ export default function App() {
   }
 
   const vista = POR_ID[rota.vista]
-  const comum = { estado, agora, medidoEm: medidoEm ?? estado.gerado_em, vista }
+  const comum = { estado, agora, medidoEm: medidoEm ?? estado.gerado_em, vista, faixa, aoMudarFaixa: setFaixa }
 
   function desenhar() {
     switch (rota.vista) {
@@ -274,6 +276,8 @@ export default function App() {
           aoAbrirMenu={() => setMenuAberto(true)}
           expandido={larguraExpandida}
           aoAlternarExpandido={alternarLarguraExpandida}
+          faixa={faixa}
+          aoMudarFaixa={setFaixa}
         />
         <main ref={areaRef} className="min-h-0 flex-1 overflow-y-auto">
           {/* Resposta nova rejeitada: os numeros abaixo sao os anteriores, e

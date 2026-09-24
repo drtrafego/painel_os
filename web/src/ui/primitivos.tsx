@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { SeletorDeData } from './SeletorDeData'
+import { SeletorDeData, type FaixaDeData } from './SeletorDeData'
 
 const TOM = {
   verde: { texto: 'text-verde', ponto: 'bg-verde', fundo: 'bg-verde/10', borda: 'border-verde/25' },
@@ -113,11 +113,15 @@ export function TituloDaTela({
   pergunta,
   direita,
   mostrarSeletorData = true,
+  faixa,
+  aoMudarFaixa,
 }: {
   titulo: string
   pergunta: string
   direita?: ReactNode
   mostrarSeletorData?: boolean
+  faixa?: FaixaDeData
+  aoMudarFaixa?: (f: FaixaDeData) => void
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-end justify-between gap-x-5 gap-y-2">
@@ -126,7 +130,7 @@ export function TituloDaTela({
         <p className="rotulo mt-1.5">{pergunta}</p>
       </div>
       <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:w-auto sm:shrink-0">
-        {mostrarSeletorData && <SeletorDeData />}
+        {mostrarSeletorData && <SeletorDeData faixa={faixa} aoMudarFaixa={aoMudarFaixa} />}
         {direita}
       </div>
     </div>

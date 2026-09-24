@@ -80,6 +80,23 @@ export type Aresta = {
   de_tipo?: 'sessao' | 'agente' | 'sem-cargo' | 'desconhecido'
 }
 
+export type JanelaConvocacoes = {
+  rotulo: string
+  total: number
+  por_agente: Record<string, number>
+  arestas: Aresta[]
+  convocacoes_fora_da_casa: Record<string, number>
+  mapa_src: string
+}
+
+export type JanelasConvocacoes = {
+  hoje: JanelaConvocacoes
+  '7d': JanelaConvocacoes
+  '30d': JanelaConvocacoes
+  total: JanelaConvocacoes
+  [chave: string]: JanelaConvocacoes
+}
+
 // ---------------------------------------------------------------------------
 // Agentes
 // ---------------------------------------------------------------------------
@@ -326,6 +343,7 @@ export type Estado = {
   agentes: Agente[]
   sessao: AgenteSessao[]
   arestas: Aresta[]
+  janelas?: JanelasConvocacoes
   convocacoes_fora_da_casa: Record<string, number>
   convocacoes_erro?: string
   chamador_nao_resolvido?: Record<string, number>

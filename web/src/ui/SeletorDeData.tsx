@@ -13,6 +13,65 @@ const NOMES_MESES = [
 
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 
+export function obterHojeSp(): Date {
+  try {
+    const formatador = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+    const partes = formatador.format(new Date()).split('-')
+    const ano = parseInt(partes[0], 10)
+    const mes = parseInt(partes[1], 10) - 1
+    const dia = parseInt(partes[2], 10)
+    return new Date(ano, mes, dia)
+  } catch {
+    const d = new Date()
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  }
+}
+
+export function obterFaixaPadrao(): FaixaDeData {
+  const hoje = obterHojeSp()
+  return {
+    inicio: new Date(2026, 0, 1),
+    fim: hoje,
+    rotulo: 'Total histórico',
+  }
+}
+
+export function identificarJanela(faixa?: FaixaDeData): 'hoje' | '7d' | '30d' | 'total' {
+  if (!faixa) return 'total'
+  const rotulo = (faixa.rotulo || '').toLowerCase()
+  if (rotulo.includes('hoje')) return 'hoje'
+  if (rotulo.includes('7 dia') || rotulo === '7d' || rotulo === '7dias') return '7d'
+  if (rotulo.includes('30 dia') || rotulo === '30d' || rotulo === '30dias') return '30d'
+  if (rotulo.includes('tudo') || rotulo.includes('total') || rotulo.includes('histórico')) return 'total'
+
+  const hoje = obterHojeSp()
+  const dInicio = new Date(faixa.inicio.getFullYear(), faixa.inicio.getMonth(), faixa.inicio.getDate())
+  const dFim = new Date(faixa.fim.getFullYear(), faixa.fim.getMonth(), faixa.fim.getDate())
+
+  if (mesmoDia(dInicio, dFim) && mesmoDia(dFim, hoje)) {
+    return 'hoje'
+  }
+
+  const diffDias = Math.round((dFim.getTime() - dInicio.getTime()) / (1000 * 60 * 60 * 24))
+  if (diffDias >= 5 && diffDias <= 7 && mesmoDia(dFim, hoje)) {
+    return '7d'
+  }
+  if (diffDias >= 27 && diffDias <= 31 && mesmoDia(dFim, hoje)) {
+    return '30d'
+  }
+
+  if (faixa.inicio.getFullYear() < 2026 || diffDias > 90) {
+    return 'total'
+  }
+
+  return 'total'
+}
+
 function mesmoDia(d1: Date, d2: Date): boolean {
   return (
     d1.getFullYear() === d2.getFullYear() &&
@@ -46,12 +105,10 @@ export function SeletorDeData({
 }) {
   const [aberto, setAberto] = useState(false)
 
-  // Intervalo ativo de data (Padrão: Setembro 2026 - conforme o print do usuário)
+  // Intervalo ativo de data (Padrão: Total histórico ou faixa recebida)
   const [faixaAtiva, setFaixaAtiva] = useState<FaixaDeData>(() => {
     if (faixa) return faixa
-    const inicio = new Date(2026, 8, 1)  // 01/09/2026
-    const fim = new Date(2026, 8, 30)   // 30/09/2026
-    return { inicio, fim, rotulo: 'Este mês' }
+    return obterFaixaPadrao()
   })
 
   // Rascunho temporário de seleção para o modal
@@ -60,7 +117,7 @@ export function SeletorDeData({
   const [etapaSelecao, setEtapaSelecao] = useState<'inicio' | 'fim'>('inicio')
 
   // Meses exibidos no calendário duplo
-  const [mesVisivel, setMesVisivel] = useState(() => new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth(), 1))
+  const [mesVisivel, setMesVisivel] = useState(() => new Date(faixaAtiva.fim.getFullYear(), faixaAtiva.fim.getMonth(), 1))
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -69,6 +126,7 @@ export function SeletorDeData({
       setFaixaAtiva(faixa)
       setRascunhoInicio(faixa.inicio)
       setRascunhoFim(faixa.fim)
+      setMesVisivel(new Date(faixa.fim.getFullYear(), faixa.fim.getMonth(), 1))
     }
   }, [faixa])
 
@@ -93,9 +151,10 @@ export function SeletorDeData({
 
   // Navegação rápida de mês na barra superior (botões < Mês Ano >)
   const navegarMesAnterior = () => {
-    const novoInicio = new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth() - 1, 1)
+    const ref = faixaAtiva.fim || faixaAtiva.inicio
+    const novoInicio = new Date(ref.getFullYear(), ref.getMonth() - 1, 1)
     const novoFim = new Date(novoInicio.getFullYear(), novoInicio.getMonth() + 1, 0)
-    const nova = { inicio: novoInicio, fim: novoFim, rotulo: `${NOMES_MESES[novoInicio.getMonth()]} ${novoInicio.getFullYear()}` }
+    const nova: FaixaDeData = { inicio: novoInicio, fim: novoFim, rotulo: `${NOMES_MESES[novoInicio.getMonth()]} ${novoInicio.getFullYear()}` }
     setFaixaAtiva(nova)
     setRascunhoInicio(novoInicio)
     setRascunhoFim(novoFim)
@@ -104,9 +163,10 @@ export function SeletorDeData({
   }
 
   const navegarProximoMes = () => {
-    const novoInicio = new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth() + 1, 1)
+    const ref = faixaAtiva.fim || faixaAtiva.inicio
+    const novoInicio = new Date(ref.getFullYear(), ref.getMonth() + 1, 1)
     const novoFim = new Date(novoInicio.getFullYear(), novoInicio.getMonth() + 1, 0)
-    const nova = { inicio: novoInicio, fim: novoFim, rotulo: `${NOMES_MESES[novoInicio.getMonth()]} ${novoInicio.getFullYear()}` }
+    const nova: FaixaDeData = { inicio: novoInicio, fim: novoFim, rotulo: `${NOMES_MESES[novoInicio.getMonth()]} ${novoInicio.getFullYear()}` }
     setFaixaAtiva(nova)
     setRascunhoInicio(novoInicio)
     setRascunhoFim(novoFim)
@@ -115,35 +175,42 @@ export function SeletorDeData({
   }
 
   // Presets da coluna esquerda (Hoje, Últimos 7 dias, etc.)
-  const aplicarPreset = (tipo: 'hoje' | '7dias' | '30dias' | '60dias' | 'esteMes' | 'tudo') => {
-    const hoje = new Date(2026, 8, 30) // Âncorado no tempo da aplicação (Set/2026)
+  const aplicarPreset = (tipo: 'hoje' | '7dias' | '30dias' | 'esteMes' | 'tudo') => {
+    const hoje = obterHojeSp()
     let ini = new Date(hoje)
     let fim = new Date(hoje)
+    let rotulo = 'Hoje'
 
     switch (tipo) {
       case 'hoje':
+        rotulo = 'Hoje'
         break
       case '7dias':
         ini = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 6)
+        rotulo = 'Últimos 7 dias'
         break
       case '30dias':
         ini = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 29)
-        break
-      case '60dias':
-        ini = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 59)
+        rotulo = 'Últimos 30 dias'
         break
       case 'esteMes':
         ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
         fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+        rotulo = `${NOMES_MESES[hoje.getMonth()]} ${hoje.getFullYear()}`
         break
       case 'tudo':
         ini = new Date(2026, 0, 1)
+        rotulo = 'Total histórico'
         break
     }
 
+    const nova: FaixaDeData = { inicio: ini, fim, rotulo }
     setRascunhoInicio(ini)
     setRascunhoFim(fim)
-    setMesVisivel(new Date(ini.getFullYear(), ini.getMonth(), 1))
+    setMesVisivel(new Date(fim.getFullYear(), fim.getMonth(), 1))
+    setFaixaAtiva(nova)
+    setAberto(false)
+    aoMudarFaixa?.(nova)
   }
 
   // Seleção de dia no grid do calendário
@@ -167,7 +234,7 @@ export function SeletorDeData({
   const aoAplicar = () => {
     const min = rascunhoInicio < rascunhoFim ? rascunhoInicio : rascunhoFim
     const max = rascunhoInicio < rascunhoFim ? rascunhoFim : rascunhoInicio
-    const nova = { inicio: min, fim: max }
+    const nova: FaixaDeData = { inicio: min, fim: max }
     setFaixaAtiva(nova)
     setAberto(false)
     aoMudarFaixa?.(nova)
@@ -218,12 +285,12 @@ export function SeletorDeData({
   const gridMes1 = gerarGridMes(mes1.getFullYear(), mes1.getMonth())
   const gridMes2 = gerarGridMes(mes2.getFullYear(), mes2.getMonth())
 
-  const nomeMesAnoAtivo = `${NOMES_MESES[faixaAtiva.inicio.getMonth()]} ${faixaAtiva.inicio.getFullYear()}`
+  const nomeMesAnoAtivo = `${NOMES_MESES[faixaAtiva.fim.getMonth()]} ${faixaAtiva.fim.getFullYear()}`
   const textoFaixaFormatada = `${formatarDataBr(faixaAtiva.inicio)} — ${formatarDataBr(faixaAtiva.fim)}`
 
   return (
     <div ref={containerRef} className="relative inline-flex max-w-full items-center text-[var(--color-tinta)] font-sans">
-      {/* BARRA DE NAVEGAÇÃO E SELETOR DE DATAS DA CABEÇA (Conforme Imagem 1) */}
+      {/* BARRA DE NAVEGAÇÃO E SELETOR DE DATAS DA CABEÇA */}
       <div className="flex max-w-full items-center gap-1.5 sm:gap-2">
         {/* Controles rápidos de mês: < Mês Ano > */}
         <div className="flex items-center rounded-xl border border-[var(--color-linha)] bg-[var(--color-carta)] p-0.5 shadow-sm">
@@ -256,11 +323,14 @@ export function SeletorDeData({
           className="flex min-w-0 items-center gap-1.5 rounded-xl border border-[var(--color-linha)] bg-[var(--color-carta)] px-2 py-1.5 font-mono text-[11px] font-medium text-[var(--color-tinta)] shadow-sm transition-all hover:border-[var(--color-linha-forte)] hover:bg-[var(--color-fundo)] active:scale-95 sm:gap-2.5 sm:px-3.5 sm:text-[12px]"
         >
           <span className="opacity-80">📅</span>
-          <span className="whitespace-nowrap">{textoFaixaFormatada}</span>
+          <span className="whitespace-nowrap">
+            {faixaAtiva.rotulo && <span className="hidden md:inline font-bold mr-1">{faixaAtiva.rotulo} ·</span>}
+            {textoFaixaFormatada}
+          </span>
         </button>
       </div>
 
-      {/* POPOVER MODAL COMPLETO (Conforme Imagem 2) */}
+      {/* POPOVER MODAL COMPLETO */}
       {aberto && (
         <div className="absolute right-0 top-full z-50 mt-2 flex w-[680px] max-w-[95vw] overflow-hidden rounded-2xl border border-[var(--color-linha)] bg-[var(--color-carta)] text-[var(--color-tinta)] shadow-2xl backdrop-blur-xl">
           {/* Coluna Esquerda: Presets */}
@@ -270,19 +340,28 @@ export function SeletorDeData({
                 { key: 'hoje', label: 'Hoje' },
                 { key: '7dias', label: 'Últimos 7 dias' },
                 { key: '30dias', label: 'Últimos 30 dias' },
-                { key: '60dias', label: 'Últimos 60 dias' },
                 { key: 'esteMes', label: 'Este mês' },
-                { key: 'tudo', label: 'Tudo' },
-              ].map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => aplicarPreset(p.key as any)}
-                  className="block w-full rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--color-carta)] hover:text-[var(--color-tinta)] active:scale-98"
-                >
-                  {p.label}
-                </button>
-              ))}
+                { key: 'tudo', label: 'Total histórico' },
+              ].map((p) => {
+                const ativo = (p.key === 'hoje' && faixaAtiva.rotulo === 'Hoje') ||
+                              (p.key === '7dias' && faixaAtiva.rotulo === 'Últimos 7 dias') ||
+                              (p.key === '30dias' && faixaAtiva.rotulo === 'Últimos 30 dias') ||
+                              (p.key === 'tudo' && faixaAtiva.rotulo === 'Total histórico')
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => aplicarPreset(p.key as any)}
+                    className={`block w-full rounded-lg px-3 py-2 text-left transition-colors ${
+                      ativo
+                        ? 'bg-[var(--color-verde)]/15 text-[var(--color-verde)] font-bold'
+                        : 'hover:bg-[var(--color-carta)] hover:text-[var(--color-tinta)]'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 

@@ -195,6 +195,59 @@
     { "de": "renato", "para": "closer", "vezes": 75, "de_tipo": "sessao" },
     { "de": "dev", "para": "qa", "vezes": 45, "de_tipo": "agente" }
   ],
+  "janelas": {
+    "hoje": {
+      "rotulo": "Hoje",
+      "total": 12,
+      "por_agente": { "dev": 5, "qa": 3, "copy": 4 },
+      "arestas": [
+        { "de": "luana", "para": "dev", "vezes": 5, "de_tipo": "sessao" },
+        { "de": "luana", "para": "copy", "vezes": 4, "de_tipo": "sessao" },
+        { "de": "luana", "para": "qa", "vezes": 3, "de_tipo": "sessao" }
+      ],
+      "convocacoes_fora_da_casa": {},
+      "mapa_src": "/mapas/quem-convoca-quem-hoje.html"
+    },
+    "7d": {
+      "rotulo": "Últimos 7 dias",
+      "total": 95,
+      "por_agente": { "dev": 40, "qa": 25, "copy": 30 },
+      "arestas": [
+        { "de": "luana", "para": "dev", "vezes": 40, "de_tipo": "sessao" },
+        { "de": "luana", "para": "copy", "vezes": 30, "de_tipo": "sessao" },
+        { "de": "luana", "para": "qa", "vezes": 25, "de_tipo": "sessao" }
+      ],
+      "convocacoes_fora_da_casa": {},
+      "mapa_src": "/mapas/quem-convoca-quem-7d.html"
+    },
+    "30d": {
+      "rotulo": "Últimos 30 dias",
+      "total": 310,
+      "por_agente": { "dev": 110, "qa": 65, "copy": 80, "closer": 55 },
+      "arestas": [
+        { "de": "luana", "para": "dev", "vezes": 110, "de_tipo": "sessao" },
+        { "de": "luana", "para": "copy", "vezes": 80, "de_tipo": "sessao" },
+        { "de": "renato", "para": "closer", "vezes": 55, "de_tipo": "sessao" },
+        { "de": "luana", "para": "qa", "vezes": 65, "de_tipo": "sessao" }
+      ],
+      "convocacoes_fora_da_casa": {},
+      "mapa_src": "/mapas/quem-convoca-quem-30d.html"
+    },
+    "total": {
+      "rotulo": "Total histórico",
+      "total": 455,
+      "por_agente": { "dev": 140, "qa": 85, "copy": 110, "closer": 75 },
+      "arestas": [
+        { "de": "luana", "para": "dev", "vezes": 140, "de_tipo": "sessao" },
+        { "de": "luana", "para": "copy", "vezes": 110, "de_tipo": "sessao" },
+        { "de": "luana", "para": "qa", "vezes": 85, "de_tipo": "sessao" },
+        { "de": "renato", "para": "closer", "vezes": 75, "de_tipo": "sessao" },
+        { "de": "dev", "para": "qa", "vezes": 45, "de_tipo": "agente" }
+      ],
+      "convocacoes_fora_da_casa": {},
+      "mapa_src": "/mapas/quem-convoca-quem-total.html"
+    }
+  },
   "convocacoes_fora_da_casa": {},
   "sops": {
     "status": "pronto",

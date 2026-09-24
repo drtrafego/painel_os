@@ -1,25 +1,20 @@
-import { useState } from 'react'
 import { Acoes, montarAcoes, type FiltroId } from '../ui/Acoes'
 import { CardAgente } from '../ui/CardAgente'
 import { CardComando } from '../ui/CardComando'
 import { Detalhe } from '../ui/Detalhe'
-import { Organograma } from '../ui/Organograma'
 import { Barra, Cabecalho, Pilula, Secao, TituloDaTela } from '../ui/primitivos'
 import { corDoSquad } from '../ui/paleta'
 import {
   ORDEM_SQUAD,
-  arestas as arestasDe,
   atividade,
-  convocadores,
-  convocados,
   encostados,
   porSquad,
-  temCargo,
 } from '../dados/estado'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
 import type { Origem } from '../dados/useEstado'
 import type { VistaId, Vista } from '../nav/rotas'
-import type { Agente, Estado, Sop } from '../dados/tipos'
+import type { Agente, Estado, JanelaConvocacoes, Sop } from '../dados/tipos'
+import { identificarJanela, type FaixaDeData } from '../ui/SeletorDeData'
 
 function sopsDoEstado(estado: Estado): Sop[] {
   const dados = estado.sops
@@ -64,9 +59,6 @@ function Marcador({ origem, medidoEm, ms }: { origem: Origem; medidoEm: string; 
       </span>
     )
   }
-  // Tres estados, nao dois: "nao consegui buscar" (ambar, o dado e do build) e
-  // "busquei e o coletor falhou" (vermelho, o dado e velho e ha erro pra ler)
-  // sao coisas diferentes, e a segunda e a que engana.
   if (origem === 'coletor-falhou') {
     return (
       <span className="rotulo !text-vermelho" title="o coletor não rodou nesta abertura; os números são do último arquivo gravado">
@@ -113,7 +105,7 @@ function AvisoColetor({ erro, medidoEm, agora }: { erro: string | null; medidoEm
 }
 
 export function Diretores({
-  estado, agora, origem, erro, medidoEm, filtro, aoFiltrar, departamento, aoMudarDepartamento, aoIr, vista,
+  estado, agora, origem, erro, medidoEm, filtro, aoFiltrar, departamento, aoMudarDepartamento, aoIr, vista, faixa, aoMudarFaixa,
 }: {
   estado: Estado
   agora: Date
@@ -126,11 +118,23 @@ export function Diretores({
   aoMudarDepartamento: (id: 'todos' | Agente['squad']) => void
   aoIr: (v: VistaId, quem?: string | null) => void
   vista: Vista
+  faixa?: FaixaDeData
+  aoMudarFaixa?: (f: FaixaDeData) => void
 }) {
-  const [noSelecionado, setNoSelecionado] = useState<string | null>(null)
   const acoes = montarAcoes(estado, agora)
   const { dados: vivos } = useAgentesVivos()
   const mapaVivos = new Map((vivos?.agentes ?? []).map((a) => [a.id, a]))
+
+  const janelaAtiva = identificarJanela(faixa)
+  const janelas = estado.janelas
+  const dadosJanela: JanelaConvocacoes = (janelas && janelas[janelaAtiva]) ? janelas[janelaAtiva] : {
+    rotulo: 'Total histórico',
+    total: estado.resumo.convocacoes_casa,
+    por_agente: Object.fromEntries(estado.agentes.map(a => [a.id, a.convocacoes ?? 0])),
+    arestas: estado.arestas,
+    convocacoes_fora_da_casa: estado.convocacoes_fora_da_casa,
+    mapa_src: '/mapas/quem-convoca-quem-total.html',
+  }
 
   const idsEncostados = new Set(encostados(estado, agora.getTime()).map((a) => a.id))
   const idsHoje = new Set(
@@ -152,6 +156,8 @@ export function Diretores({
       <TituloDaTela
         titulo="Rede de agentes."
         pergunta={vista.pergunta}
+        faixa={faixa}
+        aoMudarFaixa={aoMudarFaixa}
         direita={
           <>
             <Marcador origem={origem} medidoEm={medidoEm} ms={estado.calculo_ms} />
@@ -160,6 +166,7 @@ export function Diretores({
                 ● {ativosAgora} ao vivo
               </span>
             )}
+            <span className="rotulo">{dadosJanela.total.toLocaleString('pt-BR')} convocações ({dadosJanela.rotulo})</span>
             <span className="rotulo">{estado.resumo.agentes_casa} agentes</span>
           </>
         }
@@ -225,7 +232,14 @@ export function Diretores({
 
       {ORDEM_SQUAD.filter((squadId) => departamento === 'todos' || departamento === squadId).map((squadId) => {
         const agentes = filtrar(porSquad(estado, squadId))
-        const teto = Math.max(...porSquad(estado, squadId).map((a) => a.convocacoes ?? 0), 1)
+        const getConvocacoes = (a: Agente) => {
+          if (dadosJanela.por_agente && a.id in dadosJanela.por_agente) {
+            return dadosJanela.por_agente[a.id]
+          }
+          if (janelaAtiva === 'total') return a.convocacoes ?? 0
+          return 0
+        }
+        const teto = Math.max(...porSquad(estado, squadId).map(getConvocacoes), 1)
         if (agentes.length === 0) return null
         return (
           <div key={squadId} className="mb-6">
@@ -245,6 +259,8 @@ export function Diretores({
                   key={a.id}
                   agente={a}
                   teto={teto}
+                  convocacoesJanela={getConvocacoes(a)}
+                  rotuloJanela={dadosJanela.rotulo}
                   cor={CORES_AGENTE[squadId]}
                   agora={agora.getTime()}
                   aoAbrir={() => aoIr('diretores', a.id)}
@@ -256,15 +272,10 @@ export function Diretores({
         )
       })}
 
-      <QuemChamaQuem
-        estado={estado}
-        selecionado={noSelecionado}
-        aoSelecionar={setNoSelecionado}
-        aoIr={aoIr}
-      />
+      <MapaQuemConvocaQuem dadosJanela={dadosJanela} />
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        <Repartido estado={estado} />
+        <Repartido estado={estado} dadosJanela={dadosJanela} />
         <Encostados estado={estado} agora={agora} />
       </div>
 
@@ -341,25 +352,31 @@ function OperacoesDepartamento({
   )
 }
 
-function Repartido({ estado }: { estado: Estado }) {
+function Repartido({ estado, dadosJanela }: { estado: Estado; dadosJanela: JanelaConvocacoes }) {
+  const getConvocacoes = (a: Agente) => {
+    if (dadosJanela.por_agente && a.id in dadosJanela.por_agente) {
+      return dadosJanela.por_agente[a.id]
+    }
+    return 0
+  }
   const lista = [...estado.agentes]
-    .filter((a) => a.convocacoes !== null)
-    .sort((a, b) => (b.convocacoes ?? 0) - (a.convocacoes ?? 0))
+    .map((a) => ({ ...a, convocacoesJanela: getConvocacoes(a) }))
+    .sort((a, b) => b.convocacoesJanela - a.convocacoesJanela)
     .slice(0, 9)
-  const teto = lista[0]?.convocacoes ?? 1
+  const teto = lista[0]?.convocacoesJanela || 1
 
   return (
     <section className="carta p-4">
       <div className="mb-3 flex items-center justify-between">
         <span className="rotulo">convocações por agente</span>
-        <span className="rotulo">{estado.resumo.convocacoes_casa.toLocaleString('pt-BR')} no total</span>
+        <span className="rotulo">{dadosJanela.total.toLocaleString('pt-BR')} ({dadosJanela.rotulo})</span>
       </div>
       <div className="space-y-[9px]">
         {lista.map((a) => (
           <div key={a.id} className="flex items-center gap-2.5">
             <span className="w-[104px] shrink-0 truncate text-[11.5px] text-tinta-2">{a.nome}</span>
-            <span className="flex-1"><Barra fracao={(a.convocacoes ?? 0) / teto} cor={CORES_AGENTE[a.squad]} altura={5} /></span>
-            <span className="w-8 shrink-0 text-right font-mono text-[11px] tabular-nums text-tinta-2">{a.convocacoes}</span>
+            <span className="flex-1"><Barra fracao={a.convocacoesJanela / teto} cor={CORES_AGENTE[a.squad]} altura={5} /></span>
+            <span className="w-8 shrink-0 text-right font-mono text-[11px] tabular-nums text-tinta-2">{a.convocacoesJanela}</span>
           </div>
         ))}
       </div>
@@ -368,7 +385,7 @@ function Repartido({ estado }: { estado: Estado }) {
         {estado.resumo.convocacoes_por_motor
           ? `${estado.resumo.convocacoes_por_motor.codex} chamadas Codex e ${estado.resumo.convocacoes_por_motor.claude} Claude legado. `
           : ''}
-        {Object.keys(estado.convocacoes_fora_da_casa).length} identidades de execução não têm ficha própria no catálogo e ficam separadas.
+        {Object.keys(dadosJanela.convocacoes_fora_da_casa || {}).length} identidades de execução não têm ficha própria no catálogo e ficam separadas.
       </p>
     </section>
   )
@@ -404,135 +421,44 @@ function Encostados({ estado, agora }: { estado: Estado; agora: Date }) {
 }
 
 /**
- * O GRAFO DE QUEM CONVOCA QUEM.
+ * MAPA INTERATIVO: QUEM CONVOCA QUEM
  *
- * Ele nasceu em 08/09 e o motivo esta escrito no coletor: ate entao a contagem
- * lia so os transcripts da raiz, com a justificativa de que "um subagente nao
- * invoca outro". A premissa era falsa, e medido deu 21% das chamadas partindo
- * de subagentes, com erro desigual (`dev` sumia 6%, `Explore` sumia 82%).
- * Consertar isso nao deu so um numero melhor: deu a LIGACAO, que e a pergunta
- * que o dono fez, e que nenhuma tabela responde tao bem.
- *
- * ‼️ ELE NAO DIZ PARA QUE. A descricao que o chamador escreve nao descreve o
- * assunto de verdade, entao daqui sai QUEM chamou QUEM e QUANTAS vezes, e nada
- * mais. Rotulo de intencao seria invencao com cara de dado.
+ * Exibe o fluxo geral da casa agregando Luana, Renato e Bia convocando
+ * especialistas agrupados por squad e subagentes sem cargo como "outros".
+ * Respeita a janela ativa de dados ('hoje', '7d', '30d', 'total').
  */
-function QuemChamaQuem({
-  estado, selecionado, aoSelecionar, aoIr,
-}: {
-  estado: Estado
-  selecionado: string | null
-  aoSelecionar: (id: string | null) => void
-  aoIr: (v: VistaId, quem?: string | null) => void
-}) {
-  const arestas = arestasDe(estado)
-  const semCargo = Object.entries(estado.convocacoes_fora_da_casa)
-  const totalSemCargo = semCargo.reduce((n, [, v]) => n + v, 0)
-  const total = estado.resumo.convocacoes_total
-  const saem = selecionado ? convocados(estado, selecionado) : []
-  const chegam = selecionado ? convocadores(estado, selecionado) : []
-  const ehAgente = selecionado ? estado.agentes.some((a) => a.id === selecionado) : false
-
+function MapaQuemConvocaQuem({ dadosJanela }: { dadosJanela: JanelaConvocacoes }) {
   return (
-    <section className="carta mt-6 p-4">
-      <Cabecalho cor="var(--color-lima)" meta={`${arestas.length} ligações`}>
-        quem convoca quem
-      </Cabecalho>
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-        <div className="min-w-0">
-          <Organograma
-            arestas={arestas}
-            temCargo={(nome) => temCargo(estado, nome)}
-            selecionado={selecionado}
-            aoSelecionar={aoSelecionar}
-          />
+    <section className="carta mt-6 w-full min-w-0 overflow-hidden" aria-labelledby="mapa-fluxo-quem-convoca-quem">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-linha px-4 py-4">
+        <div className="min-w-0 max-w-2xl flex-1">
+          <Cabecalho cor="var(--color-lima)" meta={`${dadosJanela.total} chamadas · ${dadosJanela.arestas.length} ligações`}>
+            quem convoca quem
+          </Cabecalho>
+          <p id="mapa-fluxo-quem-convoca-quem" className="mt-1 text-[12px] leading-relaxed text-tinta-2">
+            Fluxo geral da casa ({dadosJanela.rotulo}): diretores (Luana, Renato e Bia) convocando especialistas e subagentes agrupados por squad.
+          </p>
         </div>
-
-        <div className="min-w-0">
-          {selecionado ? (
-            <>
-              <div className="mb-2 flex flex-wrap items-baseline gap-2">
-                <h3 className="font-serif text-[21px] leading-none text-tinta">{selecionado}</h3>
-                {ehAgente && (
-                  <button
-                    type="button"
-                    onClick={() => aoIr('diretores', selecionado)}
-                    className="rotulo transition-colors hover:!text-lima"
-                  >
-                    abrir o detalhe →
-                  </button>
-                )}
-              </div>
-              <Ligacoes titulo="ele convoca" lista={saem} campo="para" />
-              <Ligacoes titulo="convocam ele" lista={chegam} campo="de" />
-            </>
-          ) : (
-            <p className="text-[12px] leading-[1.6] text-tinta-2">
-              Cada bolinha é um nome que apareceu numa convocação, e o tamanho dela é quantas vezes
-              apareceu. Cada linha é uma ligação, e a espessura é a frequência. Toque num nó para
-              ver quem ele chama e quem chama ele.
-            </p>
-          )}
-
-          <div className="mt-4 border-t border-linha pt-3">
-            <span className="rotulo">sem ficha no catálogo</span>
-            <p className="mt-1.5 text-[11.5px] leading-[1.55] text-tinta-2">
-              <span className="font-serif text-[19px] text-tinta">
-                {total > 0 ? Math.round((totalSemCargo / total) * 100) : 0}%
-              </span>{' '}
-              das convocações vão para {semCargo.length} identidades sem ficha própria. Aqui entram
-              funções embutidas do Claude legado e execuções temporárias do Codex. Isso não prova
-              ausência de modelo ou contexto: prova somente que não há cadastro correspondente no catálogo.
-            </p>
-          </div>
-        </div>
+        <a
+          className="inline-flex shrink-0 items-center justify-center rounded-md border border-linha px-3 py-2 text-[11px] text-lima transition-colors hover:border-linha-forte hover:bg-white/5"
+          href={dadosJanela.mapa_src}
+          target="_blank"
+          rel="noreferrer"
+        >
+          abrir mapa completo ↗
+        </a>
       </div>
-
-      <p className="mt-3 border-t border-linha pt-2.5 text-[10.5px] leading-relaxed text-tinta-3">
-        {estado.resumo.convocacoes_total.toLocaleString('pt-BR')} chamadas únicas, das quais{' '}
-        {(estado.resumo.convocacoes_por_subagente ?? 0).toLocaleString('pt-BR')} partiram de um
-        subagente e não da sessão. Contadas por id da chamada, não por linha:{' '}
-        {estado.resumo.convocacoes_repetidas_descartadas ?? 0} vinham gravadas duas vezes, porque um
-        `fork` herda o transcript do pai. ‼️ Este contador é vivo e sobe enquanto a operação roda,
-        então ele só vale com a hora ao lado, e duas medições se comparam por nome, nunca pelo total.
+      <div className="bg-black/10 p-2 sm:p-3">
+        <iframe
+          className="h-[min(76vw,520px)] min-h-[340px] w-full rounded-lg border border-linha bg-[#101215]"
+          src={dadosJanela.mapa_src}
+          title={`Quem convoca quem - ${dadosJanela.rotulo}`}
+          loading="lazy"
+        />
+      </div>
+      <p className="border-t border-linha px-4 py-3 text-[10.5px] leading-relaxed text-tinta-3">
+        O mapa é um artefato versionado gerado a partir das convocações reais da janela ativa. Use o link para abrir a leitura completa em nova aba com tema e centralização.
       </p>
     </section>
-  )
-}
-
-function Ligacoes({
-  titulo, lista, campo,
-}: {
-  titulo: string
-  lista: { de: string; para: string; vezes: number }[]
-  campo: 'de' | 'para'
-}) {
-  const teto = Math.max(...lista.map((l) => l.vezes), 1)
-  return (
-    <div className="mt-3">
-      <div className="mb-1.5 flex items-baseline gap-2">
-        <span className="rotulo">{titulo}</span>
-        <span className="h-px flex-1 bg-linha" />
-        <span className="rotulo">{lista.length}</span>
-      </div>
-      {lista.length === 0 ? (
-        <p className="text-[11.5px] text-tinta-3">Nenhuma ligação registrada nesse sentido.</p>
-      ) : (
-        <ul className="space-y-[5px]">
-          {lista.slice(0, 8).map((l) => (
-            <li key={l.de + l.para} className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-[11.5px] text-tinta-2">{l[campo]}</span>
-              <span className="w-16 shrink-0">
-                <Barra fracao={l.vezes / teto} cor="var(--color-lima)" altura={3} />
-              </span>
-              <span className="w-7 shrink-0 text-right font-mono text-[10.5px] tabular-nums text-tinta-2">
-                {l.vezes}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   )
 }

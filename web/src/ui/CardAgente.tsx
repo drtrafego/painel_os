@@ -19,7 +19,7 @@ const TOM_ATIVIDADE: Record<string, Tom> = {
 }
 
 export function CardAgente({
-  agente, teto, cor, agora, aoAbrir, aoVivo,
+  agente, teto, cor, agora, aoAbrir, aoVivo, convocacoesJanela, rotuloJanela,
 }: {
   agente: Agente
   teto: number
@@ -27,10 +27,13 @@ export function CardAgente({
   agora: number
   aoAbrir?: () => void
   aoVivo?: { estado: 'trabalhando' | 'silencioso' | 'parado'; etapa?: string }
+  convocacoesJanela?: number | null
+  rotuloJanela?: string
 }) {
   const at = atividade(agente, agora)
   const dias = diasParado(agente, agora)
-  const fracao = agente.convocacoes === null ? null : teto > 0 ? agente.convocacoes / teto : 0
+  const totalConvocacoes = convocacoesJanela !== undefined ? convocacoesJanela : agente.convocacoes
+  const fracao = totalConvocacoes === null ? null : teto > 0 ? totalConvocacoes / teto : 0
 
   return (
     <article
@@ -78,7 +81,7 @@ export function CardAgente({
       </p>
 
       <div className="mt-3.5 grid grid-cols-3 gap-2">
-        <Numero rotulo="convoc." valor={agente.convocacoes} tamanho="text-[21px]" cor="text-tinta" />
+        <Numero rotulo={rotuloJanela ? `convoc. (${rotuloJanela})` : "convoc."} valor={totalConvocacoes} tamanho="text-[21px]" cor="text-tinta" />
         <Numero rotulo="últimas 24h" valor={agente.convocacoes_24h ?? null} tamanho="text-[21px]" cor="text-tinta-2" />
         <Numero rotulo="parado (d)" valor={dias} tamanho="text-[21px]" cor="text-tinta-2" />
       </div>

@@ -41,12 +41,22 @@ import urllib.error
 import urllib.request
 import unicodedata
 from datetime import datetime, timedelta, timezone
+try:
+    from zoneinfo import ZoneInfo
+    FUSO_SP = ZoneInfo("America/Sao_Paulo")
+except Exception:
+    FUSO_SP = timezone(timedelta(hours=-3), name="America/Sao_Paulo")
 from pathlib import Path
 from chamadas_ingestao import ErroIngestao, carregar_inbox
 from diretiva import carregar as carregar_diretiva
 import motores
 
 RAIZ = Path("/opt/gastaomatos")
+PAINEL_OS_DIR = Path(__file__).resolve().parent.parent
+DATA_MAPAS = PAINEL_OS_DIR / "data" / "mapas"
+DIST_MAPAS = PAINEL_OS_DIR / "web" / "dist" / "mapas"
+PUBLIC_MAPAS = PAINEL_OS_DIR / "web" / "public" / "mapas"
+ARCHIFY_CLI = Path(os.environ.get("ARCHIFY_CLI", "/home/claude/.codex-luana/skills/archify/bin/archify.mjs"))
 CASA_CLAUDE = Path.home() / ".claude"
 AGENTES_GLOBAIS = CASA_CLAUDE / "agents"
 PROJETOS = CASA_CLAUDE / "projects"
@@ -2004,7 +2014,7 @@ def _ler_convocacoes_codex(pasta: Path = SESSOES_CODEX):
     """
     vazio = {
         "chamadas": {}, "retornos": {}, "arestas": {}, "arquivos": 0,
-        "repetidas_descartadas": 0, "erro": None,
+        "repetidas_descartadas": 0, "erro": None, "lista_chamadas": [],
     }
     if not pasta.is_dir():
         vazio["erro"] = "catálogo de sessões Codex não encontrado"
@@ -2126,12 +2136,15 @@ def _ler_convocacoes_codex(pasta: Path = SESSOES_CODEX):
 
     por_alvo = {}
     arestas = {}
+    lista_chamadas = []
     for chamador_path, alvo_path, quando in chamadas.values():
         alvo = _apelido_codex(alvo_path, apelidos)
         chamador = _apelido_codex(chamador_path, apelidos)
+        de_tipo = "agente" if chamador_path else "sessao"
         por_alvo.setdefault(alvo, []).append(quando)
-        chave = (chamador, "agente" if chamador_path else "sessao", alvo)
+        chave = (chamador, de_tipo, alvo)
         arestas[chave] = arestas.get(chave, 0) + 1
+        lista_chamadas.append((chamador, de_tipo, alvo, quando))
 
     retornos = {}
     for alvo, momentos in por_alvo.items():
@@ -2141,6 +2154,7 @@ def _ler_convocacoes_codex(pasta: Path = SESSOES_CODEX):
         "chamadas": por_alvo, "retornos": retornos, "arestas": arestas,
         "arquivos": len(linhas_por_arquivo),
         "repetidas_descartadas": repetidas, "erro": None,
+        "lista_chamadas": lista_chamadas,
     }
 
 
@@ -2372,6 +2386,7 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
     }
 
     arestas = {}
+    todas_chamadas = []
     agora = agora_utc()
     for ident, (chamador, alvo, projeto, quando) in chamadas.items():
         saida["por_agente"][alvo] = saida["por_agente"].get(alvo, 0) + 1
@@ -2415,6 +2430,7 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
 
         chave = (de, de_tipo, alvo)
         arestas[chave] = arestas.get(chave, 0) + 1
+        todas_chamadas.append((de, de_tipo, alvo, quando))
 
     saida["arestas"] = [
         {"de": de, "de_tipo": de_tipo, "para": para, "vezes": n}
@@ -2471,11 +2487,605 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
         for (de, de_tipo, para), n in sorted(arestas.items(), key=lambda kv: (-kv[1], kv[0][0], kv[0][2]))
     ]
     saida["arquivos"] = arquivos + codex["arquivos"]
-    saida["total"] = len(chamadas) + saida["por_motor"]["codex"]
-    saida["repetidas_descartadas"] = repetidas + codex["repetidas_descartadas"]
+    todas_chamadas.extend(codex.get("lista_chamadas", []))
+    saida["todas_chamadas"] = todas_chamadas
     erros = [x for x in saida["erros_por_motor"].values() if x]
     saida["erro"] = "; ".join(erros) if erros else None
     return saida
+
+
+def agregar_janelas_convocacoes(todas_chamadas, ids_casa, agora_referencia=None):
+    """Agrega as chamadas nas janelas: 'hoje', '7d', '30d' e 'total'.
+    Fuso de São Paulo (America/Sao_Paulo) para 'hoje', '7d' e '30d'.
+    """
+    if agora_referencia is None:
+        agora_sp = datetime.now(FUSO_SP)
+    else:
+        agora_sp = agora_referencia.astimezone(FUSO_SP) if agora_referencia.tzinfo else agora_referencia.replace(tzinfo=FUSO_SP)
+
+    inicio_hoje_sp = agora_sp.replace(hour=0, minute=0, second=0, microsecond=0)
+    inicio_7d_sp = inicio_hoje_sp - timedelta(days=6)
+    inicio_30d_sp = inicio_hoje_sp - timedelta(days=29)
+
+    janelas = {
+        "hoje": {
+            "rotulo": "Hoje",
+            "filtro": lambda t: t is not None and t >= inicio_hoje_sp,
+            "arestas_map": {},
+            "por_agente": {},
+            "total": 0,
+            "fora_da_casa": {},
+        },
+        "7d": {
+            "rotulo": "Últimos 7 dias",
+            "filtro": lambda t: t is not None and t >= inicio_7d_sp,
+            "arestas_map": {},
+            "por_agente": {},
+            "total": 0,
+            "fora_da_casa": {},
+        },
+        "30d": {
+            "rotulo": "Últimos 30 dias",
+            "filtro": lambda t: t is not None and t >= inicio_30d_sp,
+            "arestas_map": {},
+            "por_agente": {},
+            "total": 0,
+            "fora_da_casa": {},
+        },
+        "total": {
+            "rotulo": "Total histórico",
+            "filtro": lambda t: True,
+            "arestas_map": {},
+            "por_agente": {},
+            "total": 0,
+            "fora_da_casa": {},
+        },
+    }
+
+    for de, de_tipo, alvo, quando in todas_chamadas:
+        t_sp = None
+        if quando:
+            try:
+                instante = datetime.fromisoformat(str(quando).replace("Z", "+00:00"))
+                if instante.tzinfo is None:
+                    instante = instante.replace(tzinfo=timezone.utc)
+                t_sp = instante.astimezone(FUSO_SP)
+            except (TypeError, ValueError):
+                t_sp = None
+
+        chave = (de, de_tipo, alvo)
+        for j_key, j_data in janelas.items():
+            if j_data["filtro"](t_sp):
+                j_data["total"] += 1
+                j_data["arestas_map"][chave] = j_data["arestas_map"].get(chave, 0) + 1
+                j_data["por_agente"][alvo] = j_data["por_agente"].get(alvo, 0) + 1
+                if alvo not in ids_casa:
+                    j_data["fora_da_casa"][alvo] = j_data["fora_da_casa"].get(alvo, 0) + 1
+
+    resultado = {}
+    for j_key, j_data in janelas.items():
+        arestas_lista = [
+            {"de": de, "de_tipo": de_tipo, "para": para, "vezes": n}
+            for (de, de_tipo, para), n in sorted(
+                j_data["arestas_map"].items(), key=lambda kv: (-kv[1], kv[0][0], kv[0][2])
+            )
+            if n > 0
+        ]
+        resultado[j_key] = {
+            "rotulo": j_data["rotulo"],
+            "total": j_data["total"],
+            "por_agente": j_data["por_agente"],
+            "arestas": arestas_lista,
+            "convocacoes_fora_da_casa": j_data["fora_da_casa"],
+            "mapa_src": f"/mapas/quem-convoca-quem-{j_key}.html",
+        }
+    return resultado
+
+
+def gerar_workflow_quem_convoca_quem(janela_key: str, janela_info: dict, agentes: list, squads: dict) -> dict:
+    rotulo = janela_info.get("rotulo", janela_key)
+    arestas = janela_info.get("arestas", [])
+    por_agente = janela_info.get("por_agente", {})
+    fora_da_casa = janela_info.get("convocacoes_fora_da_casa", {})
+
+    diretores = [
+        {"id": "luana", "label": "Luana", "sublabel": "CEO Operacional", "col": 0},
+        {"id": "renato", "label": "Renato", "sublabel": "CRO Comercial", "col": 0},
+        {"id": "bia", "label": "Bia", "sublabel": "Tráfego & IA", "col": 0},
+    ]
+    ids_diretores = {d["id"] for d in diretores}
+
+    especialistas = []
+    for ag in agentes:
+        ag_id = ag.get("id")
+        if not ag_id or ag_id in ids_diretores:
+            continue
+        squad_id = ag.get("squad", "global")
+        col = 1 if squad_id == "global" else (2 if squad_id == "conteudo" else 3)
+        especialistas.append({
+            "id": ag_id,
+            "label": ag.get("nome", ag_id),
+            "sublabel": ag.get("funcao", squad_id),
+            "squad": squad_id,
+            "col": col,
+        })
+
+    qtd_fora = sum(fora_da_casa.values())
+    nos_outros = []
+    if qtd_fora > 0 or len(fora_da_casa) > 0:
+        nos_outros.append({
+            "id": "outros",
+            "label": f"outros ({len(fora_da_casa)})",
+            "sublabel": f"{qtd_fora} chamada{'s' if qtd_fora != 1 else ''} sem ficha",
+            "col": 4,
+            "type": "external",
+        })
+
+    nodes = []
+    y_offsets = {0: -100, 1: -120, 2: -120, 3: -120, 4: 0}
+
+    for d in diretores:
+        nodes.append({
+            "id": d["id"],
+            "lane": "diretoria",
+            "col": d["col"],
+            "type": "director",
+            "label": d["label"],
+            "sublabel": d["sublabel"],
+            "width": 136,
+            "yOffset": y_offsets[0],
+        })
+        y_offsets[0] += 90
+
+    for esp in especialistas:
+        col = esp["col"]
+        nodes.append({
+            "id": esp["id"],
+            "lane": "operacao",
+            "col": col,
+            "type": "backend",
+            "label": esp["label"],
+            "sublabel": esp["sublabel"],
+            "width": 130,
+            "yOffset": y_offsets[col],
+        })
+        y_offsets[col] += 70
+
+    for out in nos_outros:
+        nodes.append({
+            "id": out["id"],
+            "lane": "operacao",
+            "col": out["col"],
+            "type": out["type"],
+            "label": out["label"],
+            "sublabel": out["sublabel"],
+            "width": 140,
+            "yOffset": y_offsets[4],
+        })
+
+    ids_todos_nodes = {n["id"] for n in nodes}
+    edges_map = {}
+    for a in arestas:
+        origem = a.get("de")
+        destino = a.get("para")
+        vezes = a.get("vezes", 0)
+        if vezes <= 0:
+            continue
+        if destino not in ids_todos_nodes:
+            destino = "outros" if "outros" in ids_todos_nodes else None
+        if not destino:
+            continue
+        if origem not in ids_todos_nodes:
+            origem = "luana" if "luana" in ids_todos_nodes else (list(ids_todos_nodes)[0] if ids_todos_nodes else "sessao")
+
+        chave_edge = (origem, destino)
+        edges_map[chave_edge] = edges_map.get(chave_edge, 0) + vezes
+
+    edges = []
+    for (src, dst), n in sorted(edges_map.items(), key=lambda kv: -kv[1]):
+        edge_id = f"{src}-{dst}"
+        variant = "emphasis" if n >= 20 else ("default" if n >= 5 else "dashed")
+        role = "main" if n >= 15 else "branch"
+        edges.append({
+            "id": edge_id,
+            "from": src,
+            "to": dst,
+            "label": f"{n} chamada{'s' if n != 1 else ''}",
+            "variant": variant,
+            "role": role,
+            "calls": n,
+        })
+
+    return {
+        "schema_version": 2,
+        "diagram_type": "workflow",
+        "meta": {
+            "title": f"Quem convoca quem ({rotulo})",
+            "animation": "trace",
+            "quality_profile": "showcase",
+            "janela": janela_key,
+            "total_convocacoes": janela_info.get("total", 0),
+            "output": f"quem-convoca-quem-{janela_key}.html",
+        },
+        "lanes": [
+            {"id": "diretoria", "label": "Diretoria"},
+            {"id": "operacao", "label": "Operação e Especialistas"},
+        ],
+        "phases": [
+            {"id": "comando", "label": "Diretoria", "fromCol": 0, "toCol": 0, "variant": "emphasis"},
+            {"id": "global", "label": "Orquestração", "fromCol": 1, "toCol": 1},
+            {"id": "conteudo", "label": "Conteúdo e Tráfego", "fromCol": 2, "toCol": 2},
+            {"id": "pipeline", "label": "Execução Especializada", "fromCol": 3, "toCol": 4},
+        ],
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
+def renderizar_html_workflow_quem_convoca_quem(workflow: dict) -> str:
+    meta = workflow.get("meta", {})
+    titulo = meta.get("title", "Quem convoca quem")
+    total_convocacoes = meta.get("total_convocacoes", 0)
+    nodes = workflow.get("nodes", [])
+    edges = workflow.get("edges", [])
+
+    col_width = 240
+    start_x = 40
+    start_y = 60
+    card_w = 160
+    card_h = 60
+
+    nodes_by_col = {}
+    for n in nodes:
+        c = n.get("col", 0)
+        nodes_by_col.setdefault(c, []).append(n)
+
+    max_rows = max((len(cols) for cols in nodes_by_col.values()), default=1)
+    max_cols = max(nodes_by_col.keys(), default=0) + 1
+
+    svg_w = max(900, start_x * 2 + max_cols * col_width)
+    svg_h = max(550, start_y * 2 + max_rows * 85 + 40)
+
+    node_positions = {}
+    for col_idx, col_nodes in nodes_by_col.items():
+        x = start_x + col_idx * col_width
+        for row_idx, n in enumerate(col_nodes):
+            y = start_y + row_idx * 85
+            node_positions[n["id"]] = (x, y)
+
+    svg_nodes = []
+    for n in nodes:
+        nid = n["id"]
+        pos = node_positions.get(nid, (start_x, start_y))
+        x, y = pos
+        label = n.get("label", nid)
+        sublabel = n.get("sublabel", "")
+        ntype = n.get("type", "backend")
+
+        cor_borda = "#7ee787" if ntype == "director" else ("#58a6ff" if ntype == "backend" else "#f0883e")
+        badge_bg = "rgba(126, 231, 135, 0.15)" if ntype == "director" else "rgba(88, 166, 255, 0.15)"
+        badge_cor = cor_borda
+
+        svg_nodes.append(f"""
+        <g class="node-group" id="node-{nid}" transform="translate({x}, {y})">
+          <rect width="{card_w}" height="{card_h}" rx="8" class="card-bg" stroke="{cor_borda}" stroke-width="1.5"/>
+          <text x="12" y="24" class="node-title">{label}</text>
+          <text x="12" y="44" class="node-sub">{sublabel}</text>
+          <rect x="{card_w - 42}" y="8" width="34" height="18" rx="4" fill="{badge_bg}"/>
+          <text x="{card_w - 25}" y="21" class="node-badge" fill="{badge_cor}" text-anchor="middle">{ntype[:3].upper()}</text>
+        </g>
+        """)
+
+    svg_edges = []
+    for e in edges:
+        src = e.get("from")
+        dst = e.get("to")
+        lbl = e.get("label", "")
+        if src not in node_positions or dst not in node_positions:
+            continue
+        x1, y1 = node_positions[src]
+        x2, y2 = node_positions[dst]
+
+        if x2 > x1:
+            p1 = (x1 + card_w, y1 + card_h / 2)
+            p2 = (x2, y2 + card_h / 2)
+            cx1 = p1[0] + (p2[0] - p1[0]) * 0.5
+            cy1 = p1[1]
+            cx2 = p1[0] + (p2[0] - p1[0]) * 0.5
+            cy2 = p2[1]
+        elif x2 < x1:
+            p1 = (x1, y1 + card_h / 2)
+            p2 = (x2 + card_w, y2 + card_h / 2)
+            cx1 = p1[0] - 40
+            cy1 = p1[1]
+            cx2 = p2[0] + 40
+            cy2 = p2[1]
+        else:
+            p1 = (x1 + card_w / 2, y1 + card_h)
+            p2 = (x2 + card_w / 2, y2)
+            cx1 = p1[0] + 40
+            cy1 = p1[1] + 20
+            cx2 = p2[0] + 40
+            cy2 = p2[1] - 20
+
+        mid_x = (p1[0] + p2[0]) / 2
+        mid_y = (p1[1] + p2[1]) / 2
+
+        stroke_w = min(4, max(1.5, e.get("calls", 1) / 10))
+        variant_class = e.get("variant", "default")
+
+        svg_edges.append(f"""
+        <g class="edge-group">
+          <path d="M {p1[0]} {p1[1]} C {cx1} {cy1}, {cx2} {cy2}, {p2[0]} {p2[1]}" 
+                class="edge-path {variant_class}" stroke-width="{stroke_w}" marker-end="url(#arrow)"/>
+          <g transform="translate({mid_x}, {mid_y})">
+            <rect x="-32" y="-9" width="64" height="18" rx="4" class="edge-label-bg"/>
+            <text x="0" y="3.5" class="edge-label-text" text-anchor="middle">{lbl}</text>
+          </g>
+        </g>
+        """)
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{titulo}</title>
+  <style>
+    :root {{
+      --bg: #0e1117;
+      --card-bg: #161b22;
+      --card-border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --edge: #8b949e;
+      --edge-emphasis: #7ee787;
+      --badge-bg: #21262d;
+      --header-bg: rgba(22, 27, 34, 0.85);
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    }}
+    [data-theme="light"] {{
+      --bg: #f6f8fa;
+      --card-bg: #ffffff;
+      --card-border: #d0d7de;
+      --text: #1f2328;
+      --text-muted: #656d76;
+      --edge: #656d76;
+      --edge-emphasis: #1a7f37;
+      --badge-bg: #eaeef2;
+      --header-bg: rgba(255, 255, 255, 0.85);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }}
+    .toolbar {{
+      height: 48px;
+      padding: 0 16px;
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--card-border);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 10;
+    }}
+    .title-area {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }}
+    .title {{
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }}
+    .pill {{
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: var(--badge-bg);
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+      white-space: nowrap;
+    }}
+    .btn {{
+      background: var(--badge-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s, border-color 0.15s;
+    }}
+    .btn:hover {{
+      border-color: var(--text-muted);
+    }}
+    .canvas-container {{
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      position: relative;
+      background-image: radial-gradient(var(--card-border) 1px, transparent 1px);
+      background-size: 24px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }}
+    svg {{
+      display: block;
+      min-width: 100%;
+      min-height: 100%;
+    }}
+    .card-bg {{
+      fill: var(--card-bg);
+      transition: fill 0.2s, stroke 0.2s;
+    }}
+    .node-group:hover .card-bg {{
+      stroke-width: 2.2px;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.15));
+    }}
+    .node-title {{
+      font-size: 13px;
+      font-weight: 600;
+      fill: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    .node-sub {{
+      font-size: 10.5px;
+      fill: var(--text-muted);
+      font-family: var(--font-mono);
+    }}
+    .node-badge {{
+      font-size: 9px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }}
+    .edge-path {{
+      fill: none;
+      stroke: var(--edge);
+      stroke-opacity: 0.65;
+      transition: stroke 0.2s, stroke-width 0.2s;
+    }}
+    .edge-path.emphasis {{
+      stroke: var(--edge-emphasis);
+      stroke-opacity: 0.85;
+    }}
+    .edge-path.dashed {{
+      stroke-dasharray: 4, 4;
+    }}
+    .edge-group:hover .edge-path {{
+      stroke-opacity: 1;
+      stroke: #7ee787;
+    }}
+    .edge-label-bg {{
+      fill: var(--card-bg);
+      stroke: var(--card-border);
+      stroke-width: 1px;
+    }}
+    .edge-label-text {{
+      font-size: 9px;
+      font-family: var(--font-mono);
+      fill: var(--text-muted);
+      font-weight: 500;
+    }}
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="title-area">
+      <span class="title">⚡ {titulo}</span>
+      <span class="pill">{total_convocacoes} chamadas</span>
+    </div>
+    <div>
+      <button class="btn" id="theme-btn" type="button" title="Alternar tema">🌓 Tema</button>
+      <button class="btn" id="reset-btn" type="button" title="Centralizar">⛶ Centralizar</button>
+    </div>
+  </div>
+  <div class="canvas-container" id="container">
+    <svg viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}" height="{svg_h}">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--edge)"/>
+        </marker>
+      </defs>
+      {"".join(svg_edges)}
+      {"".join(svg_nodes)}
+    </svg>
+  </div>
+  <script>
+    const themeBtn = document.getElementById('theme-btn');
+    if (themeBtn) {{
+      themeBtn.addEventListener('click', () => {{
+        const html = document.documentElement;
+        const cur = html.getAttribute('data-theme') || 'dark';
+        html.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+      }});
+    }}
+    const resetBtn = document.getElementById('reset-btn');
+    const container = document.getElementById('container');
+    if (resetBtn && container) {{
+      resetBtn.addEventListener('click', () => {{
+        container.scrollTo({{ left: 0, top: 0, behavior: 'smooth' }});
+      }});
+    }}
+  </script>
+</body>
+</html>
+"""
+
+
+def salvar_mapas_quem_convoca_quem(janelas: dict, agentes: list, squads: dict) -> None:
+    """Gera e salva artefatos de mapa (workflow.json e html) para cada janela."""
+    for janela_key, j_data in janelas.items():
+        wf = gerar_workflow_quem_convoca_quem(janela_key, j_data, agentes, squads)
+        wf_json = json.dumps(wf, ensure_ascii=False, indent=2)
+
+        html_conteudo = None
+        if ARCHIFY_CLI.exists() and shutil.which("node"):
+            try:
+                with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp_wf:
+                    tmp_wf.write(wf_json)
+                    tmp_wf_path = Path(tmp_wf.name)
+                tmp_out = tmp_wf_path.with_suffix(".html")
+                res = subprocess.run(["node", str(ARCHIFY_CLI), "build", str(tmp_wf_path), "-o", str(tmp_out)], capture_output=True, text=True, timeout=15)
+                if res.returncode == 0 and tmp_out.is_file():
+                    html_conteudo = tmp_out.read_text(encoding="utf-8")
+                try:
+                    tmp_wf_path.unlink(missing_ok=True)
+                    tmp_out.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            except Exception:
+                html_conteudo = None
+
+        if not html_conteudo:
+            html_conteudo = renderizar_html_workflow_quem_convoca_quem(wf)
+
+        try:
+            DATA_MAPAS.mkdir(parents=True, exist_ok=True)
+            (DATA_MAPAS / f"quem-convoca-quem-{janela_key}.html").write_text(html_conteudo, encoding="utf-8")
+            (DATA_MAPAS / f"quem-convoca-quem-{janela_key}.workflow.json").write_text(wf_json, encoding="utf-8")
+        except OSError:
+            pass
+
+        if DIST_MAPAS.parent.exists():
+            try:
+                DIST_MAPAS.mkdir(parents=True, exist_ok=True)
+                (DIST_MAPAS / f"quem-convoca-quem-{janela_key}.html").write_text(html_conteudo, encoding="utf-8")
+                (DIST_MAPAS / f"quem-convoca-quem-{janela_key}.workflow.json").write_text(wf_json, encoding="utf-8")
+            except OSError:
+                pass
+
+        if PUBLIC_MAPAS.exists():
+            try:
+                alvo_pub = PUBLIC_MAPAS / f"quem-convoca-quem-{janela_key}.html"
+                alvo_pub.write_text(html_conteudo, encoding="utf-8")
+                (PUBLIC_MAPAS / f"quem-convoca-quem-{janela_key}.workflow.json").write_text(wf_json, encoding="utf-8")
+            except OSError:
+                pass
 
 
 FUSOS = {"utc": 0, "gmt": 0, "z": 0, "brt": -3, "-03": -3, "-0300": -3, "art": -3}
@@ -3749,6 +4359,10 @@ def main():
     ids_casa = {a["id"] for a in agentes}
     de_fora = {k: v for k, v in convocacoes.items() if k not in ids_casa}
 
+    todas_chamadas = conv.get("todas_chamadas", [])
+    janelas = agregar_janelas_convocacoes(todas_chamadas, ids_casa)
+    salvar_mapas_quem_convoca_quem(janelas, agentes, SQUADS)
+
     estado = {
         "gerado_em": agora_utc().isoformat(),
         "fonte": {
@@ -3830,6 +4444,7 @@ def main():
         "agentes": agentes,
         "convocacoes_fora_da_casa": de_fora,
         "arestas": conv["arestas"],
+        "janelas": janelas,
         "convocacoes_erro": conv["erro"],
         "chamador_nao_resolvido": conv["chamador_nao_resolvido"],
     }

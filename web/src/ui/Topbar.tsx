@@ -1,6 +1,6 @@
 import { Icone } from './Icone'
 import { Pilula, type Tom } from './primitivos'
-import { SeletorDeData } from './SeletorDeData'
+import { SeletorDeData, identificarJanela, type FaixaDeData } from './SeletorDeData'
 import type { AgenteSessao, Estado } from '../dados/tipos'
 
 /**
@@ -24,6 +24,8 @@ export function Topbar({
   aoAbrirMenu,
   expandido,
   aoAlternarExpandido,
+  faixa,
+  aoMudarFaixa,
 }: {
   hora: string
   estado: Estado
@@ -31,6 +33,8 @@ export function Topbar({
   aoAbrirMenu: () => void
   expandido?: boolean
   aoAlternarExpandido?: () => void
+  faixa?: FaixaDeData
+  aoMudarFaixa?: (f: FaixaDeData) => void
 }) {
   const naoLidos = estado.sessao.filter(ilegivel)
   const lidos = estado.sessao.filter((s) => !ilegivel(s))
@@ -82,6 +86,11 @@ export function Topbar({
     }
   }
 
+  const janelaAtiva = identificarJanela(faixa)
+  const totalConvocacoes = (estado.janelas && estado.janelas[janelaAtiva])
+    ? estado.janelas[janelaAtiva].total
+    : estado.resumo.convocacoes_casa
+
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-linha bg-topo/70 px-3 sm:px-5">
       <button
@@ -100,12 +109,12 @@ export function Topbar({
       <div className="ml-auto flex shrink-0 items-center gap-3 sm:gap-4">
         {/* Seletor de Datas Interativo */}
         <span className="hidden sm:inline-flex">
-          <SeletorDeData />
+          <SeletorDeData faixa={faixa} aoMudarFaixa={aoMudarFaixa} />
         </span>
 
         <span className="rotulo hidden xl:inline">
           convocações de agente{' '}
-          <span className="text-tinta-2">{estado.resumo.convocacoes_casa.toLocaleString('pt-BR')}</span>
+          <span className="text-tinta-2">{totalConvocacoes.toLocaleString('pt-BR')}</span>
         </span>
         <span
           className="hidden sm:inline"

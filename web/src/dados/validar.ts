@@ -120,6 +120,29 @@ function validarCofre(ctx: Contexto, v: unknown) {
 
 function validarArestas(ctx: Contexto, v: unknown) { if (v === undefined) return; if (lista(ctx, v, 'estado.arestas')) v.forEach((item, i) => { const p = `estado.arestas[${i}]`; if (!objetoObrigatorio(ctx, item, p)) return; texto(ctx, item.de, `${p}.de`); texto(ctx, item.para, `${p}.para`); numero(ctx, item.vezes, `${p}.vezes`, true, true); if (item.de_tipo !== undefined && (!texto(ctx, item.de_tipo, `${p}.de_tipo`) || !TIPOS_ARESTA.has(item.de_tipo))) ctx.problemas.push(`${p}.de_tipo: tipo de aresta não permitido`) }) }
 
+function validarJanelas(ctx: Contexto, v: unknown) {
+  if (v === undefined || v === null) return
+  if (!objetoObrigatorio(ctx, v, 'estado.janelas')) return
+  for (const [chave, janela] of Object.entries(v as Record<string, unknown>)) {
+    const p = `estado.janelas.${chave}`
+    if (!objetoObrigatorio(ctx, janela, p)) continue
+    texto(ctx, (janela as Registro).rotulo, `${p}.rotulo`)
+    numero(ctx, (janela as Registro).total, `${p}.total`, true, true)
+    texto(ctx, (janela as Registro).mapa_src, `${p}.mapa_src`)
+    mapaNumeros(ctx, (janela as Registro).por_agente, `${p}.por_agente`)
+    mapaNumeros(ctx, (janela as Registro).convocacoes_fora_da_casa, `${p}.convocacoes_fora_da_casa`)
+    if (lista(ctx, (janela as Registro).arestas, `${p}.arestas`)) {
+      ((janela as Registro).arestas as unknown[]).forEach((item, i) => {
+        const ap = `${p}.arestas[${i}]`
+        if (!objetoObrigatorio(ctx, item, ap)) return
+        texto(ctx, (item as Registro).de, `${ap}.de`)
+        texto(ctx, (item as Registro).para, `${ap}.para`)
+        numero(ctx, (item as Registro).vezes, `${ap}.vezes`, true, true)
+      })
+    }
+  }
+}
+
 function validarPrivacidade(v: unknown, p = 'estado', problemas: string[] = []) {
   const chaveSecreta = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential|authorization|private[_-]?key|bearer)/i
   const caminhoPrivado = /(?:^|[\s"'=])(?:\/(?:opt|home|root|tmp|var|mnt|etc)\/|[A-Za-z]:\\|\\\\[^\\]+\\)/i
@@ -136,7 +159,7 @@ export function validarEstado(dado: unknown): ResultadoValidacao {
   if (objetoObrigatorio(ctx, e.fonte, 'estado.fonte')) mapaTextos(ctx, e.fonte, 'estado.fonte')
   if (objetoObrigatorio(ctx, e.squads, 'estado.squads')) for (const [id, squad] of Object.entries(e.squads)) { ctx.squads.add(id); const p = `estado.squads.${id}`; if (objetoObrigatorio(ctx, squad, p)) { texto(ctx, squad.nome, `${p}.nome`); texto(ctx, squad.descricao, `${p}.descricao`) } }
   if (objetoObrigatorio(ctx, e.resumo, 'estado.resumo')) { for (const n of ['agentes_casa', 'agentes_sessao', 'convocacoes_total', 'convocacoes_casa', 'transcripts_lidos']) numero(ctx, e.resumo[n], `estado.resumo.${n}`, true, true); opcionalNumero(ctx, e.resumo.convocacoes_pela_sessao, 'estado.resumo.convocacoes_pela_sessao', false, true, true); opcionalNumero(ctx, e.resumo.convocacoes_por_subagente, 'estado.resumo.convocacoes_por_subagente', false, true, true); opcionalNumero(ctx, e.resumo.convocacoes_repetidas_descartadas, 'estado.resumo.convocacoes_repetidas_descartadas', false, true, true); opcionalNumero(ctx, e.resumo.cron_ativo, 'estado.resumo.cron_ativo', true, true, true); for (const n of ['convocacoes_por_motor', 'convocacoes_por_modelo', 'transcripts_por_motor']) if (e.resumo[n] !== undefined) mapaNumeros(ctx, e.resumo[n], `estado.resumo.${n}`) }
-  validarAgentes(ctx, e.agentes); validarSessao(ctx, e.sessao); validarArestas(ctx, e.arestas)
+  validarAgentes(ctx, e.agentes); validarSessao(ctx, e.sessao); validarArestas(ctx, e.arestas); validarJanelas(ctx, e.janelas)
   mapaNumeros(ctx, e.convocacoes_fora_da_casa, 'estado.convocacoes_fora_da_casa')
   if (objetoObrigatorio(ctx, e.verificadores, 'estado.verificadores')) for (const [nome, item] of Object.entries(e.verificadores)) { if (nome === 'erro') opcionalTexto(ctx, item, `estado.verificadores.${nome}`, true); else validarVerificador(ctx, item, `estado.verificadores.${nome}`) }
   if (objetoObrigatorio(ctx, e.cron, 'estado.cron')) { if (e.cron.jobs === null) { /* permitido pelo tipo */ } else if (lista(ctx, e.cron.jobs, 'estado.cron.jobs')) e.cron.jobs.forEach((j, i) => { const p = `estado.cron.jobs[${i}]`; if (objetoObrigatorio(ctx, j, p)) { texto(ctx, j.expressao, `${p}.expressao`); texto(ctx, j.rotulo, `${p}.rotulo`); opcionalTexto(ctx, j.dono, `${p}.dono`, true) } }); else ctx.problemas.push('estado.cron.jobs: campo ausente'); opcionalTexto(ctx, e.cron.fuso, 'estado.cron.fuso', true); opcionalNumero(ctx, e.cron.total, 'estado.cron.total', true, true, true); if (e.cron.negacao !== undefined && objetoObrigatorio(ctx, e.cron.negacao, 'estado.cron.negacao')) { opcionalTexto(ctx, e.cron.negacao.erro, 'estado.cron.negacao.erro', true); opcionalNumero(ctx, e.cron.negacao.mascarados, 'estado.cron.negacao.mascarados', false, true, true) } }
