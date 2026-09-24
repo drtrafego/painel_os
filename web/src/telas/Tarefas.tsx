@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
+import { contarAgentesVivosNaContagem } from '../dados/agentes-vivos'
 import { montarCatalogoPixel } from '../dados/pixel-agents'
 import { PixelOffice } from '../ui/PixelOffice'
-import { ORDEM_SQUAD, porSquad } from '../dados/estado'
+import { porSquad, squadsComAgentes } from '../dados/estado'
 import type { PropsTela } from './Vazias'
 import type { AgenteVivo } from '../dados/tipos'
 
@@ -230,10 +231,11 @@ function InspectorAgente({
 export function Tarefas({ estado, vista }: PropsTela) {
   const { dados: vivos, carregando: carregandoVivos, erro: erroVivos, falhouHaSegundos } = useAgentesVivos()
   const ativos = vivos?.contagem?.trabalhando ?? 0
-  const totalVivos = (vivos?.contagem?.trabalhando ?? 0) + (vivos?.contagem?.silencioso ?? 0)
+  const totalVivos = contarAgentesVivosNaContagem(vivos?.contagem)
   // A sonda é a única fonte de presença; o catálogo do escritório completa o restante.
   const listaVivos = vivos?.agentes ?? []
   const catalogoPixel = useMemo(() => montarCatalogoPixel(estado.agentes, estado.sessao), [estado.agentes, estado.sessao])
+  const squadIds = useMemo(() => squadsComAgentes(estado), [estado])
 
   const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal' | 'squad'>('office')
   const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
@@ -390,7 +392,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
                 ? `FALHA (${falhouHaSegundos}s)`
                 : 'FALHA'
               : vivos?.ok
-              ? `${vivos.contagem?.vivos ?? 0} VIVOS (${ativos} EXEC)`
+              ? `${totalVivos} VIVOS (${ativos} EXEC)`
               : 'SONDA OFF'
           }
           corBadge={
@@ -580,7 +582,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
         />
         <PixelKpi
           rotulo="DEPARTAMENTOS"
-          valor={Object.keys(estado.squads).length}
+          valor={squadIds.length}
           cor="text-[#fb923c]"
           nota="squads estruturados"
         />
@@ -635,7 +637,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
           corBadge="text-[#38bdf8]"
         >
           <div className="space-y-4">
-            {ORDEM_SQUAD.map((squadId) => {
+            {squadIds.map((squadId) => {
               const squadAgentes = porSquad(estado, squadId)
               const nome = estado.squads[squadId]?.nome ?? squadId
               return (

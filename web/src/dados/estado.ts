@@ -4,7 +4,7 @@
 
 import type { Agente, AgenteSessao, Aresta, Estado } from './tipos'
 
-export const ORDEM_SQUAD = ['global', 'conteudo', 'comercial', 'pipeline-luana']
+export const ORDEM_SQUAD = ['global', 'conteudo', 'comercial'] as const
 
 export type SituacaoDiretiva =
   | { estado: 'sem-fonte'; porque: string }
@@ -121,6 +121,15 @@ export function arestas(estado: Estado): Aresta[] {
 
 export function porSquad(estado: Estado, squadId: string): Agente[] {
   return (estado.agentes ?? []).filter((a) => a.squad === squadId)
+}
+
+export function squadsComAgentes(estado: Estado): string[] {
+  const idsComAgentes = new Set((estado.agentes ?? []).map((a) => a.squad))
+  const squads = estado.squads ?? {}
+  const prioridade = new Set<string>(ORDEM_SQUAD)
+  const fixos = ORDEM_SQUAD.filter((id) => id in squads && idsComAgentes.has(id))
+  const extras = Object.keys(squads).filter((id) => !prioridade.has(id) && idsComAgentes.has(id)).sort()
+  return [...fixos, ...extras]
 }
 
 export function temCargo(estado: Estado, nome: string): boolean {

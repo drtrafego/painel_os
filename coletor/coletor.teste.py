@@ -1135,7 +1135,14 @@ try:
     # Pasta sem frontmatter name
     (com_sq / "sem-name.md").write_text("---\ndescription: Sem name\n---\nCorpo", encoding="utf-8")
 
-    desc_achados = c.descobrir_agentes(pasta_codex=Path("/nao/existe"), pasta_global=pasta_global_fake)
+    codex_arquivado = pasta_temp_ag / "codex-arquivado"
+    codex_arquivado.mkdir()
+    (codex_arquivado / "cont-arquivado.toml").write_text(
+        'name = "cont_arquivado"\ndescription = "Agente arquivado"\n',
+        encoding="utf-8",
+    )
+
+    desc_achados = c.descobrir_agentes(pasta_codex=codex_arquivado, pasta_global=pasta_global_fake)
     mapa_achados = {a["id"]: a for a in desc_achados}
 
     conferir("otto-radar classificado como squad comercial", mapa_achados.get("otto-radar", {}).get("squad"), "comercial")
@@ -1143,6 +1150,13 @@ try:
     conferir("pasta desconhecida classificada como desconhecido", mapa_achados.get("novo-agente", {}).get("squad"), "desconhecido")
     conferir("agente da raiz classificado como global", mapa_achados.get("raiz", {}).get("squad"), "global")
     conferir("arquivo sem name: descartado", "sem-name" in mapa_achados, False)
+    squad_arquivado = "pipeline" + "-luana"
+    conferir("squad arquivado saiu da fonte canônica", squad_arquivado in c.SQUADS, False)
+    conferir("manifesto Codex local arquivado não entra no catálogo", "cont-arquivado" in mapa_achados, False)
+    conferir("nenhum agente sai no squad arquivado", any(a.get("squad") == squad_arquivado for a in desc_achados), False)
+    squads_publicados = c.squads_com_agentes(desc_achados)
+    conferir("squad sem agentes não é emitido", "conteudo" in squads_publicados, False)
+    conferir("squad com agentes continua emitido", sorted(squads_publicados), ["comercial", "global"])
 finally:
     shutil.rmtree(pasta_temp_ag)
 
@@ -1339,7 +1353,7 @@ agentes_mapa_largo = [
 ]
 agentes_mapa_largo.extend({"id": f"global-{i}", "nome": f"Global {i}", "squad": "global"} for i in range(18))
 agentes_mapa_largo.extend({"id": f"conteudo-{i}", "nome": f"Conteúdo {i}", "squad": "conteudo"} for i in range(8))
-agentes_mapa_largo.extend({"id": f"pipeline-{i}", "nome": f"Pipeline {i}", "squad": "pipeline-luana"} for i in range(6))
+agentes_mapa_largo.extend({"id": f"comercial-{i}", "nome": f"Comercial {i}", "squad": "comercial"} for i in range(6))
 janela_mapa_largo = {
     "rotulo": "Teste largo",
     "total": len(agentes_mapa_largo),

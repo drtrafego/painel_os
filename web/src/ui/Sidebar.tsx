@@ -4,6 +4,7 @@ import { VISTAS, type VistaId } from '../nav/rotas'
 import { dadoDaVista } from '../nav/rotulo'
 import { corDaSessao } from './paleta'
 import { lerMotores } from '../dados/motores'
+import { squadsComAgentes } from '../dados/estado'
 import type { Estado } from '../dados/tipos'
 
 /**
@@ -45,6 +46,8 @@ export function Sidebar({
   recolhido?: boolean
   aoAlternarRecolher?: () => void
 }) {
+  const squadIds = squadsComAgentes(estado)
+
   return (
     <>
       <div className={`flex items-center py-4 ${recolhido ? 'flex-col gap-2 px-2' : 'justify-between px-4'}`}>
@@ -200,7 +203,7 @@ export function Sidebar({
             <span className="rotulo">especialistas</span>
             <span className="rotulo">{estado.resumo.agentes_casa}</span>
           </div>
-          {(Object.keys(estado.squads) as (keyof typeof estado.squads)[]).map((id) => (
+          {squadIds.map((id) => (
             <div key={id} className="mb-1 flex items-baseline gap-2">
               <span className="truncate text-[11.5px] text-tinta-2">{estado.squads[id].nome}</span>
               <span className="h-px flex-1 bg-linha" />
@@ -213,7 +216,7 @@ export function Sidebar({
       ) : (
         <div
           className="mt-4 flex flex-col items-center px-2 font-mono text-[10px] text-tinta-3"
-          title={`${estado.resumo.agentes_casa} especialistas em ${Object.keys(estado.squads).length} squads`}
+          title={`${estado.resumo.agentes_casa} especialistas em ${squadIds.length} squads`}
         >
           <span className="text-[9px] uppercase tracking-wider text-tinta-3">AG</span>
           <span className="font-semibold text-tinta">{estado.resumo.agentes_casa}</span>

@@ -40,14 +40,6 @@
     "conteudo": {
       "nome": "Estúdio de Conteúdo",
       "descricao": "Pesquisa, roteiro, renderização e acervo"
-    },
-    "pipeline-luana": {
-      "nome": "Comercial & Vendas",
-      "descricao": "CRM, contatos, follow-ups e propostas"
-    },
-    "comercial": {
-      "nome": "Setor comercial",
-      "descricao": "Traz cliente novo pra agência vendendo o sistema pronto."
     }
   },
   "sessao": [
@@ -196,25 +188,6 @@
         "pesquisa_mercado"
       ],
       "origem": "agente:conteudo/copy.md"
-    },
-    {
-      "id": "closer",
-      "nome": "Closer de Vendas",
-      "squad": "pipeline-luana",
-      "modelo": "GPT-4o",
-      "descricao": "Qualificação avançada e fechamento de novos projetos",
-      "linhas": 195,
-      "bytes": 6800,
-      "modificado": "2026-09-16T10:00:00Z",
-      "arquivo": "agentes/closer.md",
-      "convocacoes": 150,
-      "convocacoes_24h": 8,
-      "convocacoes_7d": 65,
-      "ultima_convocacao": "2026-09-18T16:00:00Z",
-      "ferramentas": [
-        "crm_api"
-      ],
-      "origem": "agente:pipeline-luana/closer.md"
     }
   ],
   "arestas": [
@@ -234,12 +207,6 @@
       "de": "luana",
       "para": "copy",
       "vezes": 110,
-      "de_tipo": "sessao"
-    },
-    {
-      "de": "renato",
-      "para": "closer",
-      "vezes": 75,
       "de_tipo": "sessao"
     },
     {
@@ -314,12 +281,11 @@
     },
     "30d": {
       "rotulo": "Últimos 30 dias",
-      "total": 310,
+      "total": 255,
       "por_agente": {
         "dev": 110,
         "qa": 65,
-        "copy": 80,
-        "closer": 55
+        "copy": 80
       },
       "arestas": [
         {
@@ -335,12 +301,6 @@
           "de_tipo": "sessao"
         },
         {
-          "de": "renato",
-          "para": "closer",
-          "vezes": 55,
-          "de_tipo": "sessao"
-        },
-        {
           "de": "luana",
           "para": "qa",
           "vezes": 65,
@@ -352,12 +312,11 @@
     },
     "total": {
       "rotulo": "Total histórico",
-      "total": 455,
+      "total": 380,
       "por_agente": {
         "dev": 140,
         "qa": 85,
-        "copy": 110,
-        "closer": 75
+        "copy": 110
       },
       "arestas": [
         {
@@ -376,12 +335,6 @@
           "de": "luana",
           "para": "qa",
           "vezes": 85,
-          "de_tipo": "sessao"
-        },
-        {
-          "de": "renato",
-          "para": "closer",
-          "vezes": 75,
           "de_tipo": "sessao"
         },
         {

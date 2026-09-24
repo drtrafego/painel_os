@@ -158,11 +158,13 @@ SQUADS = {
         "nome": "Setor comercial",
         "descricao": "Traz cliente novo pra agência vendendo o sistema pronto.",
     },
-    "pipeline-luana": {
-        "nome": "Pipeline local da Luana",
-        "descricao": "Versão enxuta do squad de conteúdo, registrada dentro da pasta dela.",
-    },
 }
+
+
+def squads_com_agentes(agentes: list[dict], squads: dict = SQUADS) -> dict:
+    ids_com_agentes = {ag.get("squad") for ag in agentes if ag.get("squad")}
+    return {id_: dados for id_, dados in squads.items() if id_ in ids_com_agentes}
+
 
 # Mapa explícito pasta de squad -> chave de squad
 MAPA_PASTA_SQUAD = {
@@ -1825,9 +1827,9 @@ def ler_frontmatter(caminho: Path):
 def descobrir_agentes(pasta_codex: Path = AGENTES_CODEX, pasta_global: Path = None):
     """Normaliza catálogos de agentes sem eleger um motor como fonte única.
 
-    Os manifestos Markdown legados e os TOML do Codex são adaptadores da mesma
-    entidade operacional. Um papel presente nos dois vira um item, com as duas
-    proveniências. Se um motor sair, o outro continua alimentando a interface.
+    O parâmetro `pasta_codex` fica na assinatura por compatibilidade com testes
+    antigos. O pipeline local da Luana foi arquivado e não alimenta mais o
+    catálogo público.
     """
     achados = {}
 
@@ -1890,34 +1892,6 @@ def descobrir_agentes(pasta_codex: Path = AGENTES_CODEX, pasta_global: Path = No
                 sq = MAPA_PASTA_SQUAD.get(sub.name.lower(), "desconhecido")
                 orig = SQUADS.get(sq, {}).get("nome", f"squad {sub.name}")
                 coletar(sub / "agents", sq, orig, 1)
-    coletar(RAIZ / "luana/.claude/agents", "pipeline-luana", "manifesto Markdown", 1)
-
-    if pasta_codex.is_dir():
-        for arq in sorted(pasta_codex.glob("*.toml")):
-            try:
-                bruto = tomllib.loads(arq.read_text(encoding="utf-8", errors="strict"))
-                nome = bruto.get("name")
-                if not isinstance(nome, str) or not nome:
-                    continue
-                id_ = nome.replace("_", "-")
-                descricao = _texto_de_tela(bruto.get("description", "") or "sem descrição pública")
-                if auditar_estado_publico(descricao, "descricao"):
-                    descricao = "[descrição omitida: dado privado]"
-                adicionar({
-                    "id": id_,
-                    "nome": id_,
-                    "descricao": descricao,
-                    "modelo": bruto.get("model") if isinstance(bruto.get("model"), str) else None,
-                    "ferramentas": None,
-                    "squad": "pipeline-luana",
-                    "origem": "catálogo operacional normalizado",
-                    "arquivo": f"agente:pipeline-luana/{id_}",
-                    "linhas": len(arq.read_text(encoding="utf-8", errors="replace").splitlines()),
-                    "bytes": arq.stat().st_size,
-                    "modificado": datetime.fromtimestamp(arq.stat().st_mtime, tz=timezone.utc).isoformat(),
-                }, "manifesto TOML")
-            except (OSError, ValueError, TypeError):
-                continue
 
     # Os packs (copy-squad, brand-squad, ...) nao tem name: no frontmatter,
     # entao nao sao subagentes invocaveis e ficam de fora de proposito.
@@ -2678,7 +2652,7 @@ def gerar_workflow_quem_convoca_quem(janela_key: str, janela_info: dict, agentes
             "type": "external",
         })
 
-    ordem_squads = [s for s in ("global", "conteudo", "pipeline-luana") if s in especialistas_por_squad]
+    ordem_squads = [s for s in ("global", "conteudo", "comercial") if s in especialistas_por_squad]
     ordem_squads.extend(sorted(s for s in especialistas_por_squad if s not in ordem_squads))
 
     def distribuir_colunas(limite_linhas: int) -> list[dict]:
@@ -5078,13 +5052,14 @@ def main():
 
     todas_chamadas = conv.get("todas_chamadas", [])
     janelas = agregar_janelas_convocacoes(todas_chamadas, ids_casa)
-    salvar_mapas_quem_convoca_quem(janelas, agentes, SQUADS)
+    squads = squads_com_agentes(agentes)
+    salvar_mapas_quem_convoca_quem(janelas, agentes, squads)
     salvar_mapa_setor_comercial()
 
     estado = {
         "gerado_em": agora_utc().isoformat(),
         "fonte": {
-            "agentes": "frontmatter dos catálogos global, de conteúdo e local",
+            "agentes": "frontmatter dos catálogos global e de squads operacionais",
             "convocacoes": (
                 f"{total_convocacoes} chamadas únicas de subagente em {transcripts} transcripts "
                 f"(transcrições da sessão, inclusive as de subagente), contadas por id da "
@@ -5157,7 +5132,7 @@ def main():
         "followup": followup,
         "calendario": calendario,
         "diretiva": diretiva,
-        "squads": SQUADS,
+        "squads": squads,
         "sessao": sessao,
         "agentes": agentes,
         "convocacoes_fora_da_casa": de_fora,

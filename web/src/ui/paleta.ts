@@ -55,7 +55,6 @@ export const COR_DO_SQUAD: Record<string, string> = {
   global: IDENTIDADE.ciano,
   conteudo: IDENTIDADE.ambar,
   comercial: IDENTIDADE.verde,
-  'pipeline-luana': IDENTIDADE.pervinca,
 }
 
 export const COR_DA_SESSAO: Record<string, string> = {

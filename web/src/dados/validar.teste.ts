@@ -207,6 +207,17 @@ console.log('\nOS CASOS DENTRO DE UMA LISTA (o erro tem que vir com o indice)')
   ok('esquadrao desconhecido reprova', !r.ok)
 }
 {
+  const c = copia(real) as { squads: Record<string, unknown> }
+  c.squads.squad_vazio = { nome: 'Squad vazio', descricao: 'Sem agentes' }
+  const r = validarEstado(c)
+  ok('squad declarado sem agentes reprova', !r.ok)
+  ok(
+    'e aponta o squad vazio',
+    !r.ok && (r.problemas ?? []).some((p) => p.includes('estado.squads.squad_vazio') && p.includes('squad sem agentes')),
+    !r.ok ? (r.problemas ?? []).join(' | ').slice(0, 140) : '',
+  )
+}
+{
   const c = copia(real) as { sessao: Record<string, unknown>[] }
   ;(c.sessao[0].verificador as Record<string, unknown>).falhas = [{ desde: 'ontem' }]
   const r = validarEstado(c)

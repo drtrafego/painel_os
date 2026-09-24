@@ -5,10 +5,10 @@ import { Detalhe } from '../ui/Detalhe'
 import { Barra, Cabecalho, Pilula, Secao, TituloDaTela } from '../ui/primitivos'
 import { corDoSquad } from '../ui/paleta'
 import {
-  ORDEM_SQUAD,
   atividade,
   encostados,
   porSquad,
+  squadsComAgentes,
 } from '../dados/estado'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
 import type { Origem } from '../dados/useEstado'
@@ -26,7 +26,6 @@ const CORES_AGENTE: Record<string, string> = {
   global: corDoSquad('global'),
   conteudo: corDoSquad('conteudo'),
   comercial: corDoSquad('comercial'),
-  'pipeline-luana': corDoSquad('pipeline-luana'),
 }
 
 const MAPA_COMERCIAL: MapaDiretor = {
@@ -132,6 +131,8 @@ export function Diretores({
   const acoes = montarAcoes(estado, agora)
   const { dados: vivos } = useAgentesVivos()
   const mapaVivos = new Map((vivos?.agentes ?? []).map((a) => [a.id, a]))
+  const squadIds = squadsComAgentes(estado)
+  const departamentoAtual = departamento !== 'todos' && squadIds.includes(departamento) ? departamento : 'todos'
 
   const janelaAtiva = identificarJanela(faixa)
   const janelas = estado.janelas
@@ -192,17 +193,17 @@ export function Diretores({
         <div className="flex flex-wrap gap-2 pb-1">
           <button
             type="button"
-            aria-pressed={departamento === 'todos'}
+            aria-pressed={departamentoAtual === 'todos'}
             onClick={() => aoMudarDepartamento('todos')}
-            className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-colors ${departamento === 'todos' ? 'border-lima/40 bg-lima/8' : 'border-linha bg-white/2 hover:border-linha-forte'}`}
+            className={`shrink-0 rounded-lg border px-3 py-2 text-left transition-colors ${departamentoAtual === 'todos' ? 'border-lima/40 bg-lima/8' : 'border-linha bg-white/2 hover:border-linha-forte'}`}
           >
-            <span className={`block font-mono text-[9px] uppercase tracking-[.18em] ${departamento === 'todos' ? 'text-lima' : 'text-tinta-3'}`}>visão geral</span>
+            <span className={`block font-mono text-[9px] uppercase tracking-[.18em] ${departamentoAtual === 'todos' ? 'text-lima' : 'text-tinta-3'}`}>visão geral</span>
             <span className="mt-1 block text-[12px] text-tinta">Toda a operação</span>
           </button>
-          {ORDEM_SQUAD.map((id) => {
+          {squadIds.map((id) => {
             const quantidade = porSquad(estado, id).length
-            const ativo = departamento === id
-            const cor = CORES_AGENTE[id]
+            const ativo = departamentoAtual === id
+            const cor = CORES_AGENTE[id] ?? corDoSquad(id)
             return (
               <button
                 key={id}
@@ -234,11 +235,11 @@ export function Diretores({
 
       <Conector />
 
-      {departamento !== 'todos' && (
-        <OperacoesDepartamento estado={estado} squadId={departamento} aoIr={aoIr} />
+      {departamentoAtual !== 'todos' && (
+        <OperacoesDepartamento estado={estado} squadId={departamentoAtual} aoIr={aoIr} />
       )}
 
-      {ORDEM_SQUAD.filter((squadId) => departamento === 'todos' || departamento === squadId).map((squadId) => {
+      {squadIds.filter((squadId) => departamentoAtual === 'todos' || departamentoAtual === squadId).map((squadId) => {
         const agentes = filtrar(porSquad(estado, squadId))
         const getConvocacoes = (a: Agente) => {
           if (dadosJanela.por_agente && a.id in dadosJanela.por_agente) {
@@ -248,11 +249,12 @@ export function Diretores({
           return 0
         }
         const teto = Math.max(...porSquad(estado, squadId).map(getConvocacoes), 1)
-        if (agentes.length === 0 && squadId !== 'comercial') return null
+        const cor = CORES_AGENTE[squadId] ?? corDoSquad(squadId)
+        if (agentes.length === 0) return null
         return (
           <div key={squadId} className="mb-6">
             <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="rotulo whitespace-nowrap" style={{ color: CORES_AGENTE[squadId] }}>
+              <span className="rotulo whitespace-nowrap" style={{ color: cor }}>
                 {estado.squads[squadId]?.nome ?? squadId}
               </span>
               <span className="text-[11.5px] text-tinta-3">{estado.squads[squadId]?.descricao ?? ''}</span>
@@ -270,7 +272,7 @@ export function Diretores({
                     teto={teto}
                     convocacoesJanela={getConvocacoes(a)}
                     rotuloJanela={dadosJanela.rotulo}
-                    cor={CORES_AGENTE[squadId]}
+                    cor={cor}
                     agora={agora.getTime()}
                     aoAbrir={() => aoIr('diretores', a.id)}
                     aoVivo={mapaVivos.get(a.id)}
@@ -288,8 +290,8 @@ export function Diretores({
                 <p className="mt-3 border-t border-linha pt-2.5 text-[11px] leading-relaxed text-tinta-3">
                   <span className="font-semibold text-tinta-2">Nota de governança:</span> Clay (@closer) e a regente Luana entram por evento, ficam listados nos departamentos deles.
                 </p>
-                <SecaoMapaDoFluxo mapa={MAPA_COMERCIAL} cor={CORES_AGENTE.comercial} />
-                <CartaoFiscalComercial fiscal={estado.comercial} cor={CORES_AGENTE.comercial} />
+                <SecaoMapaDoFluxo mapa={MAPA_COMERCIAL} cor={cor} />
+                <CartaoFiscalComercial fiscal={estado.comercial} cor={cor} />
               </>
             )}
           </div>
@@ -325,7 +327,7 @@ function OperacoesDepartamento({
   const agentes = porSquad(estado, squadId)
   const ids = new Set(agentes.map((agente) => agente.id))
   const operacoes = sopsDoEstado(estado).filter((sop) => sop.agentes.some((id) => ids.has(id)))
-  const cor = CORES_AGENTE[squadId]
+  const cor = CORES_AGENTE[squadId] ?? corDoSquad(squadId)
 
   return (
     <section className="carta mb-4 overflow-hidden" data-operacoes-departamento>
@@ -399,7 +401,7 @@ function Repartido({ estado, dadosJanela }: { estado: Estado; dadosJanela: Janel
         {lista.map((a) => (
           <div key={a.id} className="flex items-center gap-2.5">
             <span className="w-[104px] shrink-0 truncate text-[11.5px] text-tinta-2">{a.nome}</span>
-            <span className="flex-1"><Barra fracao={a.convocacoesJanela / teto} cor={CORES_AGENTE[a.squad]} altura={5} /></span>
+            <span className="flex-1"><Barra fracao={a.convocacoesJanela / teto} cor={CORES_AGENTE[a.squad] ?? corDoSquad(a.squad)} altura={5} /></span>
             <span className="w-8 shrink-0 text-right font-mono text-[11px] tabular-nums text-tinta-2">{a.convocacoesJanela}</span>
           </div>
         ))}

@@ -241,7 +241,6 @@ export function mesclarRuntimesNoCatalogo(
 
 const normalizarSquad = (squad: string): PixelAgentSquad => {
   if (squad === 'global') return 'globais'
-  if (squad === 'pipeline-luana') return 'pipeline Codex'
   if (squad === 'conteudo') return 'conteúdo'
   return 'coordenação'
 }
