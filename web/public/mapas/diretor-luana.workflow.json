@@ -1,0 +1,90 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Diretora Luana: operação orquestrada",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "conteudo",
+        "label": "Conteúdo",
+        "focus": ["luana", "vega", "suri", "gastao_conteudo", "theo", "cleo_dani", "guardiao", "publicador", "analista_ciclo"],
+        "note": "Luana rege o pipeline de conteúdo até o aprendizado D+3 e D+7."
+      },
+      {
+        "id": "trafego-prospeccao",
+        "label": "Tráfego e prospecção",
+        "focus": ["gestor", "verificador_ads", "gastao_verba", "minerador_email", "nina_whatsapp"],
+        "note": "Tráfego pago e prospecção ficam em trilhos próprios da operação."
+      },
+      {
+        "id": "portoes",
+        "label": "Portões automáticos",
+        "focus": ["portao_memoria", "portao_modelo", "codex_mecanico"],
+        "note": "Memória e modelo barato aparecem como travas automáticas."
+      }
+    ],
+    "output": "web/public/mapas/diretor-luana.html"
+  },
+  "lanes": [
+    { "id": "operacao", "label": "Operação Luana" }
+  ],
+  "phases": [
+    { "id": "entrada", "label": "Entrada", "fromCol": 0, "toCol": 1 },
+    { "id": "decisao", "label": "Gate humano", "fromCol": 2, "toCol": 3, "variant": "security" },
+    { "id": "execucao", "label": "Execução e ciclo", "fromCol": 4, "toCol": 5, "variant": "emphasis" }
+  ],
+  "groups": [],
+  "mainPath": ["luana", "vega", "suri", "gastao_conteudo", "theo", "cleo_dani", "guardiao", "publicador", "analista_ciclo"],
+  "semanticChecks": {
+    "allowedRoots": ["luana", "gestor", "minerador_email", "portao_memoria", "portao_modelo"],
+    "allowedTerminals": ["analista_ciclo", "gastao_verba", "nina_whatsapp", "portao_memoria", "codex_mecanico"],
+    "requiredEdges": [
+      { "from": "suri", "to": "gastao_conteudo" },
+      { "from": "gastao_conteudo", "to": "theo" },
+      { "from": "guardiao", "to": "publicador" },
+      { "from": "verificador_ads", "to": "gastao_verba" },
+      { "from": "minerador_email", "to": "nina_whatsapp" },
+      { "from": "portao_modelo", "to": "codex_mecanico" }
+    ],
+    "requiredPaths": [
+      { "from": "luana", "to": "analista_ciclo" },
+      { "from": "gestor", "to": "gastao_verba" }
+    ]
+  },
+  "nodes": [
+    { "id": "luana", "lane": "operacao", "col": 0, "type": "backend", "label": "Luana", "sublabel": "orquestradora", "width": 118, "yOffset": -120 },
+    { "id": "vega", "lane": "operacao", "col": 1, "type": "backend", "label": "Vega", "sublabel": "pesquisa", "width": 112, "yOffset": -120 },
+    { "id": "suri", "lane": "operacao", "col": 2, "type": "backend", "label": "Suri", "sublabel": "planejamento", "width": 118, "yOffset": -120 },
+    { "id": "gastao_conteudo", "lane": "operacao", "col": 3, "type": "security", "label": "Gastão", "sublabel": "aprova no painel", "width": 146, "yOffset": -120 },
+    { "id": "theo", "lane": "operacao", "col": 4, "type": "backend", "label": "Theo", "sublabel": "conceito", "width": 112, "yOffset": -120 },
+    { "id": "cleo_dani", "lane": "operacao", "col": 5, "type": "backend", "label": "Cleo + Dani", "sublabel": "texto e design", "width": 132, "yOffset": -120 },
+    { "id": "guardiao", "lane": "operacao", "col": 5, "type": "security", "label": "Guardião", "sublabel": "PASSA", "width": 120, "yOffset": -60 },
+    { "id": "publicador", "lane": "operacao", "col": 5, "type": "backend", "label": "Publicador", "sublabel": "publica e confere", "width": 146, "yOffset": 0 },
+    { "id": "analista_ciclo", "lane": "operacao", "col": 5, "type": "database", "label": "Analista D+3/D+7", "sublabel": "aprendizado", "width": 154, "yOffset": 60 },
+    { "id": "gestor", "lane": "operacao", "col": 1, "type": "backend", "label": "gestor", "sublabel": "campanha e verba", "width": 132, "yOffset": 120 },
+    { "id": "verificador_ads", "lane": "operacao", "col": 3, "type": "security", "label": "verificar_anuncios.py", "sublabel": "confere anúncio", "width": 172, "yOffset": 120 },
+    { "id": "gastao_verba", "lane": "operacao", "col": 4, "type": "security", "label": "Gastão", "sublabel": "ok pra gastar", "width": 132, "yOffset": 120 },
+    { "id": "minerador_email", "lane": "operacao", "col": 1, "type": "external", "label": "Minerador", "sublabel": "e-mail", "width": 124, "yOffset": 185 },
+    { "id": "nina_whatsapp", "lane": "operacao", "col": 2, "type": "backend", "label": "Nina", "sublabel": "WhatsApp", "width": 116, "yOffset": 185 },
+    { "id": "portao_memoria", "lane": "operacao", "col": 0, "type": "database", "label": "Portão memória", "sublabel": "busca antes", "width": 140, "yOffset": 250 },
+    { "id": "portao_modelo", "lane": "operacao", "col": 2, "type": "security", "label": "Portão modelo", "sublabel": "mecânico exige 5.5", "width": 154, "yOffset": 250 },
+    { "id": "codex_mecanico", "lane": "operacao", "col": 4, "type": "backend", "label": "Codex GPT-5.5", "sublabel": "tarefa mecânica", "width": 146, "yOffset": 250 }
+  ],
+  "edges": [
+    { "id": "luana-vega", "from": "luana", "to": "vega", "label": "bora a semana", "variant": "emphasis", "role": "main" },
+    { "id": "vega-suri", "from": "vega", "to": "suri", "label": "pesquisa", "variant": "default", "role": "main" },
+    { "id": "suri-gastao", "from": "suri", "to": "gastao_conteudo", "label": "plano", "variant": "security", "role": "main" },
+    { "id": "gastao-theo", "from": "gastao_conteudo", "to": "theo", "label": "aprovado", "variant": "emphasis", "role": "main" },
+    { "id": "theo-cleo-dani", "from": "theo", "to": "cleo_dani", "label": "roteiro", "variant": "default", "role": "main" },
+    { "id": "cleo-dani-guardiao", "from": "cleo_dani", "to": "guardiao", "label": "peça real", "variant": "security", "role": "main" },
+    { "id": "guardiao-publicador", "from": "guardiao", "to": "publicador", "label": "PASSA", "variant": "emphasis", "role": "main" },
+    { "id": "publicador-analista", "from": "publicador", "to": "analista_ciclo", "label": "D+3 e D+7", "variant": "dashed", "role": "async" },
+    { "id": "gestor-verificador", "from": "gestor", "to": "verificador_ads", "label": "anúncio", "variant": "security", "role": "branch" },
+    { "id": "verificador-gastao", "from": "verificador_ads", "to": "gastao_verba", "label": "ok pra gastar", "variant": "security", "role": "branch" },
+    { "id": "minerador-nina", "from": "minerador_email", "to": "nina_whatsapp", "label": "WhatsApp", "variant": "default", "role": "branch" },
+    { "id": "modelo-codex", "from": "portao_modelo", "to": "codex_mecanico", "label": "mecânico", "variant": "emphasis", "role": "branch" }
+  ],
+  "cards": []
+}

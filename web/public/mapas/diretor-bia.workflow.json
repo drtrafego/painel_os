@@ -1,0 +1,85 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Diretora Bia: tráfego e engenharia de IA",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "trafego",
+        "label": "Tráfego pago",
+        "focus": ["amanda", "bia", "meta_ads", "gestor", "analista", "acao_trafego"],
+        "note": "Meta Ads é a frente principal, com gestor e analista como especialistas."
+      },
+      {
+        "id": "conteudo-ia",
+        "label": "Conteúdo e IA",
+        "focus": ["skill_conteudo", "producao_conteudo", "pedido_engenharia", "perguntar_escopo", "playbook_ia"],
+        "note": "Conteúdo tem skill pronta; engenharia de IA começa perguntando o escopo."
+      },
+      {
+        "id": "portoes",
+        "label": "Portões",
+        "focus": ["trafego_duplicado", "amanda_decide", "portao_modelo", "codex_mecanico"],
+        "note": "Tráfego só sai da Luana por pedido; tarefa mecânica passa pelo portão 5.5."
+      }
+    ],
+    "output": "web/public/mapas/diretor-bia.html"
+  },
+  "lanes": [
+    { "id": "operacao", "label": "Operação Bia" }
+  ],
+  "phases": [
+    { "id": "pedido", "label": "Pedido", "fromCol": 0, "toCol": 1 },
+    { "id": "especialistas", "label": "Especialistas", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "decisao", "label": "Decisão e registro", "fromCol": 4, "toCol": 5 }
+  ],
+  "groups": [],
+  "mainPath": ["amanda", "bia", "meta_ads", "gestor", "analista", "acao_trafego"],
+  "semanticChecks": {
+    "allowedRoots": ["amanda", "skill_conteudo", "pedido_engenharia", "trafego_duplicado", "portao_modelo"],
+    "allowedTerminals": ["acao_trafego", "producao_conteudo", "playbook_ia", "amanda_decide", "codex_mecanico"],
+    "requiredEdges": [
+      { "from": "bia", "to": "meta_ads" },
+      { "from": "gestor", "to": "analista" },
+      { "from": "pedido_engenharia", "to": "perguntar_escopo" },
+      { "from": "trafego_duplicado", "to": "amanda_decide" },
+      { "from": "portao_modelo", "to": "codex_mecanico" }
+    ],
+    "requiredPaths": [
+      { "from": "amanda", "to": "acao_trafego" },
+      { "from": "pedido_engenharia", "to": "playbook_ia" }
+    ]
+  },
+  "nodes": [
+    { "id": "amanda", "lane": "operacao", "col": 0, "type": "external", "label": "Interlocutora", "sublabel": "fala com Bia", "width": 126, "yOffset": -110 },
+    { "id": "bia", "lane": "operacao", "col": 1, "type": "backend", "label": "Bia", "sublabel": "tráfego e IA", "width": 118, "yOffset": -110 },
+    { "id": "meta_ads", "lane": "operacao", "col": 2, "type": "cloud", "label": "Meta Ads", "sublabel": "principal", "width": 116, "yOffset": -110 },
+    { "id": "gestor", "lane": "operacao", "col": 3, "type": "backend", "label": "gestor", "sublabel": "campanha", "width": 116, "yOffset": -110 },
+    { "id": "analista", "lane": "operacao", "col": 4, "type": "database", "label": "analista", "sublabel": "ROAS/CPA", "width": 118, "yOffset": -110 },
+    { "id": "acao_trafego", "lane": "operacao", "col": 5, "type": "backend", "label": "Ação", "sublabel": "escala ou pausa", "width": 126, "yOffset": -110 },
+    { "id": "skill_conteudo", "lane": "operacao", "col": 2, "type": "backend", "label": "Skill conteudo", "sublabel": "conteúdo", "width": 128, "yOffset": -15 },
+    { "id": "producao_conteudo", "lane": "operacao", "col": 4, "type": "backend", "label": "Produção", "sublabel": "frente ativa", "width": 118, "yOffset": -15 },
+    { "id": "pedido_engenharia", "lane": "operacao", "col": 2, "type": "external", "label": "Pedido IA", "sublabel": "primeiro", "width": 116, "yOffset": 65 },
+    { "id": "perguntar_escopo", "lane": "operacao", "col": 3, "type": "security", "label": "Escopo", "sublabel": "perguntar", "width": 110, "yOffset": 65 },
+    { "id": "playbook_ia", "lane": "operacao", "col": 5, "type": "database", "label": "Playbook IA", "sublabel": "memória", "width": 124, "yOffset": 65 },
+    { "id": "trafego_duplicado", "lane": "operacao", "col": 2, "type": "security", "label": "Tráfego duplicado", "sublabel": "Luana + Bia", "width": 146, "yOffset": 145 },
+    { "id": "amanda_decide", "lane": "operacao", "col": 4, "type": "security", "label": "Interlocutora", "sublabel": "decide tirar", "width": 130, "yOffset": 145 },
+    { "id": "portao_modelo", "lane": "operacao", "col": 3, "type": "security", "label": "Portão 5.5", "sublabel": "mecânico", "width": 116, "yOffset": 225 },
+    { "id": "codex_mecanico", "lane": "operacao", "col": 5, "type": "backend", "label": "Codex", "sublabel": "build/deploy/grep", "width": 136, "yOffset": 225 }
+  ],
+  "edges": [
+    { "id": "amanda-bia", "from": "amanda", "to": "bia", "label": "pedido", "variant": "emphasis", "role": "main" },
+    { "id": "bia-meta", "from": "bia", "to": "meta_ads", "label": "tráfego pago", "variant": "emphasis", "role": "main" },
+    { "id": "meta-gestor", "from": "meta_ads", "to": "gestor", "label": "campanha", "variant": "default", "role": "main" },
+    { "id": "gestor-analista", "from": "gestor", "to": "analista", "label": "números", "variant": "default", "role": "main" },
+    { "id": "analista-acao", "from": "analista", "to": "acao_trafego", "label": "decisão", "variant": "emphasis", "role": "main" },
+    { "id": "conteudo-producao", "from": "skill_conteudo", "to": "producao_conteudo", "label": "executar", "variant": "default", "role": "branch" },
+    { "id": "engenharia-escopo", "from": "pedido_engenharia", "to": "perguntar_escopo", "label": "primeiro pedido", "variant": "security", "role": "branch" },
+    { "id": "escopo-playbook", "from": "perguntar_escopo", "to": "playbook_ia", "label": "registrar", "variant": "dashed", "role": "async" },
+    { "id": "duplicado-amanda", "from": "trafego_duplicado", "to": "amanda_decide", "label": "só se pedir", "variant": "security", "role": "branch" },
+    { "id": "modelo-codex", "from": "portao_modelo", "to": "codex_mecanico", "label": "GPT-5.5", "variant": "emphasis", "role": "branch" }
+  ],
+  "cards": []
+}

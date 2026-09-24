@@ -1,0 +1,79 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Diretor Renato: manutenção dos bots Hermes",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "caminho-bot",
+        "label": "Caminho de conserto",
+        "focus": ["renato", "bots_hermes", "conversa_real", "dev_fix", "qa_revisa", "reteste", "registro"],
+        "note": "O bot é conferido na conversa real, corrigido, testado e revisado."
+      },
+      {
+        "id": "caso-extremo",
+        "label": "Gate humano",
+        "focus": ["reteste", "gastao_extremo", "sem_mensagem"],
+        "note": "Gastão só entra quando a decisão é extrema ou dele."
+      },
+      {
+        "id": "travas",
+        "label": "Travas dos bots",
+        "focus": ["sem_restart", "banco_ro", "sem_mensagem", "sem_lead", "portao_modelo", "codex_mecanico"],
+        "note": "Travas impedem teste perigoso, escrita indevida e modelo caro para tarefa mecânica."
+      }
+    ],
+    "output": "web/public/mapas/diretor-renato.html"
+  },
+  "lanes": [
+    { "id": "operacao", "label": "Operação Renato" }
+  ],
+  "phases": [
+    { "id": "sinal", "label": "Sinal", "fromCol": 0, "toCol": 1 },
+    { "id": "diagnostico", "label": "Diagnóstico", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "fechamento", "label": "Teste e registro", "fromCol": 4, "toCol": 5 }
+  ],
+  "groups": [],
+  "mainPath": ["renato", "bots_hermes", "conversa_real", "dev_fix", "qa_revisa", "reteste", "registro"],
+  "semanticChecks": {
+    "allowedRoots": ["renato", "gastao_extremo", "sem_restart", "banco_ro", "sem_mensagem", "sem_lead", "portao_modelo"],
+    "allowedTerminals": ["registro", "gastao_extremo", "sem_restart", "banco_ro", "sem_mensagem", "sem_lead", "codex_mecanico"],
+    "requiredEdges": [
+      { "from": "bots_hermes", "to": "conversa_real" },
+      { "from": "dev_fix", "to": "qa_revisa" },
+      { "from": "reteste", "to": "registro" },
+      { "from": "portao_modelo", "to": "codex_mecanico" }
+    ],
+    "requiredPaths": [
+      { "from": "renato", "to": "registro" }
+    ]
+  },
+  "nodes": [
+    { "id": "renato", "lane": "operacao", "col": 0, "type": "backend", "label": "Renato", "sublabel": "dono técnico", "width": 124, "yOffset": -110 },
+    { "id": "bots_hermes", "lane": "operacao", "col": 1, "type": "external", "label": "Bots Hermes", "sublabel": "Nina e demais", "width": 132, "yOffset": -110 },
+    { "id": "conversa_real", "lane": "operacao", "col": 2, "type": "database", "label": "Conversa", "sublabel": "prova real", "width": 118, "yOffset": -110 },
+    { "id": "dev_fix", "lane": "operacao", "col": 3, "type": "backend", "label": "dev", "sublabel": "corrige", "width": 104, "yOffset": -110 },
+    { "id": "qa_revisa", "lane": "operacao", "col": 4, "type": "security", "label": "qa", "sublabel": "quebra", "width": 96, "yOffset": -110 },
+    { "id": "reteste", "lane": "operacao", "col": 5, "type": "backend", "label": "Reteste", "sublabel": "de novo", "width": 116, "yOffset": -110 },
+    { "id": "registro", "lane": "operacao", "col": 5, "type": "database", "label": "Diário/memória", "sublabel": "sem alerta", "width": 132, "yOffset": -40 },
+    { "id": "gastao_extremo", "lane": "operacao", "col": 4, "type": "security", "label": "Gastão", "sublabel": "extremo", "width": 118, "yOffset": -40 },
+    { "id": "sem_restart", "lane": "operacao", "col": 1, "type": "security", "label": "Sem restart", "sublabel": "Hermes", "width": 118, "yOffset": 70 },
+    { "id": "banco_ro", "lane": "operacao", "col": 2, "type": "security", "label": "Banco RO", "sublabel": "SELECT", "width": 106, "yOffset": 70 },
+    { "id": "sem_mensagem", "lane": "operacao", "col": 3, "type": "security", "label": "Sem pingar", "sublabel": "corrige", "width": 114, "yOffset": 70 },
+    { "id": "sem_lead", "lane": "operacao", "col": 4, "type": "security", "label": "Sem lead", "sublabel": "pedido explícito", "width": 124, "yOffset": 70 },
+    { "id": "portao_modelo", "lane": "operacao", "col": 1, "type": "security", "label": "Portão modelo", "sublabel": "mecânico 5.5", "width": 132, "yOffset": 145 },
+    { "id": "codex_mecanico", "lane": "operacao", "col": 3, "type": "backend", "label": "Codex GPT-5.5", "sublabel": "build/git/grep", "width": 136, "yOffset": 145 }
+  ],
+  "edges": [
+    { "id": "renato-bots", "from": "renato", "to": "bots_hermes", "label": "mantém", "variant": "emphasis", "role": "main" },
+    { "id": "bots-conversa", "from": "bots_hermes", "to": "conversa_real", "label": "conversa real", "variant": "default", "role": "main" },
+    { "id": "conversa-dev", "from": "conversa_real", "to": "dev_fix", "label": "defeito", "variant": "default", "role": "main" },
+    { "id": "dev-qa", "from": "dev_fix", "to": "qa_revisa", "label": "correção", "variant": "security", "role": "main" },
+    { "id": "qa-reteste", "from": "qa_revisa", "to": "reteste", "label": "prova", "variant": "emphasis", "role": "main" },
+    { "id": "reteste-registro", "from": "reteste", "to": "registro", "label": "fecha", "variant": "dashed", "role": "async" },
+    { "id": "modelo-codex", "from": "portao_modelo", "to": "codex_mecanico", "label": "GPT-5.5", "variant": "emphasis", "role": "branch" }
+  ],
+  "cards": []
+}
