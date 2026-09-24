@@ -3,6 +3,7 @@
  * Este catálogo descreve papéis que existem. Presença e atividade vêm somente
  * de /api/agentes-vivos; um item sem sessão nunca é promovido a "executando".
  */
+
 export type PixelAgentSquad = 'coordenação' | 'radar' | 'conteúdo' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex'
 
 export type PixelAgent = {
@@ -65,6 +66,80 @@ export function normalizarId(valor: string) {
 export function encontrarPixelAgent(id: string) {
   const alvo = normalizarId(id)
   return PIXEL_AGENTS.find((agente) => normalizarId(agente.id) === alvo || agente.aliases?.some((alias) => normalizarId(alias) === alvo))
+}
+
+export const chaveAgente = (dono: string | undefined | null, id: string) => (dono ? `${dono}:${id}` : id)
+
+/** Formata rótulo do agente para o escritório pixel art, prevenindo tags duplicadas (ex: [B] [B] Cleo). */
+export function formatarRotulo(nome: string, tagDono: string, limite = 21): string {
+  let nomeLimpo = nome.trim()
+  if (tagDono) {
+    // Remove qualquer tag de dono já presente no nome (ex: "[B] Cleo", "Cleo [B]", "[B] [B] Cleo")
+    nomeLimpo = nomeLimpo.replace(/\[[A-Za-z]\]/g, '').replace(/\s+/g, ' ').trim()
+  }
+  const prefixo = tagDono ? tagDono : ''
+  const completo = `${prefixo}${nomeLimpo}`
+  if (completo.length <= limite) return completo
+  if (nomeLimpo.includes('·')) {
+    const partes = nomeLimpo.split('·').map((s) => s.trim())
+    const pref = partes[0]
+    const suf = partes.slice(1).join('·')
+    const espaco = limite - prefixo.length - suf.length - 3
+    if (espaco > 3) {
+      return `${prefixo}${pref.slice(0, espaco - 1)}… · ${suf}`
+    }
+  }
+  return completo.slice(0, limite - 1) + '…'
+}
+
+export function resolverAgenteNoCatalogo(
+  agente: { id: string; dono?: string | null; identidade?: string | null },
+  catalogoVisual: PixelAgent[]
+): PixelAgent | undefined {
+  const chave = chaveAgente(agente.dono, agente.id)
+  return (
+    catalogoVisual.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
+    catalogoVisual.find(
+      (item) =>
+        item.id === agente.id ||
+        item.aliases?.includes(agente.id) ||
+        (agente.identidade &&
+          agente.identidade !== 'sessao-codex' &&
+          (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
+            item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? ''))))
+    )
+  )
+}
+
+export function construirMapaAgentesPorCatalogo<T extends { id: string; dono?: string | null; identidade?: string | null }>(
+  agentes: T[],
+  catalogoVisual: PixelAgent[]
+): Map<string, T> {
+  const mapa = new Map<string, T>()
+  for (const agente of agentes) {
+    const chave = chaveAgente(agente.dono, agente.id)
+    mapa.set(chave, agente)
+    const itemCat = resolverAgenteNoCatalogo(agente, catalogoVisual)
+    if (itemCat) {
+      mapa.set(itemCat.id, agente)
+    }
+  }
+  return mapa
+}
+
+export function obterAtivosNoCatalogo<T extends { id: string; dono?: string | null; identidade?: string | null; estado?: string }>(
+  agentes: T[],
+  catalogoVisual: PixelAgent[]
+): Set<string> {
+  return new Set(
+    agentes
+      .filter((agente) => agente.estado === 'trabalhando')
+      .map((agente) => {
+        const chave = chaveAgente(agente.dono, agente.id)
+        const itemCat = resolverAgenteNoCatalogo(agente, catalogoVisual)
+        return itemCat?.id ?? chave
+      })
+  )
 }
 
 export function mesclarRuntimesNoCatalogo(

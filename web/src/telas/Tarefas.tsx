@@ -61,7 +61,12 @@ function PixelJanela({
           <div className="flex items-center gap-1 font-mono text-[10px] text-slate-400 select-none">
             <span className="grid size-4 place-items-center border border-black bg-[#1e293b] text-[9px] hover:bg-slate-700">_</span>
             <span className="grid size-4 place-items-center border border-black bg-[#1e293b] text-[9px] hover:bg-slate-700">□</span>
-            <span className="grid size-4 place-items-center border border-black bg-[#ef4444] text-[9px] text-white font-black hover:bg-red-600">✕</span>
+            <span className="grid size-4 place-items-center border border-black bg-[#ef4444] text-white hover:bg-red-600">
+              <svg className="size-2.5 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </span>
           </div>
         </div>
       </div>
@@ -108,9 +113,14 @@ function InspectorAgente({
               agente.estado === 'trabalhando' ? 'bg-[#a3e635] animate-ping' : 'bg-slate-500'
             }`}
           />
-          <span className="text-sm font-black uppercase text-[#facc15] truncate">
-            INSPECTOR: {agente.id.toUpperCase()}
-          </span>
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span className="text-sm font-black uppercase text-[#facc15] truncate">
+              INSPECTOR: {(agente.papel || agente.tipo || agente.identidade || agente.id).toUpperCase()}
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono shrink-0">
+              ({agente.id})
+            </span>
+          </div>
           {donoFormatado && (
             <span
               className={`border border-black px-2 py-0.5 text-[10px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
@@ -141,9 +151,13 @@ function InspectorAgente({
         <button
           type="button"
           onClick={aoFechar}
-          className="self-start sm:self-auto shrink-0 border-2 border-black bg-[#1e293b] px-3 py-1 text-xs font-bold text-slate-300 hover:bg-slate-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+          className="self-start sm:self-auto shrink-0 border-2 border-black bg-[#1e293b] px-3 py-1 text-xs font-bold text-slate-300 hover:bg-slate-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5"
         >
-          FECHAR INSPECTOR ✕
+          <span>FECHAR INSPECTOR</span>
+          <svg className="size-3 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
       </div>
 
@@ -151,7 +165,7 @@ function InspectorAgente({
       <div className="min-w-0">
         <div className="text-[10px] uppercase font-bold text-slate-400">Tarefa / Etapa</div>
         <p className="mt-0.5 text-xs text-slate-200 break-words break-all [overflow-wrap:anywhere] leading-relaxed">
-          {agente.etapa || agente.tarefa || agente.descricao || 'Sem descrição da tarefa atual'}
+          {agente.tarefa || agente.descricao || agente.etapa || 'Sem descrição da tarefa atual'}
         </p>
       </div>
 
@@ -207,9 +221,9 @@ function InspectorAgente({
           </div>
         </div>
 
-        <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
-          <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Quem mandou</div>
-          <div className="text-xs font-black text-slate-100 truncate mt-0.5" title={agente.quem_mandou || agente.pai || '—'}>
+        <div className="col-span-2 sm:col-span-2 lg:col-span-2 border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
+          <div className="text-[9.5px] uppercase font-bold text-slate-400">Quem mandou</div>
+          <div className="text-xs font-black text-slate-100 mt-0.5 break-words [overflow-wrap:anywhere] leading-snug" title={agente.quem_mandou || agente.pai || '—'}>
             {agente.quem_mandou || agente.pai || '—'}
           </div>
         </div>
@@ -491,9 +505,9 @@ export function Tarefas({ estado, vista }: PropsTela) {
 
                       <div
                         className="mt-2.5 min-w-0 border-l-2 border-[#38bdf8] pl-2 text-xs text-slate-200 line-clamp-3 leading-relaxed break-words break-all [overflow-wrap:anywhere]"
-                        title={ag.etapa ?? 'Etapa não informada'}
+                        title={ag.tarefa || ag.descricao || ag.etapa || 'Etapa não informada'}
                       >
-                        {ag.etapa ?? 'ETAPA EM ANDAMENTO'}
+                        {ag.tarefa || ag.descricao || ag.etapa || 'ETAPA EM ANDAMENTO'}
                       </div>
                     </div>
                     <div className="mt-3 flex items-center justify-between border-t border-slate-700/80 pt-2 text-[10px] text-slate-400">

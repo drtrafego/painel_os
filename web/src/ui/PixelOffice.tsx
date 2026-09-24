@@ -1,6 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AgenteVivo } from '../dados/tipos'
-import { boundsDoCatalogo, mesclarRuntimesNoCatalogo, normalizarId, PIXEL_AGENTS, PIXEL_AGENT_SQUADS, type PixelAgent, type PixelAgentSquad, zoomParaEnquadrar } from '../dados/pixel-agents'
+import {
+  boundsDoCatalogo,
+  chaveAgente,
+  construirMapaAgentesPorCatalogo,
+  formatarRotulo,
+  mesclarRuntimesNoCatalogo,
+  obterAtivosNoCatalogo,
+  PIXEL_AGENTS,
+  PIXEL_AGENT_SQUADS,
+  resolverAgenteNoCatalogo,
+  type PixelAgent,
+  type PixelAgentSquad,
+  zoomParaEnquadrar,
+} from '../dados/pixel-agents'
+
+export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, construirMapaAgentesPorCatalogo, obterAtivosNoCatalogo }
 
 interface PixelOfficeProps { agentes: AgenteVivo[]; catalogo?: PixelAgent[]; aoSelecionarAgente?: (agenteId: string) => void; agenteSelecionadoId?: string | null }
 type Posicao = { x: number; y: number }
@@ -22,54 +37,9 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   const [foco, setFoco] = useState<string | null>(agenteSelecionadoId ?? null)
   const [squad, setSquad] = useState<FiltroOffice>(() => agentes.some((agente) => agente.estado === 'trabalhando') ? 'ativos' : 'todos')
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
-  const chaveAgente = (dono: string | undefined | null, id: string) => (dono ? `${dono}:${id}` : id)
   const catalogoVisual = useMemo(() => mesclarRuntimesNoCatalogo(catalogo, agentes), [agentes, catalogo])
-  const agentesPorCatalogo = useMemo(() => {
-    const mapa = new Map<string, AgenteVivo>()
-    for (const agente of agentes) {
-      const chave = chaveAgente(agente.dono, agente.id)
-      mapa.set(chave, agente)
-      const itemCat =
-        catalogoVisual.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
-        catalogoVisual.find(
-          (item) =>
-            item.id === agente.id ||
-            item.aliases?.includes(agente.id) ||
-            (agente.identidade &&
-              agente.identidade !== 'sessao-codex' &&
-              (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
-                item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? ''))))
-        )
-      if (itemCat) {
-        mapa.set(itemCat.id, agente)
-      }
-    }
-    return mapa
-  }, [agentes, catalogoVisual])
-
-  const ativos = useMemo(
-    () =>
-      new Set(
-        agentes
-          .filter((agente) => agente.estado === 'trabalhando')
-          .map((agente) => {
-            const chave = chaveAgente(agente.dono, agente.id)
-            const itemCat =
-              catalogoVisual.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
-              catalogoVisual.find(
-                (item) =>
-                  item.id === agente.id ||
-                  item.aliases?.includes(agente.id) ||
-                  (agente.identidade &&
-                    agente.identidade !== 'sessao-codex' &&
-                    (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
-                      item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? ''))))
-              )
-            return itemCat?.id ?? chave
-          })
-      ),
-    [agentes, catalogoVisual]
-  )
+  const agentesPorCatalogo = useMemo(() => construirMapaAgentesPorCatalogo(agentes, catalogoVisual), [agentes, catalogoVisual])
+  const ativos = useMemo(() => obterAtivosNoCatalogo(agentes, catalogoVisual), [agentes, catalogoVisual])
 
   const visiveis = useMemo(
     () =>
@@ -109,21 +79,6 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
     return () => media.removeEventListener('change', atualizar)
   }, [])
   useEffect(() => { if (agenteSelecionadoId !== undefined) setFoco(agenteSelecionadoId) }, [agenteSelecionadoId])
-
-  const formatarRotulo = (nome: string, tagDono: string, limite = 21): string => {
-    const completo = `${tagDono}${nome}`
-    if (completo.length <= limite) return completo
-    if (nome.includes('·')) {
-      const partes = nome.split('·').map((s) => s.trim())
-      const prefixo = partes[0]
-      const sufixo = partes.slice(1).join('·')
-      const espaco = limite - tagDono.length - sufixo.length - 3
-      if (espaco > 3) {
-        return `${tagDono}${prefixo.slice(0, espaco - 1)}… · ${sufixo}`
-      }
-    }
-    return completo.slice(0, limite - 1) + '…'
-  }
 
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return

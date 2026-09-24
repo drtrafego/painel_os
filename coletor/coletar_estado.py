@@ -714,10 +714,8 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
             area = reg.get("area")
             if not isinstance(area, str) or not area:
                 raise ValueError(f"área inválida: {area!r}")
-            # Área nova não invalida o Cofre inteiro. O registro continua no
-            # mapa, agrupado numa categoria marcada como fallback, e o aviso
-            # fica na saída para não transformar evolução do catálogo em
-            # silêncio operacional.
+            if area not in areas:
+                raise ValueError(f"área fora do catálogo: {area!r}")
             familia = reg.get("familia")
             if familia not in familias:
                 raise ValueError(f"família fora do catálogo: {familia!r}")
@@ -831,6 +829,54 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                 "pelo", "pela", "onde", "quando", "como", "auto", "manual",
                 "script", "scripts", "componente", "operacional", "de", "do", "da",
             }
+            sinonimos_cofre = {
+                "uazapi": ["whatsapp", "zap", "wpp", "whats", "bot", "mensagem", "mensagens", "conversas", "atendimento", "restaurante"],
+                "whatsapp": ["whatsapp", "zap", "wpp", "uazapi", "bot", "mensagem", "conversas", "atendimento"],
+                "meta_ads": ["meta", "facebook", "instagram", "face", "insta", "anuncio", "anúncio", "anuncios", "anúncios", "campanha", "campanhas", "trafego", "tráfego", "feed", "grupo"],
+                "meta": ["meta", "facebook", "instagram", "anuncio", "anúncio", "campanha", "trafego", "tráfego", "feed"],
+                "trafego": ["trafego", "tráfego", "campanha", "anuncio", "anúncio", "meta", "google ads", "curl"],
+                "google_ads": ["google ads", "google", "adwords", "gads", "palavras-chave", "palavra-chave", "negativas", "rsa", "busca", "anuncio", "anúncio"],
+                "minerador": ["minerador", "mineracao", "mineração", "google", "busca", "scraping", "extracao", "extração", "alarme", "contador"],
+                "minerador_google": ["minerador", "google", "mineracao", "mineração", "busca", "scraping"],
+                "apify": ["apify", "scraping", "scraper", "minerador", "mineracao", "mineração", "extrator", "curl"],
+                "crm": ["crm", "hubspot", "mvpcrm", "lead", "leads", "contato", "contatos", "origem", "funil"],
+                "mvpcrm": ["crm", "hubspot", "mvpcrm", "lead", "leads", "contato"],
+                "hubspot": ["hubspot", "crm", "lead", "leads", "contato"],
+                "portal": ["portal", "cliente", "clientes", "painel", "sac"],
+                "sac": ["sac", "atendimento", "multicanal", "conversas", "omnichannel", "suporte"],
+                "multicanal": ["multicanal", "sac", "atendimento", "omnichannel", "conversas"],
+                "financeiro": ["financeiro", "fatura", "faturas", "cobranca", "cobrança", "pix", "asaas", "stripe", "banco", "pagamento"],
+                "asaas": ["asaas", "fatura", "cobranca", "cobrança", "pix", "financeiro", "boleto"],
+                "stripe": ["stripe", "cartao", "cartão", "fatura", "pagamento", "financeiro"],
+                "contratos": ["contrato", "contratos", "juridico", "jurídico", "assinatura", "documento"],
+                "tarefas": ["tarefa", "tarefas", "backlog", "todo", "kanban", "gestor", "demanda", "demandas", "cron"],
+                "tts": ["tts", "voz", "voz sintetica", "voz sintética", "audio", "áudio", "elevenlabs", "fala"],
+                "video": ["video", "vídeo", "reels", "capcut", "frame", "cover", "sete segundos", "studio", "edicao", "edição"],
+                "ai_video_studio": ["video", "vídeo", "reels", "capcut", "frame", "cover", "studio"],
+                "transcritor": ["transcritor", "transcricao", "transcrição", "whisper", "audio", "áudio", "degravacao", "degravação"],
+                "produtor": ["produtor", "conteudo", "conteúdo", "post", "posts", "carrossel", "copy", "roteiro", "feed", "senha"],
+                "produtor_conteudo": ["produtor", "conteudo", "conteúdo", "post", "posts", "carrossel", "copy", "roteiro", "feed", "senha"],
+                "conteudo": ["conteudo", "conteúdo", "post", "posts", "carrossel", "copy", "roteiro", "feed", "senha"],
+                "copy": ["copy", "copywriting", "texto", "legenda", "roteiro", "senha"],
+                "designer": ["designer", "design", "layout", "arte", "capa", "contraste", "tag"],
+                "verificador": ["verificador", "frota", "checagem", "sonda", "validador", "alerta", "verificacao", "verificação"],
+                "verificar_frota": ["verificador", "frota", "checagem", "sonda", "validador"],
+                "validador": ["validador", "rsa", "regras", "checagem", "teste"],
+                "dev": ["dev", "codigo", "código", "commit", "engenharia", "processo", "boot", "shell"],
+                "qa": ["qa", "validador", "teste", "revisor", "checagem"],
+                "gestor": ["gestor", "diretiva", "ordem", "relatorio", "relatório"],
+                "analista": ["analista", "analise", "análise", "credito", "crédito"],
+                "social": ["social", "post", "posts", "feed", "instagram"],
+                "dashboard": ["dashboard", "painel", "conversas", "metrica", "métrica", "grafico", "gráfico"],
+                "painel": ["painel", "dashboard", "conversas", "boot", "tela"],
+                "telegram": ["telegram", "bot", "canal", "mensageria"],
+                "cal": ["calendario", "calendário", "agenda", "agendamento", "reuniao", "reunião"],
+                "calendario": ["calendario", "calendário", "agenda", "agendamento", "reuniao", "reunião"],
+                "drive": ["drive", "google drive", "gdrive", "pasta", "nuvem"],
+                "github": ["github", "git", "commit", "repositorio", "repositório"],
+                "wordpress": ["wordpress", "wp", "site", "landing page", "lp"],
+                "n8n": ["n8n", "webhook", "automacao", "automação", "fluxo"],
+            }
             termos_por_no = {}
 
             for sa in skills_acessos:
@@ -917,7 +963,7 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                         "ponte": False,
                     })
 
-                # Extrair termos para busca nos aprendizados
+                # Extrair termos para busca nos aprendizados, incluindo sinônimos declarados
                 candidatos = []
                 nome_limpo = re.sub(r"^(?:skill|conexão|conexao)\s+", "", sa.get("nome", ""), flags=re.I).strip()
                 if nome_limpo:
@@ -926,27 +972,50 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                 if sa.get("sistema"):
                     candidatos.append(sa["sistema"].strip())
                     candidatos.extend(sa["sistema"].strip().split())
-                slug_skill = sa["id"].split("-", 2)[-1] if sa["id"].startswith("skill-") else ""
-                if slug_skill:
-                    candidatos.append(slug_skill)
-                    candidatos.extend(slug_skill.split("-"))
+                slug = sa["id"].split("-", 2)[-1] if "-" in sa["id"] else sa["id"]
+                if slug:
+                    candidatos.append(slug)
+                    candidatos.extend(slug.replace("_", "-").split("-"))
+
+                # Consulta da tabela de sinônimos/apelidos
+                for chave_candidata in [slug, slug.replace("-", "_"), slug.replace("_", "-"), _chave(sa.get("sistema", "")).replace(" ", "_")]:
+                    if chave_candidata in sinonimos_cofre:
+                        candidatos.extend(sinonimos_cofre[chave_candidata])
+                for chave_sin, sin_termos in sinonimos_cofre.items():
+                    if chave_sin in slug or chave_sin in _chave(sa.get("sistema", "")):
+                        candidatos.extend(sin_termos)
 
                 termos_validos = {
                     c.lower() for c in candidatos
                     if len(c) >= 3 and c.lower() not in palavras_ignoradas
                 }
                 if termos_validos:
-                    termos_por_no[no_skill_id] = termos_validos
-                    termos_por_no[no_sistema_id] = termos_validos
+                    termos_por_no[no_skill_id] = termos_por_no.get(no_skill_id, set()) | termos_validos
+                    termos_por_no[no_sistema_id] = termos_por_no.get(no_sistema_id, set()) | termos_validos
+
+            def _desacentuar(txt: str) -> str:
+                nfkd = unicodedata.normalize("NFKD", txt)
+                return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
 
             # Conectar aprendizados existentes aos nós de skill/sistema que eles citam
             aprendizados = [n for n in nos if n.get("area") != "operacao"]
             for apr in aprendizados:
-                texto_apr = f"{apr.get('rotulo', '')} {apr.get('corpo', '')} {apr.get('caso', '')} {apr.get('id', '')}".lower()
+                texto_apr_original = f"{apr.get('rotulo', '')} {apr.get('corpo', '')} {apr.get('caso', '')} {apr.get('id', '')}".lower()
+                texto_apr_sem_acento = _desacentuar(texto_apr_original)
                 for no_destino, termos in termos_por_no.items():
                     if apr["id"] == no_destino:
                         continue
-                    if any(re.search(rf"\b{re.escape(t)}\b", texto_apr) for t in termos):
+                    casou = False
+                    for t in termos:
+                        t_orig = t.lower()
+                        t_sem = _desacentuar(t)
+                        if re.search(rf"\b{re.escape(t_orig)}\b", texto_apr_original):
+                            casou = True
+                            break
+                        if re.search(rf"\b{re.escape(t_sem)}\b", texto_apr_sem_acento):
+                            casou = True
+                            break
+                    if casou:
                         par = (apr["id"], no_destino)
                         inverso = (no_destino, apr["id"])
                         if par not in vistas and inverso not in vistas:

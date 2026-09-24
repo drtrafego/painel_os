@@ -1,6 +1,14 @@
 // Teste do catálogo vivo. Rode com:
 //   node --experimental-strip-types src/dados/pixel-agents.teste.ts
-import { boundsDoCatalogo, mesclarRuntimesNoCatalogo, zoomParaEnquadrar } from './pixel-agents.ts'
+import {
+  boundsDoCatalogo,
+  chaveAgente,
+  construirMapaAgentesPorCatalogo,
+  formatarRotulo,
+  mesclarRuntimesNoCatalogo,
+  obterAtivosNoCatalogo,
+  zoomParaEnquadrar,
+} from './pixel-agents.ts'
 
 let falhas = 0
 function conferir(nome: string, obtido: unknown, esperado: unknown) {
@@ -51,48 +59,20 @@ const agentesDuasCleos = [
 const catDuasCleos = mesclarRuntimesNoCatalogo(base, agentesDuasCleos)
 conferir('catálogo com 2 Cleos tem 2 avatares', catDuasCleos.length, 2)
 
-const chaveAgente = (dono: string | undefined | null, id: string) => (dono ? `${dono}:${id}` : id)
-const mapaDuasCleos = new Map<string, any>()
-for (const agente of agentesDuasCleos) {
-  const chave = chaveAgente(agente.dono, agente.id)
-  mapaDuasCleos.set(chave, agente)
-  const itemCat =
-    catDuasCleos.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
-    catDuasCleos.find(
-      (item) =>
-        item.id === agente.id ||
-        item.aliases?.includes(agente.id) ||
-        (agente.identidade &&
-          agente.identidade !== 'sessao-codex' &&
-          (item.id === agente.identidade || item.aliases?.includes(agente.identidade)))
-    )
-  if (itemCat) {
-    mapaDuasCleos.set(itemCat.id, agente)
-  }
-}
+const mapaDuasCleos = construirMapaAgentesPorCatalogo(agentesDuasCleos, catDuasCleos)
 conferir('mapa tem a Cleo original e a Cleo da Bia', mapaDuasCleos.has('cleo') && mapaDuasCleos.has('bia:rollout-2'), true)
 conferir('Cleo original mapeada para o agente da Luana', mapaDuasCleos.get('cleo')?.dono, 'luana')
 conferir('Cleo da Bia mapeada para o agente da Bia', mapaDuasCleos.get('bia:rollout-2')?.dono, 'bia')
 
-const ativosDuasCleos = new Set(
-  agentesDuasCleos
-    .filter((agente) => agente.estado === 'trabalhando')
-    .map((agente) => {
-      const chave = chaveAgente(agente.dono, agente.id)
-      const itemCat =
-        catDuasCleos.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
-        catDuasCleos.find(
-          (item) =>
-            item.id === agente.id ||
-            item.aliases?.includes(agente.id) ||
-            (agente.identidade &&
-              agente.identidade !== 'sessao-codex' &&
-              (item.id === agente.identidade || item.aliases?.includes(agente.identidade)))
-        )
-      return itemCat?.id ?? chave
-    })
-)
+const ativosDuasCleos = obterAtivosNoCatalogo(agentesDuasCleos, catDuasCleos)
 conferir('ambas as Cleos constam como ativas no escritório', ativosDuasCleos.size, 2)
+
+// Testes de formatação de rótulo (evita duplicação tipo [B] [B] Cleo)
+conferir('formatarRotulo com nome puro adiciona prefixo', formatarRotulo('Cleo', '[B] '), '[B] Cleo')
+conferir('formatarRotulo não duplica tag [B] existente no início', formatarRotulo('[B] Cleo', '[B] '), '[B] Cleo')
+conferir('formatarRotulo não duplica múltiplas tags [B] [B] Cleo', formatarRotulo('[B] [B] Cleo', '[B] '), '[B] Cleo')
+conferir('formatarRotulo remove tag no final para não duplicar', formatarRotulo('Cleo [B]', '[B] '), '[B] Cleo')
+conferir('formatarRotulo sem tag do dono preserva nome', formatarRotulo('Cleo', ''), 'Cleo')
 
 
 if (falhas) process.exit(1)

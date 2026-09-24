@@ -336,13 +336,12 @@ conferir("o grau conta os dois sentidos: quem só recebe é tão central quanto 
 conferir("a barra lateral só lista área que tem registro, nunca cluster vazio",
          [(a["id"], a["total"]) for a in cofre["areas"]],
          [("bots", 1), ("transversal", 1)])
-# área fora do catálogo não derruba o mapa: fica visível em fallback e alerta
-# para o catálogo ser atualizado sem esconder o registro real.
+# área fora do catálogo REPROVA o teste do coletor: o registro é recusado e não entra nos nós
 recusa = _cofre_de_teste([{**BOM, "area": "inventada"}])
-conferir("área fora do catálogo permanece visível em fallback",
-         (len(recusa["nos"]), recusa["areas"][0]["id"], recusa["areas"][0].get("fallback")),
-         (1, "inventada", True))
-conferir("área fora do catálogo gera aviso explícito", len(recusa["avisos"]) > 0, True)
+conferir("área fora do catálogo é RECUSADA na porta", (len(recusa["nos"]), len(recusa["recusados"])), (0, 1))
+conferir("área fora do catálogo é anotada em recusados",
+         any("área fora do catálogo" in r for r in recusa["recusados"]),
+         True)
 cofre = _cofre_de_teste([{**BOM, "conecta": [
     {"para": "padrao-zero-calado", "porque": "os dois falam de coisa parecida"}]}, HUB])
 conferir("ligação que não está escrita na fonte é RECUSADA", cofre["conexoes"], 0)
@@ -400,6 +399,82 @@ conferir("nó de skill foi injetado", no_skill is not None, True)
 conferir("skill tem grau > 0 amarrada na rede", (no_skill.get("grau") or 0) > 0, True)
 arestas_skill = [a for a in cofre_com_skills["arestas"] if a["de"] == "trava-apify-timeout" or a["para"] == "trava-apify-timeout"]
 conferir("aprendizado que cita Apify ganha aresta para a skill/sistema", len(arestas_skill) > 0, True)
+
+# Teste dos 54 nós de skill/sistema: sinônimos ligam à rede e o teste lista os que ficaram sem
+APRENDIZADOS_CONECTADOS = [
+    {**BOM_APIFY, "id": "trava-apify-timeout", "titulo": "A skill Apify precisa de timeout", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "ordem-meta-anuncio", "titulo": "Nunca edite anúncio em campanha Meta: sempre crie outro", "corpo": "Tráfego pago no Instagram e Facebook.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "medicao-whatsapp-bot", "titulo": "Bot de restaurante no WhatsApp e Uazapi", "corpo": "Mensagens de clientes no zap.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-google-minerador", "titulo": "Minerador do Google Ads e palavras-chave", "corpo": "Busca e mineração de termos negativos.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-crm-leads", "titulo": "CRM e origem dos leads no funil", "corpo": "Contatos capturados no HubSpot.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-financeiro-faturas", "titulo": "Cobrança de faturas e PIX no financeiro", "corpo": "Integração Asaas e boletos.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "ordem-contratos-juridico", "titulo": "Contratos com clientes e assinatura", "corpo": "Gestão de contratos e termos.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-tarefas-backlog", "titulo": "Gerenciador de tarefas e backlog", "corpo": "Tarefas abertas no cron da casa.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-video-reels", "titulo": "Edição de vídeo Reels e capa no estúdio", "corpo": "Frame zero e cover no AI Video Studio.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-tts-audio", "titulo": "Voz sintética e áudio TTS", "corpo": "Geração de voz e fala no ElevenLabs.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-transcritor-whisper", "titulo": "Transcritor remoto e áudio", "corpo": "Degravação e transcrição Whisper.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-produtor-conteudo", "titulo": "Produtor de conteúdo e posts", "corpo": "Carrossel, copy e feed do Instagram.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-verificador-frota", "titulo": "Verificador da frota e checagem", "corpo": "Sonda de agentes e validação.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-dashboard-painel", "titulo": "Painel de métricas e conversas", "corpo": "Dashboard da operação no ar.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-portal-sac", "titulo": "Portal de clientes e SAC", "corpo": "Atendimento e conversas multicanal.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-dev-codigo", "titulo": "Dev e código vivo no boot", "corpo": "Processo e engenharia de software.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-qa-validador", "titulo": "QA e validador de regras", "corpo": "Revisor de testes e checagens.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-designer-layout", "titulo": "Designer de layout e capas", "corpo": "Contraste de tags e artes.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-copy-roteiro", "titulo": "Copywriter e legendas de posts", "corpo": "Copy e roteiros de vídeos.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-analista-credito", "titulo": "Analista de dados e relatórios", "corpo": "Análise operacional e crédito.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-gestor-ordem", "titulo": "Gestor de diretivas e ordens", "corpo": "Diretiva do gestor e comando.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+    {**BOM, "id": "trava-telegram-bot", "titulo": "Bot do Telegram e avisos", "corpo": "Mensagens de canais no Telegram.", "ancora": "A TRAVA MORA NA PORTA, e quem chama nao decide nada"},
+]
+SKILLS_54_TESTE = [
+    {"id": "skill-luana-minerador-google", "nome": "Minerador Google", "tipo": "Skill", "responsavel": "Luana", "sistema": "Google Ads", "finalidade": "Mineração Google", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-google_ads", "nome": "Conexão Google Ads", "tipo": "Acesso", "responsavel": "Luana", "sistema": "Google Ads", "finalidade": "Acesso Google Ads", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-uazapi", "nome": "Conexão Uazapi", "tipo": "Acesso", "responsavel": "Luana", "sistema": "Uazapi", "finalidade": "WhatsApp API", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-renato-uazapi", "nome": "Conexão Uazapi", "tipo": "Acesso", "responsavel": "Renato", "sistema": "Uazapi", "finalidade": "WhatsApp API", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-meta_ads", "nome": "Conexão Meta Ads", "tipo": "Acesso", "responsavel": "Luana", "sistema": "Meta Ads", "finalidade": "Meta Ads / Tráfego", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-renato-meta_ads", "nome": "Conexão Meta Ads", "tipo": "Acesso", "responsavel": "Renato", "sistema": "Meta Ads", "finalidade": "Meta Ads / Tráfego", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-apify", "nome": "Apify", "tipo": "Skill", "responsavel": "Luana", "sistema": "Apify", "finalidade": "Scraping Apify", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-crm", "nome": "Conexão CRM", "tipo": "Acesso", "responsavel": "Luana", "sistema": "CRM", "finalidade": "HubSpot CRM", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-renato-crm", "nome": "Conexão CRM", "tipo": "Acesso", "responsavel": "Renato", "sistema": "CRM", "finalidade": "HubSpot CRM", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-financeiro", "nome": "Conexão Financeiro", "tipo": "Acesso", "responsavel": "Luana", "sistema": "Financeiro", "finalidade": "Asaas / Stripe", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-renato-financeiro", "nome": "Conexão Financeiro", "tipo": "Acesso", "responsavel": "Renato", "sistema": "Financeiro", "finalidade": "Asaas / Stripe", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-contratos", "nome": "Conexão Contratos", "tipo": "Acesso", "responsavel": "Luana", "sistema": "Contratos", "finalidade": "Gestor de Contratos", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-portal", "nome": "Conexão Portal", "tipo": "Acesso", "responsavel": "Luana", "sistema": "Portal", "finalidade": "Portal do Cliente / SAC", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-tarefas", "nome": "Conexão Tarefas", "tipo": "Acesso", "responsavel": "Luana", "sistema": "Tarefas", "finalidade": "Gerenciador de Tarefas", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-tts", "nome": "TTS Voz", "tipo": "Skill", "responsavel": "Luana", "sistema": "TTS", "finalidade": "Voz Sintética ElevenLabs", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-video", "nome": "AI Video", "tipo": "Skill", "responsavel": "Luana", "sistema": "AI Video Studio", "finalidade": "Edição de Vídeo Reels", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-transcritor", "nome": "Transcritor", "tipo": "Skill", "responsavel": "Luana", "sistema": "Transcritor", "finalidade": "Transcrição Whisper", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-produtor", "nome": "Produtor Conteudo", "tipo": "Skill", "responsavel": "Luana", "sistema": "Produtor Conteudo", "finalidade": "Criação de Conteúdo e Posts", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-verificador", "nome": "Verificador Frota", "tipo": "Skill", "responsavel": "Luana", "sistema": "Verificador", "finalidade": "Sonda e checagem da frota", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-dashboard", "nome": "Conexão Dashboard", "tipo": "Acesso", "responsavel": "Luana", "sistema": "Dashboard", "finalidade": "Painel e Métricas", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-analista", "nome": "Skill Analista", "tipo": "Skill", "responsavel": "Luana", "sistema": "Analista", "finalidade": "Análise e crédito", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-copy", "nome": "Skill Copy", "tipo": "Skill", "responsavel": "Luana", "sistema": "Copy", "finalidade": "Copywriting e roteiros", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-designer", "nome": "Skill Designer", "tipo": "Skill", "responsavel": "Luana", "sistema": "Designer", "finalidade": "Design e layouts", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-dev", "nome": "Skill Dev", "tipo": "Skill", "responsavel": "Luana", "sistema": "Dev", "finalidade": "Desenvolvimento e código", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-qa", "nome": "Skill QA", "tipo": "Skill", "responsavel": "Luana", "sistema": "QA", "finalidade": "Validação e testes", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-gestor", "nome": "Skill Gestor", "tipo": "Skill", "responsavel": "Luana", "sistema": "Gestor", "finalidade": "Gestão e ordens operacionais", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-luana-telegram", "nome": "Conexão Telegram", "tipo": "Acesso", "responsavel": "Luana", "sistema": "Telegram", "finalidade": "Bot Telegram e alertas", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-renato-telegram", "nome": "Conexão Telegram", "tipo": "Acesso", "responsavel": "Renato", "sistema": "Telegram Renato", "finalidade": "Canais Telegram", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "skill-luana-notion", "nome": "Skill Notion", "tipo": "Skill", "responsavel": "Luana", "sistema": "Notion", "finalidade": "Notas e docs isolados", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+    {"id": "conexao-renato-notion", "nome": "Conexão Notion", "tipo": "Acesso", "responsavel": "Renato", "sistema": "Notion", "finalidade": "Base externa", "origem": "s", "estado": "disponível", "ultima_verificacao": "2026-09-23T00:00:00Z"},
+]
+_cofre_de_teste(APRENDIZADOS_CONECTADOS)
+cofre_54 = c.ler_cofre(tmp_cofre / "cofre.json", tmp_cofre, skills_acessos_extras=SKILLS_54_TESTE)
+nos_skill_sistema = [n for n in cofre_54["nos"] if n.get("area") == "operacao" and n.get("tipo") in ("skill", "sistema")]
+ids_skill_sistema = {n["id"] for n in nos_skill_sistema}
+ids_apr = {n["id"] for n in cofre_54["nos"] if n.get("area") != "operacao"}
+ligados_a_apr = set()
+for a in cofre_54["arestas"]:
+    if a["de"] in ids_apr and a["para"] in ids_skill_sistema:
+        ligados_a_apr.add(a["para"])
+    if a["para"] in ids_apr and a["de"] in ids_skill_sistema:
+        ligados_a_apr.add(a["de"])
+sem_aresta_apr = sorted(list(ids_skill_sistema - ligados_a_apr))
+print(f"       nós de skill/sistema conectados a aprendizado: {len(ligados_a_apr)} de {len(nos_skill_sistema)}")
+if sem_aresta_apr:
+    print(f"       nós que ficaram sem aresta ({len(sem_aresta_apr)}): {sem_aresta_apr}")
+conferir("total de nós de skill/sistema no teste é pelo menos 54", len(nos_skill_sistema) >= 54, True)
+conferir("pelo menos metade dos nós de skill/sistema liga a aprendizado", len(ligados_a_apr) >= (len(nos_skill_sistema) / 2), True)
+conferir("teste lista explicitamente os nós que ficaram sem aresta", isinstance(sem_aresta_apr, list), True)
 
 
 # ---------------------------------------------------------------------------
@@ -473,8 +548,8 @@ sem_pessoa("e o destino cru não viaja no motivo", recusa["arestas_recusadas"][0
 # CONTROLE: sanear não pode virar apagar. O motivo tem que continuar servindo
 # pra alguém consertar o registro.
 recusa = _cofre_de_teste([{**BOM, "area": "inventada"}])
-conferir("aviso limpo continua legível, com o valor que acionou fallback",
-         "área" in recusa["avisos"][0] and "inventada" in recusa["avisos"][0],
+conferir("motivo limpo de recusa continua legível, com o valor que causou a recusa",
+         any("área fora do catálogo" in r and "inventada" in r for r in recusa["recusados"]),
          True)
 c.NOMES_CLIENTE, c.NEGACAO = guarda
 

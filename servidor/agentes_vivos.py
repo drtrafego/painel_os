@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -142,6 +143,7 @@ def _deduzir_dono(projeto: str) -> str | None:
 # trabalhando; acima, como silencioso. NAO e um chute: veja `_CALIBRAGEM` no
 # fim deste arquivo, com a medicao e a data.
 LIMIAR_ATIVO_S = 90
+LIMIAR_VIVO_S = 600  # 10 minutos: limite unificado para considerar agente vivo
 
 TRABALHANDO = "trabalhando"
 SILENCIOSO = "silencioso"
@@ -269,9 +271,11 @@ def _analisar_cauda(caminho: Path) -> dict:
 def _classificar(fase: str, silencio_s: float) -> str:
     if fase in ("entregou", "erro_api"):
         return PARADO
+    if silencio_s > LIMIAR_VIVO_S:
+        return PARADO
     if fase in ("executando_ferramenta", "processando_resultado", "escrevendo"):
         return TRABALHANDO if silencio_s <= LIMIAR_ATIVO_S else SILENCIOSO
-    return SILENCIOSO if silencio_s <= JANELA_CANDIDATO_S else PARADO
+    return SILENCIOSO
 
 
 def _texto_curto(valor: object, limite: int = 160) -> str | None:
@@ -294,8 +298,11 @@ def _formatar_modelo(modelo: str | None) -> str | None:
         return "Opus 4.5"
     if any(k in m_low for k in ("opus-5", "5-opus")):
         return "Opus 5"
-    if "opus" in m_low:
+    if any(k in m_low for k in ("opus-3", "3-opus")):
         return "Opus 3"
+    if "opus" in m_low:
+        limpo = m.replace("claude-", "").replace("anthropic/", "").replace("_", " ").strip()
+        return limpo[:25]
 
     if any(k in m_low for k in ("sonnet-3-7", "sonnet-3.7", "3-7-sonnet", "3.7-sonnet")):
         return "Sonnet 3.7"
@@ -317,6 +324,10 @@ def _formatar_modelo(modelo: str | None) -> str | None:
 
     if "gpt-6" in m_low:
         return "GPT-6 Astra" if "astra" in m_low else "GPT-6"
+    if any(k in m_low for k in ("gpt-5-5", "gpt-5.5")):
+        return "GPT-5.5"
+    if "gpt-5" in m_low:
+        return "GPT-5"
     if "gpt-4o-mini" in m_low:
         return "GPT-4o mini"
     if "gpt-4o" in m_low:
@@ -333,6 +344,8 @@ def _formatar_modelo(modelo: str | None) -> str | None:
         return "o1"
 
     limpo = m.replace("claude-", "").replace("anthropic/", "").replace("_", " ")
+    if "gpt" in m_low:
+        return limpo[:25].strip()
     return limpo[:25].strip().title()
 
 
@@ -392,7 +405,32 @@ def _ts_para_epoch(ts: object) -> float | None:
         return None
 
 
-_CACHE_METRICAS: dict[str, dict] = {}
+_CACHE_PATH = Path(tempfile.gettempdir()) / "painel_os_metricas_cache.json"
+
+
+def _carregar_cache_disco() -> dict[str, dict]:
+    if _CACHE_PATH.is_file():
+        try:
+            with _CACHE_PATH.open("r", encoding="utf-8") as f:
+                d = json.load(f)
+                if isinstance(d, dict):
+                    return d
+        except Exception:
+            pass
+    return {}
+
+
+def _salvar_cache_disco(cache: dict[str, dict]) -> None:
+    try:
+        tmp_file = _CACHE_PATH.with_suffix(".tmp")
+        with tmp_file.open("w", encoding="utf-8") as f:
+            json.dump(cache, f)
+        tmp_file.replace(_CACHE_PATH)
+    except Exception:
+        pass
+
+
+_CACHE_METRICAS: dict[str, dict] = _carregar_cache_disco()
 
 
 def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
@@ -419,6 +457,8 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
     tokens_output = 0
     tokens_cache = 0
     primeiro_ts_epoch = None
+    msgs_vistas: set[str] = set()
+    tools_vistos: set[str] = set()
 
     try:
         with caminho.open("r", encoding="utf-8", errors="replace") as fh:
@@ -456,13 +496,28 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
                     if isinstance(conteudo, list):
                         for bloco in conteudo:
                             if isinstance(bloco, dict) and bloco.get("type") == "tool_use":
-                                ferramentas_usadas += 1
+                                tool_id = bloco.get("id")
+                                if tool_id:
+                                    if tool_id not in tools_vistos:
+                                        tools_vistos.add(tool_id)
+                                        ferramentas_usadas += 1
+                                else:
+                                    ferramentas_usadas += 1
+                    msg_id = msg.get("id")
                     usage = msg.get("usage")
                     if isinstance(usage, dict):
-                        tokens_input += int(usage.get("input_tokens") or 0)
-                        tokens_output += int(usage.get("output_tokens") or 0)
-                        tokens_cache += int(usage.get("cache_read_input_tokens") or 0)
-                        tokens_cache += int(usage.get("cache_creation_input_tokens") or 0)
+                        if msg_id:
+                            if msg_id not in msgs_vistas:
+                                msgs_vistas.add(msg_id)
+                                tokens_input += int(usage.get("input_tokens") or 0)
+                                tokens_output += int(usage.get("output_tokens") or 0)
+                                tokens_cache += int(usage.get("cache_read_input_tokens") or 0)
+                                tokens_cache += int(usage.get("cache_creation_input_tokens") or 0)
+                        else:
+                            tokens_input += int(usage.get("input_tokens") or 0)
+                            tokens_output += int(usage.get("output_tokens") or 0)
+                            tokens_cache += int(usage.get("cache_read_input_tokens") or 0)
+                            tokens_cache += int(usage.get("cache_creation_input_tokens") or 0)
 
                 tipo = reg.get("type")
                 payload = reg.get("payload") if isinstance(reg.get("payload"), dict) else {}
@@ -516,6 +571,7 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
         "primeiro_ts_epoch": primeiro_ts_epoch,
         "metricas": metricas,
     }
+    _salvar_cache_disco(_CACHE_METRICAS)
 
     return metricas
 
@@ -746,7 +802,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
         "custo_ms": None,
         "sessao": None,
         "caminho": None,
-        "limiares_s": {"ativo": LIMIAR_ATIVO_S, "janela_candidato": JANELA_CANDIDATO_S},
+        "limiares_s": {"ativo": LIMIAR_ATIVO_S, "vivo": LIMIAR_VIVO_S, "janela_candidato": JANELA_CANDIDATO_S},
         "contagem": {TRABALHANDO: None, SILENCIOSO: None, PARADO: None, "vivos": None, "total": None, "historico": None},
         "agentes": [],
         "avisos": [],
@@ -850,8 +906,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                             item["estado"] = PARADO
                             item["fase"] = "fora_da_janela"
                             item["etapa"] = "fora da janela de leitura (histórico)"
-                            metricas = _extrair_metricas_transcript(transcript, agora)
-                            _finalizar_item_claude(item, metricas, agora)
+                            _finalizar_item_claude(item, None, agora)
                             agentes.append(item)
                             continue
 
@@ -861,8 +916,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                             item["problema"] = f"falha ao ler a cauda: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
                             item["estado"] = None
                             item["etapa"] = "não foi possível ler"
-                            metricas = _extrair_metricas_transcript(transcript, agora)
-                            _finalizar_item_claude(item, metricas, agora)
+                            _finalizar_item_claude(item, None, agora)
                             agentes.append(item)
                             avisos.append(f"{ident}: falha ao ler a cauda do transcript")
                             continue
@@ -878,7 +932,10 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                             item["problema"] = cauda["problema_api"]
                         elif cauda["linhas_ilegiveis"]:
                             item["problema"] = f"{cauda['linhas_ilegiveis']} linha(s) ilegível(is) na cauda"
-                        metricas = _extrair_metricas_transcript(transcript, agora)
+                        if item["estado"] != PARADO:
+                            metricas = _extrair_metricas_transcript(transcript, agora)
+                        else:
+                            metricas = None
                         _finalizar_item_claude(item, metricas, agora)
                         agentes.append(item)
     except PermissionError as e:
@@ -986,7 +1043,7 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
         "medido_em": _hora_br(agora),
         "medido_em_iso": datetime.fromtimestamp(agora, BRT).isoformat(),
         "custo_ms": round((time.perf_counter() - t0) * 1000, 1),
-        "limiares_s": {"ativo": LIMIAR_ATIVO_S, "janela_candidato": JANELA_CANDIDATO_S},
+        "limiares_s": {"ativo": LIMIAR_ATIVO_S, "vivo": LIMIAR_VIVO_S, "janela_candidato": JANELA_CANDIDATO_S},
         "contagem": {**conta, "vivos": conta[TRABALHANDO] + conta[SILENCIOSO],
                      "total": len(agentes), "historico": historico_total,
                      "indeterminados": indeterminados_total},

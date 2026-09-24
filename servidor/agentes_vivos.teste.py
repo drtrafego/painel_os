@@ -21,6 +21,8 @@ from agentes_vivos import (
     TRABALHANDO,
     SILENCIOSO,
     PARADO,
+    LIMIAR_VIVO_S,
+    _formatar_modelo,
     ler_agentes,
     ler_agentes_da_casa,
     _sessao_mais_ativa,
@@ -444,6 +446,128 @@ def testar_agentes_vivos():
             conferir("tokens formatado", ag_m.get("tokens_formatado"), "15.9k")
             conferir("quem mandou preenchido", ag_m.get("quem_mandou"), "chefe-1")
             conferir("status preenchido", ag_m.get("status") in ("executando", "ocioso"), True)
+
+        print("\n--- Teste 15: Deduplicação de tokens por message.id em streaming (Item 3.b)")
+        pasta_t15 = tmp / "projeto_t15"
+        s_t15 = pasta_t15 / "sessao_t15" / "subagents"
+        s_t15.mkdir(parents=True, exist_ok=True)
+        (s_t15 / "agent-stream.meta.json").write_text(json.dumps({
+            "agentType": "dev",
+            "description": "Streaming de tokens",
+        }), encoding="utf-8")
+
+        # 3 linhas com o mesmo message.id "msg_stream_001", cada uma reportando usage
+        linhas_stream = [
+            json.dumps({
+                "timestamp": "2026-09-23T19:00:00+00:00",
+                "type": "assistant",
+                "message": {
+                    "id": "msg_stream_001",
+                    "model": "claude-3-5-sonnet-20241022",
+                    "content": [{"type": "text", "text": "Parcial 1"}],
+                    "usage": {"input_tokens": 1000, "output_tokens": 50, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+                }
+            }),
+            json.dumps({
+                "timestamp": "2026-09-23T19:00:01+00:00",
+                "type": "assistant",
+                "message": {
+                    "id": "msg_stream_001",
+                    "model": "claude-3-5-sonnet-20241022",
+                    "content": [{"type": "text", "text": "Parcial 2"}],
+                    "usage": {"input_tokens": 1000, "output_tokens": 100, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+                }
+            }),
+            json.dumps({
+                "timestamp": "2026-09-23T19:00:02+00:00",
+                "type": "assistant",
+                "message": {
+                    "id": "msg_stream_001",
+                    "model": "claude-3-5-sonnet-20241022",
+                    "content": [{"type": "text", "text": "Completo"}],
+                    "usage": {"input_tokens": 1000, "output_tokens": 200, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+                }
+            }),
+        ]
+        (s_t15 / "agent-stream.jsonl").write_text("\n".join(linhas_stream) + "\n", encoding="utf-8")
+        r_t15 = ler_agentes("projeto_t15", raiz=tmp)
+        ag_stream = next((a for a in r_t15["agentes"] if a["id"] == "stream"), None)
+        conferir("agente stream encontrado", ag_stream is not None, True)
+        if ag_stream:
+            # Não pode somar 3x (3000+), deve deduplicar pelo id da mensagem
+            conferir("tokens de streaming deduplicados por message.id", ag_stream.get("tokens_total") < 2000, True)
+
+        print("\n--- Teste 16: Formatação de modelos GPT-5.5 / Opus e não-redação de ID de modelo (Item 3.c)")
+        conferir("GPT-5.5 formatado com maiúsculas", _formatar_modelo("gpt-5.5"), "GPT-5.5")
+        conferir("GPT-5-5 formatado com maiúsculas", _formatar_modelo("gpt-5-5-turbo"), "GPT-5.5")
+        conferir("Opus desconhecido não vira Opus 3", _formatar_modelo("opus-futuro-spec"), "opus-futuro-spec")
+        conferir("Opus 3 explícito vira Opus 3", _formatar_modelo("claude-3-opus-20240229"), "Opus 3")
+
+        # Teste de não-redação de modelo com número longo / timestamp como telefone
+        from servir import redigir_dados_agentes
+        dados_modelo = {
+            "agentes": [{
+                "id": "ag_mod",
+                "modelo": "claude-3-5-haiku-20241022",
+                "modelo_legivel": "Haiku 3.5 (20241022)",
+                "descricao": "Falar com Dr. Lucas pelo telefone 11999998888",
+            }],
+            "avisos": []
+        }
+        redigido = redigir_dados_agentes(dados_modelo)
+        ag_red = redigido["agentes"][0]
+        conferir("modelo preservado sem ser tratado como telefone", ag_red["modelo"], "claude-3-5-haiku-20241022")
+        conferir("modelo_legivel preservado sem ser tratado como telefone", ag_red["modelo_legivel"], "Haiku 3.5 (20241022)")
+        conferir("descricao teve telefone redigido", "[num:" in ag_red["descricao"] or "11999998888" not in ag_red["descricao"], True)
+
+        print("\n--- Teste 17: Limiar de silêncio LIMIAR_VIVO_S = 600s (Item 4.a)")
+        conferir("constante LIMIAR_VIVO_S definida em 600s", LIMIAR_VIVO_S, 600)
+        pasta_t17 = tmp / "projeto_t17"
+        s_t17 = pasta_t17 / "sessao_t17" / "subagents"
+        s_t17.mkdir(parents=True, exist_ok=True)
+        agora_t17 = time.time()
+        # 4 agentes executando (silêncio 10s)
+        for i in range(1, 5):
+            (s_t17 / f"agent-exec{i}.meta.json").write_text(json.dumps({"agentType": "dev", "description": f"Exec {i}"}))
+            f = s_t17 / f"agent-exec{i}.jsonl"
+            f.write_text(json.dumps({
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": "sleep 1"}}]}
+            }) + "\n")
+            os.utime(f, (agora_t17 - 10, agora_t17 - 10))
+        # 1 agente executando tool_use mas com silêncio de 11 min (660s > 600s)
+        (s_t17 / "agent-travado.meta.json").write_text(json.dumps({"agentType": "dev", "description": "Travado"}))
+        f_travado = s_t17 / "agent-travado.jsonl"
+        f_travado.write_text(json.dumps({
+            "type": "assistant",
+            "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": "long_task"}}]}
+        }) + "\n")
+        os.utime(f_travado, (agora_t17 - 660, agora_t17 - 660))
+
+        r_t17 = ler_agentes("projeto_t17", raiz=tmp)
+        conferir("contagem de vivos = 4 (ignora agente com silêncio > 10m)", r_t17["contagem"]["vivos"], 4)
+        conferir("agente travado não está na lista de ativos", any(a["id"] == "travado" for a in r_t17["agentes"]), False)
+        conferir("agente travado foi contabilizado no histórico", r_t17["contagem"]["historico"] >= 1, True)
+
+        print("\n--- Teste 18: Performance no restart (< 5s) sem ler transcripts antigos (Item 3.a)")
+        pasta_t18 = tmp / "projeto_t18"
+        s_t18 = pasta_t18 / "sessao_t18" / "subagents"
+        s_t18.mkdir(parents=True, exist_ok=True)
+        agora_t18 = time.time()
+        # Cria 30 agentes com silencio > JANELA_CANDIDATO_S (3600s atrás) com arquivos grandes
+        for i in range(30):
+            (s_t18 / f"agent-antigo{i}.meta.json").write_text(json.dumps({"agentType": "worker"}))
+            f = s_t18 / f"agent-antigo{i}.jsonl"
+            f.write_text(("x" * 500 + "\n") * 50)
+            os.utime(f, (agora_t18 - 3600, agora_t18 - 3600))
+
+        mod._CACHE_METRICAS.clear()
+        t_inicio = time.perf_counter()
+        r_t18 = ler_agentes("projeto_t18", raiz=tmp)
+        t_delta = time.perf_counter() - t_inicio
+        conferir("primeira chamada pós-restart responde em < 5s", t_delta < 5.0, True)
+        conferir("agentes antigos vão para o histórico", r_t18["contagem"]["historico"], 30)
+        conferir("nenhum agente antigo nos vivos", r_t18["contagem"]["vivos"], 0)
 
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
