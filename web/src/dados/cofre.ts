@@ -54,6 +54,69 @@ export function cruzam(a: CaixaBBox, b: CaixaBBox): boolean {
   return a.x < b.x + wB && b.x < a.x + wA && a.y < b.y + hB && b.y < a.y + hA
 }
 
+export type PosicaoOrbita3D = {
+  id: string
+  fx: number
+  fy: number
+  fz: number
+  radius: number
+}
+
+/**
+ * Calcula posições esféricas equilibradas para o modo ÓRBITA (3D).
+ * O nó mais conectado (hub) fica exatamente no CENTRO (0, 0, 0), nunca na borda.
+ * Os demais nós orbitam em cascas concêntricas simétricas proporcionais ao grau.
+ */
+export function calcularPosicoesOrbita3D<T extends { id: string; grau?: number | null; peso?: number | null }>(
+  nos: T[]
+): Map<string, PosicaoOrbita3D> {
+  const mapa = new Map<string, PosicaoOrbita3D>()
+  if (!nos.length) return mapa
+
+  // Ordena nós por grau (conectividade) decrescente; nós com mais ligações ficam no centro / órbitas internas
+  const ordenados = [...nos].sort(
+    (a, b) => (b.grau ?? 0) - (a.grau ?? 0) || (b.peso ?? 0) - (a.peso ?? 0)
+  )
+
+  // O nó mais conectado (hub principal) fica rigorosamente no CENTRO (0, 0, 0)
+  const hub = ordenados[0]
+  mapa.set(hub.id, {
+    id: hub.id,
+    fx: 0,
+    fy: 0,
+    fz: 0,
+    radius: 0,
+  })
+
+  // Os nós restantes são distribuídos concentricamente em 3D
+  const restantes = ordenados.slice(1)
+  const nRestantes = restantes.length
+
+  restantes.forEach((n, k) => {
+    // t vai de 0 (órbita interna) a 1 (órbita externa)
+    const t = nRestantes > 1 ? k / (nRestantes - 1) : 0.5
+    const radius = 90 + t * 210
+
+    // Distribuição esférica uniforme de Fibonacci
+    const phi = Math.acos(-1 + (2 * (k + 0.5)) / nRestantes)
+    const theta = Math.sqrt(nRestantes * Math.PI) * phi
+
+    const fx = Math.round(radius * Math.cos(theta) * Math.sin(phi) * 10) / 10
+    const fy = Math.round(radius * Math.sin(theta) * Math.sin(phi) * 10) / 10
+    const fz = Math.round(radius * Math.cos(phi) * 10) / 10
+
+    mapa.set(n.id, {
+      id: n.id,
+      fx,
+      fy,
+      fz,
+      radius,
+    })
+  })
+
+  return mapa
+}
+
 export function corDaArea(area: string): string {
   switch (area.toLowerCase()) {
     case 'transversal':

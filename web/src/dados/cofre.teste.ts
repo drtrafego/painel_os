@@ -19,6 +19,7 @@ import {
   arestasDoCaminho,
   CAIXA_CELULAR,
   CAIXA_MESA,
+  calcularPosicoesOrbita3D,
   caminhoMaisCurto,
   corDaArea,
   corDaAreaEscuro,
@@ -360,6 +361,40 @@ console.log('\n5. O DADO DE HOJE, COM CINCO')
   ok('cinco nós também cabem sem se encostar', p.size === 5 && colados === 0, `colados=${colados}`)
   const r = escolherRotulos(p, (id) => `rótulo de ${id}`, () => 1, CAIXA)
   ok('e os cinco rótulos aparecem', r.length === 5, `desenhados=${r.length}`)
+}
+
+console.log('\n6. LAYOUT ÓRBITA 3D: HUB NO CENTRO E CASCA CONCÊNTRICA')
+{
+  const nosTeste = [
+    { id: 'hub-maximo', grau: 18, peso: 10 },
+    { id: 'no-secundario-1', grau: 8, peso: 4 },
+    { id: 'no-secundario-2', grau: 5, peso: 2 },
+    { id: 'no-secundario-3', grau: 2, peso: 1 },
+    { id: 'no-folha', grau: 0, peso: 1 },
+  ]
+  const posicoes = calcularPosicoesOrbita3D(nosTeste)
+  ok('todos os nós recebem posição 3D', posicoes.size === nosTeste.length)
+
+  const posHub = posicoes.get('hub-maximo')!
+  ok('o nó de maior grau (hub) fica exatamente em (0, 0, 0)',
+    posHub.fx === 0 && posHub.fy === 0 && posHub.fz === 0 && posHub.radius === 0,
+    `hub coords: fx=${posHub.fx}, fy=${posHub.fy}, fz=${posHub.fz}, radius=${posHub.radius}`)
+
+  const secundarias = [...posicoes.values()].filter((p) => p.id !== 'hub-maximo')
+  ok('nós orbitantes têm radius > 0', secundarias.every((p) => p.radius > 0),
+    `raios: ${secundarias.map((p) => p.radius).join(', ')}`)
+  ok('nenhuma coordenada 3D é NaN ou indefinida',
+    [...posicoes.values()].every((p) => !Number.isNaN(p.fx) && !Number.isNaN(p.fy) && !Number.isNaN(p.fz) && Number.isFinite(p.fx)))
+
+  // Prova que se o hub mudar, o novo nó mais conectado vai para o centro
+  const nosInvertidos = [
+    { id: 'antigo-hub', grau: 2 },
+    { id: 'novo-super-hub', grau: 25 },
+  ]
+  const posInvertidas = calcularPosicoesOrbita3D(nosInvertidos)
+  const posNovoHub = posInvertidas.get('novo-super-hub')!
+  ok('novo hub assume o centro (0, 0, 0) sem depender da ordem do array',
+    posNovoHub.fx === 0 && posNovoHub.fy === 0 && posNovoHub.fz === 0)
 }
 
 console.log(`\n${passou} passaram, ${falhou} falharam.`)

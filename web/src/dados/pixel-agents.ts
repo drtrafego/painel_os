@@ -133,7 +133,7 @@ export function obterAtivosNoCatalogo<T extends { id: string; dono?: string | nu
 ): Set<string> {
   return new Set(
     agentes
-      .filter((agente) => agente.estado === 'trabalhando')
+      .filter((agente) => agente.estado === 'trabalhando' || agente.estado === 'silencioso')
       .map((agente) => {
         const chave = chaveAgente(agente.dono, agente.id)
         const itemCat = resolverAgenteNoCatalogo(agente, catalogoVisual)

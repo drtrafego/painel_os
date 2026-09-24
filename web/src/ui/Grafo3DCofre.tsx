@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import ForceGraph3D from '3d-force-graph'
 import * as THREE from 'three'
-import { corDaAreaEscuro, RAIO_MINIMO_CLICAVEL } from '../dados/cofre'
+import { calcularPosicoesOrbita3D, corDaAreaEscuro, RAIO_MINIMO_CLICAVEL } from '../dados/cofre'
 
 // ‼️ 21/09/2026: `corDaArea()` (o original) devolve `var(--color-nome)`, que
 // só CSS/SVG resolvem sozinhos — THREE.Color não entende essa sintaxe e
@@ -71,6 +71,7 @@ export function Grafo3DCofre({
       noCaminhoMemo.has(id)
 
     const arestasVisiveis = arestas.filter((a) => {
+      if (modoLayout === 'orbita' && a.porque && a.porque.includes('pertence a')) return false
       const deVis = visivel(a.de)
       const paraVis = visivel(a.para)
       if (deVis && paraVis) return true
@@ -114,7 +115,7 @@ export function Grafo3DCofre({
       })),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nos, arestas, areaFoco, sempreVisiveis, caminho])
+  }, [nos, arestas, areaFoco, sempreVisiveis, caminho, modoLayout])
 
   // Inicializa o ForceGraph3D
   useEffect(() => {
@@ -267,16 +268,14 @@ export function Grafo3DCofre({
 
     // Modos de Layout 3D (Atlas / Órbita Esférica / Camadas)
     if (modoLayout === 'orbita') {
-      // Disposição em Esfera Radial Concêntrica por Grau
-      nos.forEach((n, i) => {
-        const node3d = fg.graphData().nodes.find((x: any) => x.id === n.id)
+      // Disposição em Esfera Radial Concêntrica por Grau com Hub no Centro (0, 0, 0)
+      const posicoes = calcularPosicoesOrbita3D(nos)
+      posicoes.forEach((pos, id) => {
+        const node3d = fg.graphData().nodes.find((x: any) => x.id === id)
         if (!node3d) return
-        const radius = 120 + (1 - n.grau / 10) * 160
-        const phi = Math.acos(-1 + (2 * i) / nos.length)
-        const theta = Math.sqrt(nos.length * Math.PI) * phi
-        node3d.fx = radius * Math.cos(theta) * Math.sin(phi)
-        node3d.fy = radius * Math.sin(theta) * Math.sin(phi)
-        node3d.fz = radius * Math.cos(phi)
+        node3d.fx = pos.fx
+        node3d.fy = pos.fy
+        node3d.fz = pos.fz
       })
     } else if (modoLayout === 'hierarquia') {
       // Disposição em Camadas / Tiers por Espécie

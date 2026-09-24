@@ -997,22 +997,21 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                         "grau": 0
                     })
 
-                if (no_skill_id, no_agente_id) not in vistas and (no_agente_id, no_skill_id) not in vistas:
-                    vistas.add((no_skill_id, no_agente_id))
-                    arestas.append({
-                        "de": no_skill_id,
-                        "para": no_agente_id,
-                        "porque": f"Skill {sa['nome']} pertence a {sa['responsavel']}",
-                        "ponte": False,
-                    })
+                # 3.a: Nós de agente/sistema não viram hub gigante:
+                # Omitir aresta direta skill -> agente para evitar que agente-luana concentre 47+ arestas e puxe o leque.
+                # O agente responsável permanece declarado em sa['responsavel'] e é exibido na ficha lateral ao clicar.
+                graus_atuais = graus_atuais if 'graus_atuais' in locals() else {}
                 if (no_agente_id, no_sistema_id) not in vistas and (no_sistema_id, no_agente_id) not in vistas:
-                    vistas.add((no_agente_id, no_sistema_id))
-                    arestas.append({
-                        "de": no_agente_id,
-                        "para": no_sistema_id,
-                        "porque": f"Agente {sa['responsavel']} acessa {sa['sistema']}",
-                        "ponte": False,
-                    })
+                    if graus_atuais.get(no_agente_id, 0) < 12 and graus_atuais.get(no_sistema_id, 0) < 12:
+                        vistas.add((no_agente_id, no_sistema_id))
+                        arestas.append({
+                            "de": no_agente_id,
+                            "para": no_sistema_id,
+                            "porque": f"Agente {sa['responsavel']} acessa {sa['sistema']}",
+                            "ponte": False,
+                        })
+                        graus_atuais[no_agente_id] = graus_atuais.get(no_agente_id, 0) + 1
+                        graus_atuais[no_sistema_id] = graus_atuais.get(no_sistema_id, 0) + 1
 
                 # Extrair termos para busca nos aprendizados, incluindo sinônimos declarados
                 candidatos = []
@@ -1020,20 +1019,17 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                 if nome_limpo:
                     candidatos.append(nome_limpo)
                     candidatos.extend(nome_limpo.split())
-                if sa.get("sistema"):
-                    candidatos.append(sa["sistema"].strip())
-                    candidatos.extend(sa["sistema"].strip().split())
                 slug = sa["id"].split("-", 2)[-1] if "-" in sa["id"] else sa["id"]
                 if slug:
                     candidatos.append(slug)
                     candidatos.extend(slug.replace("_", "-").split("-"))
 
-                # Consulta da tabela de sinônimos/apelidos
-                for chave_candidata in [slug, slug.replace("-", "_"), slug.replace("_", "-"), _chave(sa.get("sistema", "")).replace(" ", "_")]:
+                # Consulta da tabela de sinônimos/apelidos para a skill
+                for chave_candidata in [slug, slug.replace("-", "_"), slug.replace("_", "-")]:
                     if chave_candidata in sinonimos_cofre:
                         candidatos.extend(sinonimos_cofre[chave_candidata])
                 for chave_sin, sin_termos in sinonimos_cofre.items():
-                    if chave_sin in slug or chave_sin in _chave(sa.get("sistema", "")):
+                    if chave_sin in slug:
                         candidatos.extend(sin_termos)
 
                 termos_validos = {
@@ -1042,19 +1038,42 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                 }
                 if termos_validos:
                     termos_por_no[no_skill_id] = termos_por_no.get(no_skill_id, set()) | termos_validos
-                    termos_por_no[no_sistema_id] = termos_por_no.get(no_sistema_id, set()) | termos_validos
+
+                # Termos exclusivos do sistema (evita que o sistema herde termos de todas as skills que o usam)
+                candidatos_sistema = []
+                if sa.get("sistema"):
+                    sis_cru = sa["sistema"].strip()
+                    candidatos_sistema.append(sis_cru)
+                    candidatos_sistema.extend(sis_cru.split())
+                    sis_slug = _chave(sis_cru).replace(" ", "_")
+                    if sis_slug in sinonimos_cofre:
+                        candidatos_sistema.extend(sinonimos_cofre[sis_slug])
+                    for chave_sin, sin_termos in sinonimos_cofre.items():
+                        if chave_sin in sis_slug:
+                            candidatos_sistema.extend(sin_termos)
+
+                termos_sistema = {
+                    c.lower() for c in candidatos_sistema
+                    if len(c) >= 3 and c.lower() not in palavras_ignoradas
+                }
+                if termos_sistema:
+                    termos_por_no[no_sistema_id] = termos_por_no.get(no_sistema_id, set()) | termos_sistema
 
             def _desacentuar(txt: str) -> str:
                 nfkd = unicodedata.normalize("NFKD", txt)
                 return "".join(c for c in nfkd if not unicodedata.combining(c)).lower()
 
             # Conectar aprendizados existentes aos nós de skill/sistema que eles citam
+            # Teto de segurança: nenhum nó pode ter mais de 20 arestas
+            MAX_ARESTAS_POR_NO = 20
             aprendizados = [n for n in nos if n.get("area") != "operacao"]
             for apr in aprendizados:
                 texto_apr_original = f"{apr.get('rotulo', '')} {apr.get('corpo', '')} {apr.get('caso', '')} {apr.get('id', '')}".lower()
                 texto_apr_sem_acento = _desacentuar(texto_apr_original)
                 for no_destino, termos in termos_por_no.items():
                     if apr["id"] == no_destino:
+                        continue
+                    if graus_atuais.get(apr["id"], 0) >= MAX_ARESTAS_POR_NO or graus_atuais.get(no_destino, 0) >= MAX_ARESTAS_POR_NO:
                         continue
                     casou = False
                     for t in termos:
@@ -1078,6 +1097,8 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                                 "porque": f"Aprendizado cita {rotulo_alvo}",
                                 "ponte": apr.get("area") != "operacao",
                             })
+                            graus_atuais[apr["id"]] = graus_atuais.get(apr["id"], 0) + 1
+                            graus_atuais[no_destino] = graus_atuais.get(no_destino, 0) + 1
     except Exception:
         pass
 

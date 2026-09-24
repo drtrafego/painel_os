@@ -475,6 +475,9 @@ if sem_aresta_apr:
 conferir("total de nós de skill/sistema no teste é pelo menos 54", len(nos_skill_sistema) >= 54, True)
 conferir("pelo menos metade dos nós de skill/sistema liga a aprendizado", len(ligados_a_apr) >= (len(nos_skill_sistema) / 2), True)
 conferir("teste lista explicitamente os nós que ficaram sem aresta", isinstance(sem_aresta_apr, list), True)
+conferir("nenhum nó com mais de 20 arestas", all(n.get("grau", 0) <= 20 for n in cofre_54["nos"]), True)
+SEM_APRENDIZADO_ESPERADAS = {"conexao-renato-notion", "sistema-notion", "skill-luana-notion"}
+conferir("nenhuma skill com grau 0 em aprendizados sem estar listada no teste", set(sem_aresta_apr).issubset(SEM_APRENDIZADO_ESPERADAS), True)
 
 
 # ---------------------------------------------------------------------------

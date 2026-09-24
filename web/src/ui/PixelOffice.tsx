@@ -35,7 +35,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   const [arrastando, setArrastando] = useState(false)
   const [pontoArrasto, setPontoArrasto] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const [foco, setFoco] = useState<string | null>(agenteSelecionadoId ?? null)
-  const [squad, setSquad] = useState<FiltroOffice>(() => agentes.some((agente) => agente.estado === 'trabalhando') ? 'ativos' : 'todos')
+  const [squad, setSquad] = useState<FiltroOffice>(() => agentes.some((agente) => agente.estado === 'trabalhando' || agente.estado === 'silencioso') ? 'ativos' : 'todos')
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
   const catalogoVisual = useMemo(() => mesclarRuntimesNoCatalogo(catalogo, agentes), [agentes, catalogo])
   const agentesPorCatalogo = useMemo(() => construirMapaAgentesPorCatalogo(agentes, catalogoVisual), [agentes, catalogoVisual])
@@ -48,10 +48,10 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
       ),
     [ativos, catalogoVisual, squad]
   )
-  const ativosAnteriores = useRef(agentes.filter((agente) => agente.estado === 'trabalhando').length)
+  const ativosAnteriores = useRef(agentes.filter((agente) => agente.estado === 'trabalhando' || agente.estado === 'silencioso').length)
 
   useEffect(() => {
-    const quantidade = agentes.filter((agente) => agente.estado === 'trabalhando').length
+    const quantidade = agentes.filter((agente) => agente.estado === 'trabalhando' || agente.estado === 'silencioso').length
     if (ativosAnteriores.current === 0 && quantidade > 0) setSquad('ativos')
     ativosAnteriores.current = quantidade
   }, [agentes])
@@ -139,7 +139,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
 
   return <div ref={containerRef} className="relative h-[440px] w-full overflow-hidden border-4 border-black bg-[#0f172a] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] sm:h-[500px]" aria-label="Escritório virtual dos agentes">
     <canvas ref={canvasRef} onClick={selecionarNoCanvas} onPointerDown={iniciarArrasto} onPointerMove={arrastar} onPointerUp={finalizarArrasto} onPointerCancel={finalizarArrasto} onWheel={(e) => { e.preventDefault(); setZoom((valor) => arredondarZoom(valor * (e.deltaY < 0 ? 1.12 : 0.9))) }} className="h-full w-full cursor-grab touch-none active:cursor-grabbing" />
-    <div className="absolute inset-x-3 top-3 flex flex-wrap items-start justify-between gap-2 pointer-events-none"><div className="pointer-events-auto border-2 border-black bg-[#0b1324]/95 px-3 py-2 text-[10px] text-white shadow-[3px_3px_0_#000]"><div className="font-black tracking-wider text-[#facc15]">PIXEL AGENTS / PRESENÇA REAL</div><div className="mt-1 text-slate-400">{agentes.filter((a) => a.estado === 'trabalhando').length} executando · {catalogoVisual.length} no catálogo</div></div><div className="pointer-events-auto flex gap-1 border-2 border-black bg-[#0b1324]/95 p-1 shadow-[3px_3px_0_#000]"><button type="button" onClick={() => setZoom((valor) => arredondarZoom(valor + .2))} className="size-7 border border-slate-600 text-white active:scale-95" aria-label="Aumentar zoom">+</button><button type="button" onClick={() => setZoom((valor) => arredondarZoom(valor - .2))} className="size-7 border border-slate-600 text-white active:scale-95">−</button><button type="button" onClick={enquadrarCatalogo} className="h-7 border border-slate-600 px-2 text-[9px] font-black text-[#38bdf8] active:scale-95">RESET</button></div></div>
+    <div className="absolute inset-x-3 top-3 flex flex-wrap items-start justify-between gap-2 pointer-events-none"><div className="pointer-events-auto border-2 border-black bg-[#0b1324]/95 px-3 py-2 text-[10px] text-white shadow-[3px_3px_0_#000]"><div className="font-black tracking-wider text-[#facc15]">PIXEL AGENTS / PRESENÇA REAL</div><div className="mt-1 text-slate-400">{ativos.size} vivos ({agentes.filter((a) => a.estado === 'trabalhando').length} executando) · {catalogoVisual.length} no catálogo</div></div><div className="pointer-events-auto flex gap-1 border-2 border-black bg-[#0b1324]/95 p-1 shadow-[3px_3px_0_#000]"><button type="button" onClick={() => setZoom((valor) => arredondarZoom(valor + .2))} className="size-7 border border-slate-600 text-white active:scale-95" aria-label="Aumentar zoom">+</button><button type="button" onClick={() => setZoom((valor) => arredondarZoom(valor - .2))} className="size-7 border border-slate-600 text-white active:scale-95">−</button><button type="button" onClick={enquadrarCatalogo} className="h-7 border border-slate-600 px-2 text-[9px] font-black text-[#38bdf8] active:scale-95">RESET</button></div></div>
     <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-end justify-between gap-2 pointer-events-none"><div className="pointer-events-auto flex max-w-full flex-wrap gap-1 border-2 border-black bg-[#0b1324]/95 p-1.5 shadow-[3px_3px_0_#000]"><button type="button" onClick={() => setSquad('todos')} className={`px-2 py-1 text-[9px] font-black ${squad === 'todos' ? 'bg-white text-black' : 'text-slate-400'}`}>TODOS</button><button type="button" onClick={() => setSquad('ativos')} className={`px-2 py-1 text-[9px] font-black ${squad === 'ativos' ? 'bg-[#a3e635] text-black' : 'text-slate-400'}`}>ATIVOS ({ativos.size})</button>{PIXEL_AGENT_SQUADS.map((item) => <button key={item.id} type="button" onClick={() => setSquad(item.id)} className={`px-2 py-1 text-[9px] font-black ${squad === item.id ? 'text-black' : 'text-slate-400'}`} style={squad === item.id ? { backgroundColor: item.cor } : undefined}>{item.nome}</button>)}</div><div className="border-2 border-black bg-[#0b1324]/95 px-2 py-1 text-[9px] text-slate-300 shadow-[3px_3px_0_#000]">Arraste para mover · roda para zoom · clique para inspecionar</div></div>
   </div>
 }
