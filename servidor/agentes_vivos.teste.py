@@ -223,6 +223,64 @@ def testar_agentes_vivos():
         conferir("dono do ag_renato_1 é renato", donos.get("ag_renato_1"), "renato")
         conferir("dono do ag_bia_1 é bia", donos.get("ag_bia_1"), "bia")
 
+        print("\n--- Teste 4b: Bia com transcript pai ativo e subagents históricos")
+        projeto_bia_pai = tmp / "-opt-gastaomatos-bia-pai"
+        sessao_bia = "sessao-bia-sintetica"
+        pasta_bia = projeto_bia_pai / sessao_bia / "subagents"
+        pasta_bia.mkdir(parents=True, exist_ok=True)
+        (pasta_bia / "agent-antigo.meta.json").write_text(json.dumps({
+            "agentType": "pesquisador",
+            "description": "subagente sintetico antigo",
+        }), encoding="utf-8")
+        (pasta_bia / "agent-antigo.jsonl").write_text(json.dumps({
+            "type": "assistant",
+            "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "fim sintetico"}]},
+        }) + "\n", encoding="utf-8")
+        mtime_antigo = time.time() - mod.JANELA_CANDIDATO_S - 60
+        os.utime(pasta_bia / "agent-antigo.meta.json", (mtime_antigo, mtime_antigo))
+        os.utime(pasta_bia / "agent-antigo.jsonl", (mtime_antigo, mtime_antigo))
+
+        transcript_pai = projeto_bia_pai / f"{sessao_bia}.jsonl"
+        transcript_pai.write_text(json.dumps({
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "tool_use",
+                "id": "toolu_bia_sintetico_abcdefghi",
+                "name": "Agent",
+                "input": {
+                    "subagent_type": "pesquisador",
+                    "description": "triagem sintetica",
+                    "prompt": "SENTINELA_NAO_SAIR" + ("x" * (mod.CAUDA_BYTES + 1024)),
+                    "model": "claude-3-5-sonnet-20241022",
+                },
+            }]},
+        }) + "\n", encoding="utf-8")
+        mtime_pai = time.time() - 12
+        os.utime(transcript_pai, (mtime_pai, mtime_pai))
+
+        r_bia_pai = ler_agentes("-opt-gastaomatos-bia-pai", raiz=tmp)
+        agentes_bia_pai = r_bia_pai["agentes"]
+        conferir("transcript pai sintético excede a cauda padrão", transcript_pai.stat().st_size > mod.CAUDA_BYTES, True)
+        conferir("transcript pai recente da Bia vira presença viva", r_bia_pai["contagem"]["vivos"], 1)
+        conferir("registro vivo recebe dono bia", [a.get("dono") for a in agentes_bia_pai], ["bia"])
+        conferir("chamada Agent pendente ganha id sintético", agentes_bia_pai[0]["id"].startswith("agent-tool-"), True)
+        conferir("prompt do Agent não vaza", "SENTINELA_NAO_SAIR" in json.dumps(agentes_bia_pai, ensure_ascii=False), False)
+        conferir("subagent antigo continua só no histórico", r_bia_pai["contagem"]["historico"], 1)
+
+        projeto_bia_sessao = tmp / "-opt-gastaomatos-bia-sessao"
+        projeto_bia_sessao.mkdir(parents=True, exist_ok=True)
+        sessao_fallback = "sessao-bia-fallback"
+        transcript_fallback = projeto_bia_sessao / f"{sessao_fallback}.jsonl"
+        transcript_fallback.write_text(json.dumps({
+            "type": "assistant",
+            "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "entrega sintetica"}]},
+        }) + "\n", encoding="utf-8")
+        os.utime(transcript_fallback, (mtime_pai, mtime_pai))
+        r_bia_sessao = ler_agentes("-opt-gastaomatos-bia-sessao", raiz=tmp)
+        conferir("sessão pai recente entregue também aparece", r_bia_sessao["agentes"][0]["id"], f"sessao-{sessao_fallback[-8:]}")
+        conferir("fallback da sessão pai mantém dono bia", r_bia_sessao["agentes"][0]["dono"], "bia")
+        conferir("fallback da sessão pai entregue fica ocioso", r_bia_sessao["agentes"][0]["estado"], SILENCIOSO)
+
         print("\n--- Teste 5: Agregação resiliente quando uma sessão falha")
         projetos_com_falha = {
             "luana": "-opt-gastaomatos-luana",
@@ -596,4 +654,3 @@ def testar_agentes_vivos():
 
 if __name__ == "__main__":
     testar_agentes_vivos()
-

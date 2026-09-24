@@ -82,6 +82,7 @@ _CODEX_PADRAO = object()
 # Quanto do fim do transcript a gente le pra achar o ultimo tool_use.
 # 256 KB cobre folgado varios turnos; o arquivo pode ter 14 MB.
 CAUDA_BYTES = 256 * 1024
+CAUDA_PAI_BYTES = 4 * 1024 * 1024
 
 # So abre o transcript de quem escreveu nas ultimas N horas. Quem nao escreve
 # ha mais que isso e historico: entra na contagem de parados sem custo de I/O.
@@ -197,10 +198,10 @@ def _etapa_do_bloco(bloco: dict) -> tuple[str, bool]:
     return "sem descrição", False
 
 
-def _analisar_cauda(caminho: Path) -> dict:
+def _analisar_cauda(caminho: Path, n: int = CAUDA_BYTES) -> dict:
     """O que o FIM do transcript diz. Levanta em erro de leitura: quem chama
     decide o que fazer, e o erro viaja junto em vez de virar zero."""
-    linhas = _ler_cauda(caminho)
+    linhas = _ler_cauda(caminho, n)
     fase = "desconhecida"
     ultimo_ts = None
     etapa = None
@@ -618,35 +619,66 @@ def _identidade_codex(caminho: Path) -> dict:
     return resultado
 
 
+def _transcript_pai(dir_sessao: Path) -> Path:
+    return dir_sessao.parent / f"{dir_sessao.name}.jsonl"
+
+
+def _sessoes_do_projeto(dir_projeto: Path) -> list[Path]:
+    """Sessões com alguma evidência: pasta subagents/ ou transcript pai."""
+    sessoes: dict[str, Path] = {}
+    for item in dir_projeto.iterdir():
+        if item.is_dir() and (item / "subagents").is_dir():
+            sessoes[item.name] = item
+        elif item.is_file() and item.suffix == ".jsonl":
+            sessoes.setdefault(item.stem, dir_projeto / item.stem)
+    return list(sessoes.values())
+
+
+def _ultima_evidencia_sessao(dir_sessao: Path) -> float:
+    evidencias: list[float] = []
+    transcript_pai = _transcript_pai(dir_sessao)
+    try:
+        if transcript_pai.is_file():
+            evidencias.append(transcript_pai.stat().st_mtime)
+    except OSError:
+        pass
+
+    pasta = dir_sessao / "subagents"
+    try:
+        if pasta.is_dir():
+            arquivos = [p for p in pasta.iterdir() if p.is_file()]
+            evidencias.extend(p.stat().st_mtime for p in arquivos)
+            evidencias.append(pasta.stat().st_mtime)
+    except OSError:
+        pass
+
+    try:
+        if dir_sessao.exists():
+            evidencias.append(dir_sessao.stat().st_mtime)
+    except OSError:
+        pass
+    return max(evidencias, default=0.0)
+
+
 def _sessao_mais_ativa(dir_projeto: Path) -> Path | None:
-    """Escolhe pela última evidência dentro da sessão, não pelo diretório."""
-    candidatas = [d for d in dir_projeto.iterdir() if d.is_dir() and (d / "subagents").is_dir()]
+    """Escolhe pela última evidência da sessão, incluindo o transcript pai."""
+    candidatas = _sessoes_do_projeto(dir_projeto)
     if not candidatas:
         return None
-    def ultima_evidencia(diretorio: Path) -> float:
-        arquivos = [p for p in (diretorio / "subagents").iterdir() if p.is_file()]
-        return max((p.stat().st_mtime for p in arquivos), default=(diretorio / "subagents").stat().st_mtime)
-    return max(candidatas, key=ultima_evidencia)
+    return max(candidatas, key=_ultima_evidencia_sessao)
 
 
 def _sessoes_ativas(dir_projeto: Path, agora: float) -> list[Path]:
     """Retorna todas as sessões com subagentes ativas dentro da janela de candidatos.
     Se nenhuma estiver na janela, retorna a mais ativa para preservação de histórico."""
     try:
-        candidatas = [d for d in dir_projeto.iterdir() if d.is_dir() and (d / "subagents").is_dir()]
+        candidatas = _sessoes_do_projeto(dir_projeto)
     except OSError:
         return []
     if not candidatas:
         return []
 
-    def ultima_evidencia(diretorio: Path) -> float:
-        try:
-            arquivos = [p for p in (diretorio / "subagents").iterdir() if p.is_file()]
-            return max((p.stat().st_mtime for p in arquivos), default=(diretorio / "subagents").stat().st_mtime)
-        except OSError:
-            return 0.0
-
-    com_mtime = [(d, ultima_evidencia(d)) for d in candidatas]
+    com_mtime = [(d, _ultima_evidencia_sessao(d)) for d in candidatas]
     ativas = [d for d, mt in com_mtime if (agora - mt) <= JANELA_CANDIDATO_S]
     if ativas:
         ativas.sort(key=lambda d: next(mt for x, mt in com_mtime if x == d), reverse=True)
@@ -752,6 +784,167 @@ def _codex_recentes(agora: float, dono: str | None = None,
     return agentes
 
 
+def _agentes_agent_pendentes_do_pai(dir_sessao: Path, dono: str | None, agora: float) -> list[dict]:
+    """Chamadas `Agent` pendentes no transcript pai.
+
+    Claude Code nem sempre atualiza os arquivos em subagents/ enquanto a sessão
+    pai segue ativa. A presença viva então está no tool_use sem tool_result.
+    """
+    transcript = _transcript_pai(dir_sessao)
+    try:
+        st = transcript.stat()
+    except OSError:
+        return []
+
+    silencio = max(0.0, agora - st.st_mtime)
+    if silencio > LIMIAR_VIVO_S:
+        return []
+
+    try:
+        linhas = _ler_cauda(transcript, CAUDA_PAI_BYTES)
+    except OSError:
+        return []
+
+    usos: dict[str, dict] = {}
+    resultados: set[str] = set()
+    for linha in linhas:
+        try:
+            reg = json.loads(linha)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(reg, dict):
+            continue
+        ts_raw = reg.get("timestamp")
+        msg = reg.get("message") if isinstance(reg.get("message"), dict) else {}
+        conteudo = msg.get("content") if isinstance(msg, dict) else None
+        if not isinstance(conteudo, list):
+            continue
+        for bloco in conteudo:
+            if not isinstance(bloco, dict):
+                continue
+            tipo = bloco.get("type")
+            if tipo == "tool_result":
+                tool_use_id = bloco.get("tool_use_id")
+                if isinstance(tool_use_id, str):
+                    resultados.add(tool_use_id)
+                continue
+            if tipo != "tool_use" or bloco.get("name") != "Agent":
+                continue
+            tool_id = bloco.get("id")
+            if not isinstance(tool_id, str) or not tool_id:
+                continue
+            entrada = bloco.get("input") if isinstance(bloco.get("input"), dict) else {}
+            desc = _texto_curto(entrada.get("description"), 160)
+            sub_tipo = _texto_curto(entrada.get("subagent_type"), 80)
+            modelo = _texto_curto(entrada.get("model"), 80)
+            usos[tool_id] = {
+                "id": tool_id,
+                "descricao": desc,
+                "tipo": sub_tipo or "agent",
+                "modelo": modelo,
+                "ts_epoch": _ts_para_epoch(ts_raw),
+            }
+
+    agentes = []
+    for tool_id, uso in usos.items():
+        if tool_id in resultados:
+            continue
+        idade = max(0.0, agora - uso["ts_epoch"]) if uso.get("ts_epoch") else silencio
+        estado = TRABALHANDO if idade <= LIMIAR_ATIVO_S else SILENCIOSO
+        item = {
+            "id": f"agent-tool-{tool_id[-8:]}",
+            "tipo": uso["tipo"],
+            "motor": "claude",
+            "dono": dono,
+            "identidade": None,
+            "papel": uso["tipo"],
+            "tarefa": None,
+            "descricao": uso["descricao"],
+            "pai": f"sessao-{dir_sessao.name[-8:]}",
+            "profundidade": 1,
+            "estado": estado,
+            "fase": "executando_subagente",
+            "etapa": uso["descricao"] or "Agent",
+            "etapa_e_description": bool(uso["descricao"]),
+            "ferramenta": "Agent",
+            "silencio_s": round(idade, 1),
+            "ultima_atividade": _hora_br(agora - idade),
+            "inicio": _hora_br(uso["ts_epoch"]) if uso.get("ts_epoch") else None,
+            "transcript_bytes": st.st_size,
+            "problema": None,
+            "modelo": uso["modelo"],
+            "modelo_legivel": _formatar_modelo(uso["modelo"]),
+            "esforco": None,
+            "ferramentas_usadas": None,
+            "tokens_total": None,
+            "tokens_formatado": None,
+            "rodando_ha_s": round(idade, 1),
+            "rodando_ha": _formatar_duracao(idade),
+            "quem_mandou": f"sessao-{dir_sessao.name[-8:]}",
+            "status": "executando" if estado == TRABALHANDO else "ocioso",
+        }
+        agentes.append(item)
+    return agentes
+
+
+def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float) -> dict | None:
+    """Fallback de presença da própria sessão Claude Code."""
+    transcript = _transcript_pai(dir_sessao)
+    try:
+        st = transcript.stat()
+    except OSError:
+        return None
+
+    silencio = max(0.0, agora - st.st_mtime)
+    if silencio > LIMIAR_VIVO_S:
+        return None
+
+    try:
+        cauda = _analisar_cauda(transcript, CAUDA_PAI_BYTES)
+    except OSError:
+        return None
+
+    estado = _classificar(cauda["fase"], silencio)
+    if estado == PARADO and cauda["fase"] == "entregou" and silencio <= LIMIAR_VIVO_S:
+        estado = SILENCIOSO
+    if estado == PARADO:
+        return None
+
+    item = {
+        "id": f"sessao-{dir_sessao.name[-8:]}",
+        "tipo": "sessao_claude",
+        "motor": "claude",
+        "dono": dono,
+        "identidade": "sessao-claude",
+        "papel": "sessão Claude Code",
+        "tarefa": None,
+        "descricao": "sessão Claude Code ativa",
+        "pai": None,
+        "profundidade": 0,
+        "estado": estado,
+        "fase": cauda["fase"],
+        "etapa": cauda["etapa"],
+        "etapa_e_description": cauda["etapa_e_description"],
+        "ferramenta": cauda["ferramenta"],
+        "silencio_s": round(silencio, 1),
+        "ultima_atividade": _hora_br(st.st_mtime),
+        "inicio": None,
+        "transcript_bytes": st.st_size,
+        "problema": cauda.get("problema_api"),
+        "modelo": None,
+        "modelo_legivel": None,
+        "esforco": None,
+        "ferramentas_usadas": None,
+        "tokens_total": None,
+        "tokens_formatado": None,
+        "rodando_ha_s": None,
+        "rodando_ha": None,
+        "quem_mandou": None,
+        "status": "executando" if estado == TRABALHANDO else "ocioso",
+    }
+    return item
+
+
 def _finalizar_item_claude(item: dict, metricas: dict | None, agora: float) -> None:
     if metricas:
         if metricas.get("rodando_ha") is None and item.get("inicio_epoch"):
@@ -813,7 +1006,10 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
         base["custo_ms"] = round((time.perf_counter() - t0) * 1000, 1)
         return base
 
+    raiz_explicita = raiz is not None
     raiz = raiz or RAIZ_PROJETOS
+    if raiz_explicita and raiz_codex is _CODEX_PADRAO:
+        raiz_codex = []
     agentes: list[dict] = []
     avisos: list[str] = []
     claude_ok = False
@@ -840,104 +1036,113 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                 claude_ok = True
 
                 for dir_sessao in sessoes_candidatas:
+                    inicio_sessao = len(agentes)
                     pasta = dir_sessao / "subagents"
-                    if not pasta.is_dir():
-                        continue
 
-                    metas = sorted(pasta.glob("agent-*.meta.json"))
-                    if not metas and len(sessoes_candidatas) == 1:
-                        avisos.append("a pasta existe e foi lida, e não há nenhum agente registrado nela")
+                    if pasta.is_dir():
+                        metas = sorted(pasta.glob("agent-*.meta.json"))
+                        if not metas and len(sessoes_candidatas) == 1:
+                            avisos.append("a pasta existe e foi lida, e não há nenhum agente registrado nela")
 
-                    for meta_path in metas:
-                        ident = meta_path.name[len("agent-"):-len(".meta.json")]
-                        item = {
-                            "id": ident,
-                            "tipo": None, "motor": "claude", "dono": dono,
-                            "descricao": None, "pai": None, "profundidade": None,
-                            "estado": None, "fase": None, "etapa": None, "etapa_e_description": None,
-                            "ferramenta": None,
-                            "silencio_s": None, "ultima_atividade": None, "inicio": None,
-                            "transcript_bytes": None, "problema": None,
-                            "modelo": None, "modelo_legivel": None, "esforco": None,
-                            "ferramentas_usadas": 0, "tokens_total": None, "tokens_formatado": None,
-                            "rodando_ha_s": None, "rodando_ha": None,
-                            "quem_mandou": None, "status": None,
-                        }
-                        try:
-                            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-                            if not isinstance(meta, dict):
-                                raise ValueError("meta.json não é um dicionário")
-                            item["tipo"] = meta.get("agentType")
-                            item["descricao"] = meta.get("description")
-                            item["pai"] = meta.get("parentAgentId")
-                            item["profundidade"] = meta.get("spawnDepth")
-                            item["inicio"] = _hora_br(meta_path.stat().st_mtime)
-                            item["inicio_epoch"] = meta_path.stat().st_mtime
-                        except (OSError, ValueError) as e:
-                            item["problema"] = f"meta ilegível: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
-                            avisos.append(f"{ident}: meta ilegível")
+                        for meta_path in metas:
+                            ident = meta_path.name[len("agent-"):-len(".meta.json")]
+                            item = {
+                                "id": ident,
+                                "tipo": None, "motor": "claude", "dono": dono,
+                                "descricao": None, "pai": None, "profundidade": None,
+                                "estado": None, "fase": None, "etapa": None, "etapa_e_description": None,
+                                "ferramenta": None,
+                                "silencio_s": None, "ultima_atividade": None, "inicio": None,
+                                "transcript_bytes": None, "problema": None,
+                                "modelo": None, "modelo_legivel": None, "esforco": None,
+                                "ferramentas_usadas": 0, "tokens_total": None, "tokens_formatado": None,
+                                "rodando_ha_s": None, "rodando_ha": None,
+                                "quem_mandou": None, "status": None,
+                            }
+                            try:
+                                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                                if not isinstance(meta, dict):
+                                    raise ValueError("meta.json não é um dicionário")
+                                item["tipo"] = meta.get("agentType")
+                                item["descricao"] = meta.get("description")
+                                item["pai"] = meta.get("parentAgentId")
+                                item["profundidade"] = meta.get("spawnDepth")
+                                item["inicio"] = _hora_br(meta_path.stat().st_mtime)
+                                item["inicio_epoch"] = meta_path.stat().st_mtime
+                            except (OSError, ValueError) as e:
+                                item["problema"] = f"meta ilegível: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
+                                avisos.append(f"{ident}: meta ilegível")
 
-                        transcript = pasta / f"agent-{ident}.jsonl"
-                        try:
-                            st = transcript.stat()
-                            item["transcript_bytes"] = st.st_size
-                            silencio = max(0.0, agora - st.st_mtime)
-                            item["silencio_s"] = round(silencio, 1)
-                            item["ultima_atividade"] = _hora_br(st.st_mtime)
-                        except FileNotFoundError:
-                            item["problema"] = (item["problema"] or "") + " sem transcript (agente registrado e nunca escreveu)"
-                            item["estado"] = PARADO
-                            item["fase"] = "sem_transcript"
-                            item["etapa"] = "nunca escreveu no transcript"
-                            _finalizar_item_claude(item, None, agora)
+                            transcript = pasta / f"agent-{ident}.jsonl"
+                            try:
+                                st = transcript.stat()
+                                item["transcript_bytes"] = st.st_size
+                                silencio = max(0.0, agora - st.st_mtime)
+                                item["silencio_s"] = round(silencio, 1)
+                                item["ultima_atividade"] = _hora_br(st.st_mtime)
+                            except FileNotFoundError:
+                                item["problema"] = (item["problema"] or "") + " sem transcript (agente registrado e nunca escreveu)"
+                                item["estado"] = PARADO
+                                item["fase"] = "sem_transcript"
+                                item["etapa"] = "nunca escreveu no transcript"
+                                _finalizar_item_claude(item, None, agora)
+                                agentes.append(item)
+                                avisos.append(f"{ident}: registrado sem transcript")
+                                continue
+                            except OSError as e:
+                                item["problema"] = f"transcript ilegível: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
+                                item["estado"] = None
+                                item["etapa"] = "não foi possível ler"
+                                _finalizar_item_claude(item, None, agora)
+                                agentes.append(item)
+                                avisos.append(f"{ident}: transcript ilegível")
+                                continue
+
+                            if silencio > JANELA_CANDIDATO_S:
+                                item["estado"] = PARADO
+                                item["fase"] = "fora_da_janela"
+                                item["etapa"] = "fora da janela de leitura (histórico)"
+                                _finalizar_item_claude(item, None, agora)
+                                agentes.append(item)
+                                continue
+
+                            try:
+                                cauda = _analisar_cauda(transcript)
+                            except OSError as e:
+                                item["problema"] = f"falha ao ler a cauda: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
+                                item["estado"] = None
+                                item["etapa"] = "não foi possível ler"
+                                _finalizar_item_claude(item, None, agora)
+                                agentes.append(item)
+                                avisos.append(f"{ident}: falha ao ler a cauda do transcript")
+                                continue
+
+                            item.update({
+                                "fase": cauda["fase"],
+                                "etapa": cauda["etapa"],
+                                "etapa_e_description": cauda["etapa_e_description"],
+                                "ferramenta": cauda["ferramenta"],
+                                "estado": _classificar(cauda["fase"], silencio),
+                            })
+                            if cauda.get("problema_api"):
+                                item["problema"] = cauda["problema_api"]
+                            elif cauda["linhas_ilegiveis"]:
+                                item["problema"] = f"{cauda['linhas_ilegiveis']} linha(s) ilegível(is) na cauda"
+                            if item["estado"] != PARADO:
+                                metricas = _extrair_metricas_transcript(transcript, agora)
+                            else:
+                                metricas = None
+                            _finalizar_item_claude(item, metricas, agora)
                             agentes.append(item)
-                            avisos.append(f"{ident}: registrado sem transcript")
-                            continue
-                        except OSError as e:
-                            item["problema"] = f"transcript ilegível: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
-                            item["estado"] = None
-                            item["etapa"] = "não foi possível ler"
-                            _finalizar_item_claude(item, None, agora)
-                            agentes.append(item)
-                            avisos.append(f"{ident}: transcript ilegível")
-                            continue
 
-                        if silencio > JANELA_CANDIDATO_S:
-                            item["estado"] = PARADO
-                            item["fase"] = "fora_da_janela"
-                            item["etapa"] = "fora da janela de leitura (histórico)"
-                            _finalizar_item_claude(item, None, agora)
-                            agentes.append(item)
-                            continue
-
-                        try:
-                            cauda = _analisar_cauda(transcript)
-                        except OSError as e:
-                            item["problema"] = f"falha ao ler a cauda: {type(e).__name__}: {_sanitizar_caminho(str(e))}"
-                            item["estado"] = None
-                            item["etapa"] = "não foi possível ler"
-                            _finalizar_item_claude(item, None, agora)
-                            agentes.append(item)
-                            avisos.append(f"{ident}: falha ao ler a cauda do transcript")
-                            continue
-
-                        item.update({
-                            "fase": cauda["fase"],
-                            "etapa": cauda["etapa"],
-                            "etapa_e_description": cauda["etapa_e_description"],
-                            "ferramenta": cauda["ferramenta"],
-                            "estado": _classificar(cauda["fase"], silencio),
-                        })
-                        if cauda.get("problema_api"):
-                            item["problema"] = cauda["problema_api"]
-                        elif cauda["linhas_ilegiveis"]:
-                            item["problema"] = f"{cauda['linhas_ilegiveis']} linha(s) ilegível(is) na cauda"
-                        if item["estado"] != PARADO:
-                            metricas = _extrair_metricas_transcript(transcript, agora)
-                        else:
-                            metricas = None
-                        _finalizar_item_claude(item, metricas, agora)
-                        agentes.append(item)
+                    tem_vivo_sessao = any(a.get("estado") in (TRABALHANDO, SILENCIOSO) for a in agentes[inicio_sessao:])
+                    if not tem_vivo_sessao:
+                        agentes.extend(_agentes_agent_pendentes_do_pai(dir_sessao, dono, agora))
+                    tem_vivo_sessao = any(a.get("estado") in (TRABALHANDO, SILENCIOSO) for a in agentes[inicio_sessao:])
+                    if not tem_vivo_sessao:
+                        item_pai = _agente_sessao_pai(dir_sessao, dono, agora)
+                        if item_pai:
+                            agentes.append(item_pai)
     except PermissionError as e:
         claude_motivo = "sem_permissao"
         claude_erro = f"sem permissão de leitura: {_sanitizar_caminho(str(e))}"
