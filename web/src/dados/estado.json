@@ -321,21 +321,91 @@
   },
   "tarefas": {
     "total_abertas": 169,
+    "total_backlog": 124,
+    "total_candidatas_arquivar": 3,
     "por_status": {
       "doing": 12,
       "todo": 140,
-      "waiting": 17
+      "waiting": 17,
+      "backlog": 124
     },
     "por_prazo": {
+      "atrasadas": 2,
+      "hoje": 5,
+      "proximos_7_dias": 10,
       "sem_prazo": 40,
-      "hoje": 5
+      "depois": 112
     },
     "por_movimento": {
-      "paradas_7d": 8
+      "ultimos_7_dias": 50,
+      "entre_7_e_30_dias": 75,
+      "sem_atualizacao_30_dias": 44
     },
     "por_projeto": [
       { "projeto": "conteudo", "total": 45 },
       { "projeto": "clientes", "total": 62 }
+    ],
+    "itens": [
+      {
+        "id": "101",
+        "titulo": "Ads",
+        "projeto": "clientes",
+        "status": "todo",
+        "prioridade": "p2",
+        "criada_em": "2026-08-25T10:00:00Z",
+        "prazo": null,
+        "atualizada_em": "2026-08-25T10:00:00Z",
+        "dias_sem_movimento": 30,
+        "parece_abandonada": true
+      },
+      {
+        "id": "102",
+        "titulo": "Enviar",
+        "projeto": "clientes",
+        "status": "todo",
+        "prioridade": "p3",
+        "criada_em": "2026-08-25T11:00:00Z",
+        "prazo": null,
+        "atualizada_em": "2026-08-25T11:00:00Z",
+        "dias_sem_movimento": 30,
+        "parece_abandonada": true
+      },
+      {
+        "id": "103",
+        "titulo": "Fazer Nova Campanha",
+        "projeto": "clientes",
+        "status": "todo",
+        "prioridade": "p2",
+        "criada_em": "2026-08-25T12:00:00Z",
+        "prazo": null,
+        "atualizada_em": "2026-08-25T12:00:00Z",
+        "dias_sem_movimento": 30,
+        "parece_abandonada": true
+      },
+      {
+        "id": "104",
+        "titulo": "Produzir roteiro vídeo institucional",
+        "projeto": "conteudo",
+        "status": "doing",
+        "prioridade": "p1",
+        "criada_em": "2026-09-20T14:00:00Z",
+        "prazo": "2026-09-25T18:00:00Z",
+        "atualizada_em": "2026-09-23T15:00:00Z",
+        "dias_sem_movimento": 1,
+        "parece_abandonada": false
+      },
+      {
+        "id": "105",
+        "titulo": "Ligar para lead [tel:...4321]",
+        "projeto": "clientes",
+        "status": "waiting",
+        "prioridade": "p2",
+        "criada_em": "2026-09-22T09:00:00Z",
+        "prazo": null,
+        "atualizada_em": "2026-09-22T09:00:00Z",
+        "dias_sem_movimento": 2,
+        "parece_abandonada": false
+      }
     ]
   },
   "aprovacoes": {

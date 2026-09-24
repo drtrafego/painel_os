@@ -87,19 +87,20 @@ except ModuleNotFoundError:
 RAIZ = Path(__file__).resolve().parent.parent
 
 try:
-    from coletor.coletar_estado import redigir, achou_nome_de_cliente, NEGACAO
+    from coletor.coletar_estado import redigir, achou_nome_de_cliente, NEGACAO, redigir_texto_livre
 except ModuleNotFoundError:
     try:
-        from coletar_estado import redigir, achou_nome_de_cliente, NEGACAO
+        from coletar_estado import redigir, achou_nome_de_cliente, NEGACAO, redigir_texto_livre
     except ModuleNotFoundError:
         import sys
         sys.path.insert(0, str(RAIZ / "coletor"))
         try:
-            from coletar_estado import redigir, achou_nome_de_cliente, NEGACAO
+            from coletar_estado import redigir, achou_nome_de_cliente, NEGACAO, redigir_texto_livre
         except Exception:
             redigir = None
             achou_nome_de_cliente = None
             NEGACAO = {"carregada": False}
+            redigir_texto_livre = None
 DIST = RAIZ / "web" / "dist"
 COLETOR = RAIZ / "coletor" / "coletar_estado.py"
 # 20/09/2026: o snapshot REAL vive em `data/`, igual aprovacoes.json e
@@ -356,31 +357,32 @@ _trava_vivos = threading.Lock()
 JANELA_CACHE_VIVOS = 2.0
 
 
-def redigir_texto_livre(texto: str | None, limite: int = 400) -> str | None:
-    """Sanitiza texto livre: remove caminhos do sistema, redige emails/telefones e mascara nomes de clientes."""
-    if not texto or not isinstance(texto, str):
-        return texto
-    # 1. Sanitizar caminhos internos (/opt/..., /home/..., C:\...)
-    limpo = re.sub(r"/(?:opt|home|root|etc|var|tmp|usr)/\S+", "[caminho]", texto)
-    limpo = re.sub(r"[a-zA-Z]:\\[^\s'\":]+", "[caminho]", limpo)
+if redigir_texto_livre is None:
+    def redigir_texto_livre(texto: str | None, limite: int = 400) -> str | None:
+        """Sanitiza texto livre: remove caminhos do sistema, redige emails/telefones e mascara nomes de clientes."""
+        if not texto or not isinstance(texto, str):
+            return texto
+        # 1. Sanitizar caminhos internos (/opt/..., /home/..., C:\...)
+        limpo = re.sub(r"/(?:opt|home|root|etc|var|tmp|usr)/\S+", "[caminho]", texto)
+        limpo = re.sub(r"[a-zA-Z]:\\[^\s'\":]+", "[caminho]", limpo)
 
-    # 2. Redigir emails e telefones
-    if callable(redigir):
-        try:
-            limpo = redigir(limpo)
-        except Exception:
-            pass
+        # 2. Redigir emails e telefones
+        if callable(redigir):
+            try:
+                limpo = redigir(limpo)
+            except Exception:
+                pass
 
-    # 3. Mascarar nomes de clientes
-    if callable(achou_nome_de_cliente) and isinstance(NEGACAO, dict) and NEGACAO.get("carregada"):
-        try:
-            achados = achou_nome_de_cliente(limpo)
-            for ini, fim, _ in reversed(achados):
-                limpo = limpo[:ini] + "[cliente]" + limpo[fim:]
-        except Exception:
-            pass
+        # 3. Mascarar nomes de clientes
+        if callable(achou_nome_de_cliente) and isinstance(NEGACAO, dict) and NEGACAO.get("carregada"):
+            try:
+                achados = achou_nome_de_cliente(limpo)
+                for ini, fim, _ in reversed(achados):
+                    limpo = limpo[:ini] + "[cliente]" + limpo[fim:]
+            except Exception:
+                pass
 
-    return limpo[:limite].strip()
+        return limpo[:limite].strip()
 
 
 def redigir_dados_agentes(dados: dict) -> dict:

@@ -63,6 +63,12 @@ TAREFAS_BASE = "https://tarefas.casaldotrafego.com/api/v1"
 TAREFAS_STATUS = ("todo", "doing", "waiting", "backlog")
 TAREFAS_STATUS_ATIVAS = ("todo", "doing", "waiting")
 TAREFAS_STATUS_GUARDADAS = ("backlog",)
+# Critérios para marcar tarefas que parecem abandonadas no GTD (Rodada 5):
+#   - sem prazo (dueDate vazio)
+#   - sem movimento há mais de 21 dias (updatedAt)
+#   - título curto (até 3 palavras, ex: "Ads", "Enviar", "Fazer Nova Campanha") OU apenas número de telefone
+ABANDONADA_DIAS_SEM_MOVIMENTO = 21
+ABANDONADA_MAX_PALAVRAS_TITULO = 3
 APROVACOES_JSON = RAIZ / "luana/painel_os/data/aprovacoes.json"
 APROVACAO_ESTADOS = ("aguardando", "aprovado", "reprovado", "cancelado")
 APROVACAO_TIPOS = ("conteudo", "documento", "campanha", "outro")
@@ -403,11 +409,13 @@ def ler_tarefas():
         "total": None,
         "total_abertas": None,
         "total_backlog": None,
+        "total_candidatas_arquivar": None,
         "por_status": {},
         "por_prioridade": {},
         "por_prazo": {},
         "por_movimento": {},
         "por_projeto": [],
+        "itens": [],
         "truncado": None,
     }
     try:
@@ -426,9 +434,9 @@ def ler_tarefas():
                 raise RuntimeError(f"resposta inválida ao ler estado {status}")
             truncado = truncado or len(lista) == 200
             for tarefa in lista:
-                if not isinstance(tarefa, dict) or not isinstance(tarefa.get("id"), str):
+                if not isinstance(tarefa, dict) or not isinstance(tarefa.get("id"), (str, int)):
                     raise RuntimeError(f"tarefa inválida no estado {status}")
-                tarefas[tarefa["id"]] = tarefa
+                tarefas[str(tarefa["id"])] = tarefa
     except urllib.error.HTTPError as e:
         vazio["erro"] = f"API de tarefas respondeu HTTP {e.code}; contagens indisponíveis"
         return vazio
@@ -443,6 +451,7 @@ def ler_tarefas():
     por_prazo = {"atrasadas": 0, "hoje": 0, "proximos_7_dias": 0, "sem_prazo": 0, "depois": 0}
     por_movimento = {"ultimos_7_dias": 0, "entre_7_e_30_dias": 0, "sem_atualizacao_30_dias": 0}
     projetos = {}
+    itens_ativos = []
     try:
         for tarefa in tarefas.values():
             status = tarefa.get("status")
@@ -453,29 +462,69 @@ def ler_tarefas():
             prioridade = tarefa.get("priority")
             if prioridade in por_prioridade:
                 por_prioridade[prioridade] += 1
-            slug = tarefa.get("projectSlug")
+            slug = tarefa.get("projectSlug") or tarefa.get("project_slug") or tarefa.get("projeto")
             rotulo = slug if slug in TAREFAS_PROJETOS_PUBLICOS else "outros projetos"
             projetos[rotulo] = projetos.get(rotulo, 0) + 1
-            atualizado = datetime.fromisoformat(str(tarefa["updatedAt"]).replace("Z", "+00:00"))
-            if atualizado.tzinfo is None:
-                atualizado = atualizado.replace(tzinfo=timezone.utc)
-            idade = instante_coleta - atualizado.astimezone(timezone.utc)
+            atualizado_str = tarefa.get("updatedAt") or tarefa.get("updated_at") or tarefa.get("atualizada_em")
+            if atualizado_str:
+                atualizado = datetime.fromisoformat(str(atualizado_str).replace("Z", "+00:00"))
+                if atualizado.tzinfo is None:
+                    atualizado = atualizado.replace(tzinfo=timezone.utc)
+                idade = instante_coleta - atualizado.astimezone(timezone.utc)
+            else:
+                idade = timedelta(days=999)
             movimento = "ultimos_7_dias" if idade < timedelta(days=7) else "entre_7_e_30_dias" if idade < timedelta(days=30) else "sem_atualizacao_30_dias"
             por_movimento[movimento] += 1
-            prazo = tarefa.get("dueDate")
-            if not prazo:
+            prazo_raw = tarefa.get("dueDate") or tarefa.get("due_date") or tarefa.get("prazo")
+            tem_prazo = bool(prazo_raw and str(prazo_raw).strip() not in ("", "None", "0001-01-01T00:00:00Z"))
+            if not tem_prazo:
                 por_prazo["sem_prazo"] += 1
-                continue
-            dia = datetime.fromisoformat(str(prazo).replace("Z", "+00:00")).date()
-            delta = (dia - hoje).days
-            faixa = "atrasadas" if delta < 0 else "hoje" if delta == 0 else "proximos_7_dias" if delta <= 7 else "depois"
-            por_prazo[faixa] += 1
+                prazo_val = None
+            else:
+                dia = datetime.fromisoformat(str(prazo_raw).replace("Z", "+00:00")).date()
+                delta = (dia - hoje).days
+                faixa = "atrasadas" if delta < 0 else "hoje" if delta == 0 else "proximos_7_dias" if delta <= 7 else "depois"
+                por_prazo[faixa] += 1
+                prazo_val = str(prazo_raw)
+
+            # Critério "parece abandonada" (Rodada 5):
+            # 1. Sem prazo (dueDate vazio)
+            # 2. Sem movimento há mais de 21 dias (updatedAt)
+            # 3. Título curto (até 3 palavras, ex: "Ads", "Enviar", "Fazer Nova Campanha") OU apenas número de telefone
+            titulo_bruto = str(tarefa.get("title") or tarefa.get("titulo") or tarefa.get("name") or "").strip()
+            palavras = [p for p in titulo_bruto.split() if p]
+            eh_titulo_curto = bool(palavras and len(palavras) <= ABANDONADA_MAX_PALAVRAS_TITULO)
+            digs_tel = re.sub(r"\D", "", titulo_bruto)
+            eh_so_telefone = bool(digs_tel and len(digs_tel) >= 8 and len(re.sub(r"[\s\(\)\+\-\.]", "", titulo_bruto)) == len(digs_tel))
+            sem_movimento_21d = idade > timedelta(days=ABANDONADA_DIAS_SEM_MOVIMENTO)
+            parece_abandonada = bool((not tem_prazo) and sem_movimento_21d and (eh_titulo_curto or eh_so_telefone))
+
+            # Redação do título do texto livre (mascara lead preservando últimos 4 dígitos)
+            titulo_redigido = redigir_texto_livre(titulo_bruto, limite=140, manter_ultimos_4_tel=True) or "Sem título"
+            criado_raw = tarefa.get("createdAt") or tarefa.get("created_at") or tarefa.get("criada_em")
+
+            itens_ativos.append({
+                "id": str(tarefa.get("id")),
+                "titulo": titulo_redigido,
+                "projeto": rotulo,
+                "status": status,
+                "prioridade": prioridade,
+                "criada_em": str(criado_raw) if criado_raw else None,
+                "prazo": prazo_val,
+                "atualizada_em": str(atualizado_str) if atualizado_str else None,
+                "dias_sem_movimento": idade.days,
+                "parece_abandonada": parece_abandonada,
+            })
     except (TypeError, ValueError):
-        vazio["erro"] = "API devolveu prazo inválido; contagens indisponíveis"
+        vazio["erro"] = "API devolveu prazo ou data inválida; contagens indisponíveis"
         return vazio
 
     total_ativas = sum(por_status.get(s, 0) for s in TAREFAS_STATUS_ATIVAS)
     total_backlog = por_status.get("backlog", 0)
+    total_candidatas_arquivar = sum(1 for it in itens_ativos if it["parece_abandonada"])
+
+    # Ordena itens por projeto e pelas tarefas mais paradas primeiro
+    itens_ativos.sort(key=lambda x: (x["projeto"], -x.get("dias_sem_movimento", 0), x["titulo"]))
 
     return {
         **vazio,
@@ -483,6 +532,7 @@ def ler_tarefas():
         "total": total_ativas,
         "total_abertas": total_ativas,
         "total_backlog": total_backlog,
+        "total_candidatas_arquivar": total_candidatas_arquivar,
         "por_status": por_status,
         "por_prioridade": por_prioridade,
         "por_prazo": por_prazo,
@@ -496,6 +546,7 @@ def ler_tarefas():
             }
             for nome, total in sorted(projetos.items(), key=lambda x: (-x[1], x[0]))
         ],
+        "itens": itens_ativos,
         "truncado": truncado,
     }
 
@@ -2895,6 +2946,50 @@ def rotulo_seguro(bruto: str, limite: int = 78):
     if not texto or achou_nome_de_cliente(texto):
         return None
     return texto, len(achados)
+
+
+def redigir_texto_livre(texto: str | None, limite: int = 400, manter_ultimos_4_tel: bool = False) -> str | None:
+    """Sanitiza texto livre: remove caminhos do sistema, redige emails/telefones e mascara nomes de clientes.
+
+    Se manter_ultimos_4_tel for True, substitui números de telefone preservando os 4 últimos dígitos
+    (ex: '[tel:...4321]'), permitindo identificar leads em títulos de tarefas sem vazar o número completo.
+    """
+    if not texto or not isinstance(texto, str):
+        return texto
+    # 1. Sanitizar caminhos internos (/opt/..., /home/..., C:\...)
+    limpo = re.sub(r"/(?:opt|home|root|etc|var|tmp|usr)/\S+", "[caminho]", texto)
+    limpo = re.sub(r"[a-zA-Z]:\\[^\s'\":]+", "[caminho]", limpo)
+
+    # 2. Redigir emails
+    limpo = RE_EMAIL.sub("[e-mail]", limpo)
+
+    # 3. Redigir telefones e números sensíveis
+    chave = limpo.translate(TABELA_SEPARADOR)
+    pedacos, fim = [], 0
+    for m in RE_NUMERO.finditer(chave):
+        if m.group("seguro") is not None:
+            continue
+        pedacos.append(limpo[fim:m.start()])
+        bruto = m.group(0)
+        digs = re.sub(r"\D", "", bruto)
+        if manter_ultimos_4_tel and len(digs) >= 4:
+            pedacos.append(f"[tel:...{digs[-4:]}]")
+        else:
+            pedacos.append(f"[num:{_apelido_do_numero(bruto)}]")
+        fim = m.end()
+    pedacos.append(limpo[fim:])
+    limpo = "".join(pedacos)
+
+    # 4. Mascarar nomes de clientes
+    if callable(achou_nome_de_cliente) and isinstance(NEGACAO, dict) and NEGACAO.get("carregada"):
+        try:
+            achados = achou_nome_de_cliente(limpo)
+            for ini, f, _ in reversed(achados):
+                limpo = limpo[:ini] + "[cliente]" + limpo[f:]
+        except Exception:
+            pass
+
+    return limpo[:limite].strip()
 
 
 def _texto_de_tela(bruto: str) -> str:

@@ -3,7 +3,7 @@ import { useAgentesVivos } from '../dados/useAgentesVivos'
 import { montarCatalogoPixel } from '../dados/pixel-agents'
 import { PixelOffice } from '../ui/PixelOffice'
 import type { PropsTela } from './Vazias'
-import type { AgenteVivo } from '../dados/tipos'
+import type { AgenteVivo, TarefaGtd } from '../dados/tipos'
 
 const STATUS_ATIVAS: [string, string][] = [
   ['todo', 'a fazer'],
@@ -240,6 +240,262 @@ function InspectorAgente({
   )
 }
 
+type FiltroTarefas = 'todas' | 'abandonadas' | 'sem_prazo' | 'sem_movimento'
+
+function formatarData(iso?: string | null): string {
+  if (!iso) return '—'
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  } catch {
+    return iso
+  }
+}
+
+function formatarMovimento(dias?: number | null, atualizadaEm?: string | null): string {
+  if (dias !== null && dias !== undefined) {
+    if (dias === 0) return 'hoje'
+    if (dias === 1) return 'ontem'
+    return `há ${dias} dias`
+  }
+  if (atualizadaEm) return formatarData(atualizadaEm)
+  return '—'
+}
+
+function ListaTarefasAbertas({
+  itens,
+  filtroAtivo,
+  aoMudarFiltro,
+  aoFechar,
+}: {
+  itens: TarefaGtd[]
+  filtroAtivo: FiltroTarefas
+  aoMudarFiltro: (filtro: FiltroTarefas) => void
+  aoFechar: () => void
+}) {
+  const [busca, setBusca] = useState('')
+
+  const itensFiltrados = useMemo(() => {
+    return itens.filter((t) => {
+      if (filtroAtivo === 'abandonadas' && !t.parece_abandonada) return false
+      if (filtroAtivo === 'sem_prazo' && t.prazo) return false
+      if (filtroAtivo === 'sem_movimento' && (t.dias_sem_movimento ?? 0) < 21) return false
+
+      if (busca.trim()) {
+        const q = busca.toLowerCase()
+        const matchTitulo = t.titulo?.toLowerCase().includes(q)
+        const matchProj = t.projeto?.toLowerCase().includes(q)
+        const matchStatus = t.status?.toLowerCase().includes(q)
+        return Boolean(matchTitulo || matchProj || matchStatus)
+      }
+      return true
+    })
+  }, [itens, filtroAtivo, busca])
+
+  const tarefasPorProjeto = useMemo(() => {
+    const grupos = new Map<string, TarefaGtd[]>()
+    for (const item of itensFiltrados) {
+      const proj = item.projeto || 'sem projeto'
+      const lista = grupos.get(proj) ?? []
+      lista.push(item)
+      grupos.set(proj, lista)
+    }
+    return Array.from(grupos.entries()).sort(
+      (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])
+    )
+  }, [itensFiltrados])
+
+  const totalAbandonadas = useMemo(() => itens.filter((i) => i.parece_abandonada).length, [itens])
+  const totalSemPrazo = useMemo(() => itens.filter((i) => !i.prazo).length, [itens])
+  const totalSemMovimento = useMemo(() => itens.filter((i) => (i.dias_sem_movimento ?? 0) >= 21).length, [itens])
+
+  return (
+    <PixelJanela
+      titulo="📋 LISTA DE TAREFAS ATIVAS (GTD)"
+      subtitulo={`${itensFiltrados.length} de ${itens.length} tarefas exibidas · agrupadas por projeto`}
+      badge={`${itensFiltrados.length} ITENS`}
+      corBadge="text-[#facc15]"
+    >
+      <div className="space-y-4">
+        {/* Controles de Filtro, Busca e Fechar */}
+        <div className="flex flex-col gap-3 border-b-2 border-slate-700 pb-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => aoMudarFiltro('todas')}
+              className={`border-2 border-black px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 ${
+                filtroAtivo === 'todas'
+                  ? 'bg-[#facc15] text-black'
+                  : 'bg-[#0f172a] text-slate-300 hover:text-white'
+              }`}
+            >
+              TODAS ({itens.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => aoMudarFiltro('abandonadas')}
+              className={`border-2 border-black px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 ${
+                filtroAtivo === 'abandonadas'
+                  ? 'bg-[#fb923c] text-black'
+                  : 'bg-[#0f172a] text-[#fb923c] hover:bg-slate-800'
+              }`}
+            >
+              📦 PARECE ABANDONADA ({totalAbandonadas})
+            </button>
+            <button
+              type="button"
+              onClick={() => aoMudarFiltro('sem_prazo')}
+              className={`border-2 border-black px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 ${
+                filtroAtivo === 'sem_prazo'
+                  ? 'bg-[#fbbf24] text-black'
+                  : 'bg-[#0f172a] text-[#fbbf24] hover:bg-slate-800'
+              }`}
+            >
+              SEM PRAZO ({totalSemPrazo})
+            </button>
+            <button
+              type="button"
+              onClick={() => aoMudarFiltro('sem_movimento')}
+              className={`border-2 border-black px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 ${
+                filtroAtivo === 'sem_movimento'
+                  ? 'bg-[#a3e635] text-black'
+                  : 'bg-[#0f172a] text-[#a3e635] hover:bg-slate-800'
+              }`}
+            >
+              SEM MOVIMENTO ({totalSemMovimento})
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              placeholder="Buscar título, projeto..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full sm:w-64 border-2 border-black bg-[#0f172a] px-3 py-1 text-xs text-white placeholder-slate-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] outline-none focus:border-[#facc15]"
+            />
+            {busca && (
+              <button
+                type="button"
+                onClick={() => setBusca('')}
+                className="border-2 border-black bg-[#1e293b] px-2 py-1 text-[11px] font-bold text-slate-300 hover:bg-slate-700 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+              >
+                LIMPAR
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={aoFechar}
+              className="border-2 border-black bg-[#ef4444] px-3 py-1 text-xs font-black uppercase text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+            >
+              ✕ FECHAR LISTA
+            </button>
+          </div>
+        </div>
+
+        {/* Lista de Projetos e suas Tarefas */}
+        {tarefasPorProjeto.length > 0 ? (
+          <div className="space-y-4">
+            {tarefasPorProjeto.map(([projeto, tarefasDoProjeto]) => (
+              <div
+                key={projeto}
+                className="border-2 border-black bg-[#0f172a] p-3.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] space-y-2.5 min-w-0"
+              >
+                <div className="flex items-center justify-between border-b border-slate-700 pb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="size-2.5 bg-[#c084fc] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0" />
+                    <span className="text-xs font-black uppercase text-[#c084fc] truncate">
+                      PROJETO: {projeto.toUpperCase()}
+                    </span>
+                  </div>
+                  <span className="border border-black bg-[#1e293b] px-2 py-0.5 text-[10px] font-black text-slate-300 shrink-0">
+                    {tarefasDoProjeto.length} {tarefasDoProjeto.length === 1 ? 'tarefa' : 'tarefas'}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {tarefasDoProjeto.map((t, idx) => (
+                    <div
+                      key={t.id || `${projeto}-${idx}`}
+                      className={`border-2 border-black bg-[#1e293b] p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors hover:bg-slate-800 flex flex-col gap-2 min-w-0 ${
+                        t.parece_abandonada ? 'border-l-4 border-l-[#fb923c]' : ''
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 min-w-0">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <span
+                            className={`shrink-0 border border-black px-1.5 py-0.5 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+                              t.status === 'doing'
+                                ? 'bg-[#38bdf8] text-black'
+                                : t.status === 'waiting'
+                                ? 'bg-[#fbbf24] text-black'
+                                : 'bg-slate-700 text-slate-200'
+                            }`}
+                          >
+                            {t.status}
+                          </span>
+                          <span className="text-xs sm:text-sm font-bold text-slate-100 break-words min-w-0">
+                            {t.titulo}
+                          </span>
+                        </div>
+
+                        {t.parece_abandonada && (
+                          <span
+                            className="shrink-0 self-start border-2 border-black bg-[#fb923c] px-2 py-0.5 text-[10px] font-black uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                            title="Sem prazo, sem movimento há mais de 21 dias e título curto. Candidata a arquivar (decisão humana)."
+                          >
+                            📦 PARECE ABANDONADA
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400 border-t border-slate-700/60 pt-2 min-w-0">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="text-slate-500">📅 Criada:</span>
+                          <span className="text-slate-300 font-mono">{formatarData(t.criada_em)}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="text-slate-500">⏰ Prazo:</span>
+                          <span
+                            className={`font-mono ${
+                              t.prazo ? 'text-[#facc15] font-semibold' : 'text-slate-500 italic'
+                            }`}
+                          >
+                            {t.prazo ? formatarData(t.prazo) : 'sem prazo'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="text-slate-500">⏱️ Movimento:</span>
+                          <span
+                            className={`font-mono ${
+                              (t.dias_sem_movimento ?? 0) >= 21
+                                ? 'text-[#fb923c] font-semibold'
+                                : 'text-slate-300'
+                            }`}
+                          >
+                            {formatarMovimento(t.dias_sem_movimento, t.atualizada_em)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="border-2 border-dashed border-slate-700 bg-[#0f172a]/60 p-6 text-center text-xs text-slate-400">
+            Nenhuma tarefa encontrada com os filtros selecionados.
+          </div>
+        )}
+      </div>
+    </PixelJanela>
+  )
+}
+
 export function Tarefas({ estado, vista }: PropsTela) {
   const dados = estado.tarefas
   const { dados: vivos, carregando: carregandoVivos, erro: erroVivos, falhouHaSegundos } = useAgentesVivos()
@@ -251,6 +507,11 @@ export function Tarefas({ estado, vista }: PropsTela) {
 
   const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal' | 'squad'>('office')
   const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
+  const [filtroListaTarefas, setFiltroListaTarefas] = useState<FiltroTarefas | null>(null)
+
+  const alternarFiltro = (filtro: FiltroTarefas) => {
+    setFiltroListaTarefas((atual) => (atual === filtro ? null : filtro))
+  }
 
   const agenteSelecionado: AgenteVivo | undefined =
     listaVivos.find((a) =>
@@ -584,12 +845,26 @@ export function Tarefas({ estado, vista }: PropsTela) {
           )}
 
           {/* Grid de KPIs Pixel Art com Números Grandes */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
             <PixelKpi
               rotulo="TAREFAS ABERTAS"
               valor={dados?.total_abertas}
               cor="text-[#facc15]"
-              nota="carteira GTD total ativa"
+              nota="carteira GTD total ativa · clique p/ ver"
+              onClick={() => alternarFiltro('todas')}
+              ativo={filtroListaTarefas === 'todas'}
+            />
+            <PixelKpi
+              rotulo="CANDIDATAS A ARQUIVAR"
+              valor={
+                dados?.total_candidatas_arquivar ??
+                dados?.itens?.filter((i) => i.parece_abandonada).length ??
+                0
+              }
+              cor="text-[#fb923c]"
+              nota="sem prazo, +21d paradas · clique p/ ver"
+              onClick={() => alternarFiltro('abandonadas')}
+              ativo={filtroListaTarefas === 'abandonadas'}
             />
             <PixelKpi
               rotulo="BACKLOG · GUARDADAS"
@@ -613,9 +888,23 @@ export function Tarefas({ estado, vista }: PropsTela) {
               rotulo="SEM PRAZO"
               valor={dados?.por_prazo?.sem_prazo}
               cor="text-[#fbbf24]"
-              nota="não agendadas no calendário"
+              nota="não agendadas no calendário · clique p/ ver"
+              onClick={() => alternarFiltro('sem_prazo')}
+              ativo={filtroListaTarefas === 'sem_prazo'}
             />
           </div>
+
+          {/* Lista Expandida de Tarefas Abertas */}
+          {filtroListaTarefas && (
+            <div id="lista-tarefas-abertas">
+              <ListaTarefasAbertas
+                itens={dados?.itens ?? []}
+                filtroAtivo={filtroListaTarefas}
+                aoMudarFiltro={(f) => setFiltroListaTarefas(f)}
+                aoFechar={() => setFiltroListaTarefas(null)}
+              />
+            </div>
+          )}
 
           {/* 3 Janelas Secundárias de GTD */}
           <div className="grid gap-5 lg:grid-cols-3">
@@ -653,6 +942,8 @@ export function Tarefas({ estado, vista }: PropsTela) {
                     valor={dados?.por_prazo[chave]}
                     total={dados?.total_abertas}
                     cor={chave === 'atrasadas' ? 'bg-[#f87171]' : 'bg-[#facc15]'}
+                    onClick={chave === 'sem_prazo' ? () => alternarFiltro('sem_prazo') : undefined}
+                    clicavel={chave === 'sem_prazo'}
                   />
                 ))}
               </div>
@@ -668,12 +959,27 @@ export function Tarefas({ estado, vista }: PropsTela) {
                       valor={dados?.por_movimento[chave]}
                       total={dados?.total_abertas}
                       cor="bg-[#a3e635]"
+                      onClick={
+                        chave === 'sem_atualizacao_30_dias'
+                          ? () => alternarFiltro('sem_movimento')
+                          : undefined
+                      }
+                      clicavel={chave === 'sem_atualizacao_30_dias'}
                     />
                   ))}
                 </div>
-                <p className="mt-5 border-t border-slate-700 pt-2 text-[10px] text-slate-400">
-                  Mede a última alteração do registro no sistema GTD.
-                </p>
+                <div className="mt-4 pt-3 border-t border-slate-700/80 flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-slate-400">
+                    Mede a última alteração do registro no sistema GTD.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => alternarFiltro('sem_movimento')}
+                    className="border border-black bg-[#1e293b] px-2 py-1 text-[10px] font-bold text-[#a3e635] hover:bg-slate-700 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
+                  >
+                    {filtroListaTarefas === 'sem_movimento' ? '▲ FECHAR' : 'VER SEM MOVIMENTO ▼'}
+                  </button>
+                </div>
               </div>
             </PixelJanela>
           </div>
@@ -711,15 +1017,41 @@ function PixelKpi({
   valor,
   cor = 'text-white',
   nota,
+  onClick,
+  ativo,
 }: {
   rotulo: string
   valor?: number | null
   cor?: string
   nota?: string
+  onClick?: () => void
+  ativo?: boolean
 }) {
+  const clicavel = Boolean(onClick)
   return (
-    <div className="border-4 border-black bg-[#0f172a] p-4 sm:p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5">
-      <div className="text-[11px] font-black uppercase tracking-wider text-slate-400">{rotulo}</div>
+    <div
+      onClick={onClick}
+      role={clicavel ? 'button' : undefined}
+      tabIndex={clicavel ? 0 : undefined}
+      onKeyDown={
+        clicavel
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') onClick?.()
+            }
+          : undefined
+      }
+      className={`border-4 border-black bg-[#0f172a] p-4 sm:p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all ${
+        clicavel ? 'cursor-pointer hover:-translate-y-0.5 hover:border-slate-500' : ''
+      } ${ativo ? 'ring-4 ring-[#facc15] bg-[#1e293b]' : ''}`}
+    >
+      <div className="flex items-center justify-between gap-1 text-[11px] font-black uppercase tracking-wider text-slate-400">
+        <span>{rotulo}</span>
+        {clicavel && (
+          <span className="text-[10px] font-mono text-[#facc15]">
+            {ativo ? '▲ FECHAR' : '▼ ABRIR'}
+          </span>
+        )}
+      </div>
       <div className={`mt-2 text-3xl sm:text-4xl font-black tabular-nums ${cor}`}>
         {valor !== null && valor !== undefined ? valor : '—'}
       </div>
@@ -733,18 +1065,40 @@ function PixelLinha({
   valor,
   total,
   cor = 'bg-[#a3e635]',
+  onClick,
+  clicavel = false,
 }: {
   nome: string
   valor?: number
   total?: number | null
   cor?: string
+  onClick?: () => void
+  clicavel?: boolean
 }) {
   const fracao = total && valor !== undefined ? Math.min(100, (valor / total) * 100) : 0
+  const isClickable = Boolean(onClick || clicavel)
   return (
-    <div className="space-y-1.5">
+    <div
+      onClick={onClick}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={
+        isClickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') onClick?.()
+            }
+          : undefined
+      }
+      className={`space-y-1.5 ${
+        isClickable ? 'cursor-pointer hover:opacity-85 transition-opacity' : ''
+      }`}
+    >
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="truncate font-semibold uppercase text-slate-200">{nome}</span>
-        <span className="font-black tabular-nums text-white">{valor ?? '—'}</span>
+        <span className="font-black tabular-nums text-white">
+          {valor ?? '—'}
+          {isClickable && <span className="ml-1 text-[10px] text-[#facc15]">▼</span>}
+        </span>
       </div>
       <div className="h-3 border-2 border-black bg-[#0f172a] p-0.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
         <div className={`h-full ${cor} transition-all duration-300`} style={{ width: `${fracao}%` }} />

@@ -1107,6 +1107,51 @@ conferir("total_backlog isola as 124 guardadas", t["total_backlog"], 124)
 conferir("por_prazo soma exatamente as 43 ativas, excluindo backlog", sum(t["por_prazo"].values()), 43)
 conferir("por_movimento soma exatamente as 43 ativas", sum(t["por_movimento"].values()), 43)
 
+# Testes de tarefas abandonadas e redação de leads (Rodada 5)
+def urlopen_abandonadas(req, timeout):
+    status = req.full_url.split("status=")[1].split("&")[0]
+    agora_dt = c.agora_utc()
+    # 25/08/2026 (30 dias antes de 24/09/2026)
+    data_25_ago = (agora_dt - c.timedelta(days=30)).isoformat()
+    data_5_dias = (agora_dt - c.timedelta(days=5)).isoformat()
+    if status == "todo":
+        tarefas = [
+            # 1. Tarefa de 25/08 sem prazo com título "Ads" -> É MARCADAB
+            {"id": "t-ads", "title": "Ads", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
+            # 2. Tarefa de 25/08 sem prazo com título "Enviar" -> É MARCADA
+            {"id": "t-enviar", "title": "Enviar", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
+            # 3. Tarefa de 25/08 sem prazo com título "Fazer Nova Campanha" -> É MARCADA
+            {"id": "t-nova-camp", "title": "Fazer Nova Campanha", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
+            # 4. Tarefa de 25/08 sem prazo com título só telefone -> É MARCADA
+            {"id": "t-fone", "title": "(11) 98765-4321", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
+            # 5. Tarefa com prazo (dueDate) -> NÃO É MARCADA
+            {"id": "t-com-prazo", "title": "Ads", "status": "todo", "projectSlug": "clientes", "dueDate": "2026-09-30T00:00:00Z", "updatedAt": data_25_ago},
+            # 6. Tarefa movimentada há 5 dias (< 21 dias) -> NÃO É MARCADA
+            {"id": "t-recente", "title": "Ads", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_5_dias},
+            # 7. Tarefa sem prazo de 25/08 mas com título longo (4+ palavras) -> NÃO É MARCADA
+            {"id": "t-longa", "title": "Desenvolver nova campanha promocional completa", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
+        ]
+    else:
+        tarefas = []
+    return RespostaFake({"ok": True, "data": {"tasks": tarefas}})
+
+c.urllib.request.urlopen = urlopen_abandonadas
+t_aband = c.ler_tarefas()
+itens_map = {it["id"]: it for it in t_aband.get("itens", [])}
+
+conferir("total de candidatas a arquivar = 4", t_aband["total_candidatas_arquivar"], 4)
+conferir("tarefa de 25/08 sem prazo 'Ads' É marcada abandonada", itens_map.get("t-ads", {}).get("parece_abandonada"), True)
+conferir("tarefa de 25/08 sem prazo 'Enviar' É marcada abandonada", itens_map.get("t-enviar", {}).get("parece_abandonada"), True)
+conferir("tarefa de 25/08 sem prazo 'Fazer Nova Campanha' É marcada abandonada", itens_map.get("t-nova-camp", {}).get("parece_abandonada"), True)
+conferir("tarefa de 25/08 sem prazo com só telefone É marcada abandonada", itens_map.get("t-fone", {}).get("parece_abandonada"), True)
+conferir("tarefa com prazo NÃO é marcada", itens_map.get("t-com-prazo", {}).get("parece_abandonada"), False)
+conferir("tarefa movimentada há 5 dias NÃO é marcada", itens_map.get("t-recente", {}).get("parece_abandonada"), False)
+conferir("tarefa com título longo (4+ palavras) NÃO é marcada", itens_map.get("t-longa", {}).get("parece_abandonada"), False)
+conferir("telefone no título é redigido mantendo os 4 últimos dígitos", "[tel:...4321]" in itens_map.get("t-fone", {}).get("titulo", ""), True)
+
+# Testes diretos de redigir_texto_livre
+conferir("redigir_texto_livre mascara telefone com 4 últimos dígitos", c.redigir_texto_livre("Ligar (11) 98765-4321", manter_ultimos_4_tel=True), "Ligar [tel:...4321]")
+conferir("redigir_texto_livre sanitiza caminhos absolutos", c.redigir_texto_livre("Salvar em /opt/gastaomatos/dados"), "Salvar em [caminho]")
 
 def urlopen_falha(req, timeout):
     if "status=doing" in req.full_url: raise c.urllib.error.URLError("fora")

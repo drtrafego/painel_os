@@ -28,6 +28,19 @@ export type Ferramenta = {
   estado: 'disponível' | 'fallback' | 'ausente'
 }
 
+export type TarefaGtd = {
+  id: string
+  titulo: string
+  projeto: string
+  status: 'todo' | 'doing' | 'waiting' | 'backlog'
+  prioridade?: string
+  criada_em?: string | null
+  prazo?: string | null
+  atualizada_em?: string | null
+  dias_sem_movimento?: number
+  parece_abandonada?: boolean
+}
+
 // ---------------------------------------------------------------------------
 // Cofre de conhecimento
 // ---------------------------------------------------------------------------
@@ -348,10 +361,12 @@ export type Estado = {
     erro?: string
     total_abertas: number | null
     total_backlog?: number | null
+    total_candidatas_arquivar?: number | null
     por_status: Record<string, number>
     por_prazo: Record<string, number>
     por_movimento: Record<string, number>
     por_projeto: { projeto: string; total: number }[]
+    itens?: TarefaGtd[]
     truncado?: boolean
     coletado_em?: string
   }
