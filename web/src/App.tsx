@@ -185,7 +185,7 @@ export default function App() {
                 aria-modal="true"
                 aria-label="ficha do agente"
                 data-ficha-drawer
-                className="w-full bg-fundo lg:absolute lg:inset-y-0 lg:right-0 lg:w-[var(--drawer-w)] lg:overflow-y-auto lg:border-l lg:border-linha lg:shadow-[-24px_0_70px_rgba(0,0,0,.42)] transition-all duration-300"
+                className="w-full max-w-full min-w-0 bg-fundo lg:absolute lg:inset-y-0 lg:right-0 lg:w-[var(--drawer-w)] lg:max-w-[calc(100vw-var(--sidebar-w))] lg:overflow-y-auto lg:overflow-x-hidden lg:border-l lg:border-linha lg:shadow-[-24px_0_70px_rgba(0,0,0,.42)] transition-all duration-300"
               >
                 <Diretor {...comum} quem={rota.quem} aoIr={ir} compacto />
               </aside>

@@ -316,9 +316,36 @@ export type AgentesVivos = {
   avisos: string[]
 }
 
-// ---------------------------------------------------------------------------
-// Estado raiz
-// ---------------------------------------------------------------------------
+export type ConsumoPorDiretor = {
+  diretor: string
+  tokens_24h: number | null
+}
+
+export type UsoPlanos = {
+  status: 'pronto' | 'erro' | 'indeterminado'
+  atualizado_em: string
+  erro?: string | null
+  claude: {
+    sessao_5h_percentual: number | null
+    sessao_5h_reset: string | null
+    semana_7d_percentual: number | null
+    semana_7d_reset: string | null
+    fonte_percentual_oficial: boolean
+    tokens_24h_estimativa: number | null
+    por_diretor: ConsumoPorDiretor[]
+  } | null
+  codex: {
+    primario_percentual: number | null
+    primario_janela_dias: number | null
+    primario_reset: string | null
+    secundario_percentual: number | null
+    secundario_reset: string | null
+    plano: string | null
+    conta_compartilhada: boolean
+    tokens_24h_estimativa: number | null
+    por_diretor: ConsumoPorDiretor[]
+  } | null
+}
 
 export type Estado = {
   gerado_em: string
@@ -476,4 +503,6 @@ export type Estado = {
     rotulos_mascarados: number
     itens: ItemBiblioteca[]
   }
+
+  uso_planos?: UsoPlanos
 }

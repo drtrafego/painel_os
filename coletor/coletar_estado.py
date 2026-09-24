@@ -58,9 +58,14 @@ DIST_MAPAS = PAINEL_OS_DIR / "web" / "dist" / "mapas"
 PUBLIC_MAPAS = PAINEL_OS_DIR / "web" / "public" / "mapas"
 ARCHIFY_CLI = Path(os.environ.get("ARCHIFY_CLI", "/home/claude/.codex-luana/skills/archify/bin/archify.mjs"))
 CASA_CLAUDE = Path.home() / ".claude"
-AGENTES_GLOBAIS = CASA_CLAUDE / "agents"
 PROJETOS = CASA_CLAUDE / "projects"
-SESSOES_CODEX = Path.home() / ".codex-luana/sessions"
+AGENTES_GLOBAIS = CASA_CLAUDE / "agents"
+PASTAS_SESSOES_CODEX = (
+    Path.home() / ".codex-luana/sessions",
+    Path.home() / ".codex-renato/sessions",
+    Path.home() / ".codex-bia/sessions",
+)
+SESSOES_CODEX = PASTAS_SESSOES_CODEX[0]
 AGENTES_CODEX = RAIZ / "luana/.codex/agents"
 CONFIGS_CODEX = (Path.home() / ".codex-luana/config.toml", RAIZ / "luana/.codex/config.toml")
 CONFIGS_CLAUDE = (RAIZ / "luana/.mcp.json", Path.home() / ".claude.json")
@@ -1536,6 +1541,269 @@ def ler_ferramentas(configs_codex=CONFIGS_CODEX, configs_claude=CONFIGS_CLAUDE,
     return {"erro": "; ".join(sorted(set(erros))) or None, "itens": itens, "contagem": contagem, "por_tipo": por_tipo, "medidos": len(itens), "skills_acessos": skills_acessos}
 
 
+CACHE_USO_PLANOS = PAINEL_OS_DIR / "data" / "cache_uso_planos.json"
+
+
+def ler_uso_planos_codex(buscar=None, pastas_sessoes=None):
+    """Lê metadados de limite do Codex (.jsonl em .codex-*/sessions).
+
+    Regra de privacidade: NUNCA lê nem repassa account_id, tokens de auth ou segredos.
+    Apenas extrai rate_limits.primary / secondary, plano e contagem de tokens.
+    """
+    diretores = ["luana", "renato", "bia"]
+    vazio_codex = {
+        "primario_percentual": None,
+        "primario_janela_dias": None,
+        "primario_reset": None,
+        "secundario_percentual": None,
+        "secundario_reset": None,
+        "plano": None,
+        "conta_compartilhada": True,
+        "tokens_24h_estimativa": None,
+        "por_diretor": [{"diretor": d, "tokens_24h": None} for d in diretores],
+    }
+
+    if buscar is not None:
+        try:
+            bruto = buscar()
+            if isinstance(bruto, dict):
+                return bruto
+        except Exception:
+            return vazio_codex
+
+    if pastas_sessoes is None:
+        pastas_sessoes = [Path.home() / f".codex-{d}/sessions" for d in diretores]
+
+    ultimo_token_count = None
+    ultimo_mtime_rate_limits = None
+    tokens_24h_map = {d: None for d in diretores}
+    agora = agora_utc()
+    limite_24h = agora - timedelta(hours=24)
+
+    for idx, d_nome in enumerate(diretores):
+        pasta = pastas_sessoes[idx] if idx < len(pastas_sessoes) else Path.home() / f".codex-{d_nome}/sessions"
+        if not isinstance(pasta, Path):
+            pasta = Path(pasta)
+        if not pasta.is_dir():
+            continue
+
+        arquivos = sorted(pasta.rglob("*.jsonl"))
+        soma_dir = 0
+        teve_arquivo = False
+
+        for arq in arquivos:
+            try:
+                st = arq.stat()
+                mtime_dt = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+            except OSError:
+                continue
+
+            teve_arquivo = True
+            try:
+                size = st.st_size
+                with arq.open("r", encoding="utf-8", errors="replace") as fh:
+                    if size > 65536:
+                        fh.seek(size - 65536)
+                        fh.readline()
+                    linhas = [l.strip() for l in fh if l.strip()]
+            except OSError:
+                continue
+
+            for lin in reversed(linhas):
+                try:
+                    obj = json.loads(lin)
+                    if not isinstance(obj, dict):
+                        continue
+                    t_count = None
+                    if obj.get("type") == "token_count" and isinstance(obj.get("payload"), dict):
+                        t_count = obj["payload"]
+                    elif isinstance(obj.get("rate_limits"), dict):
+                        t_count = obj
+
+                    if t_count and isinstance(t_count.get("rate_limits"), dict):
+                        if (ultimo_mtime_rate_limits is None) or (mtime_dt > ultimo_mtime_rate_limits):
+                            ultimo_mtime_rate_limits = mtime_dt
+                            ultimo_token_count = t_count
+
+                    if mtime_dt >= limite_24h:
+                        if isinstance(t_count, dict) and isinstance(t_count.get("total_token_usage"), dict):
+                            toks = t_count["total_token_usage"].get("total_tokens") or 0
+                            soma_dir += toks
+                        elif "tokens" in obj and isinstance(obj["tokens"], (int, float)):
+                            soma_dir += int(obj["tokens"])
+                except Exception:
+                    continue
+
+        if teve_arquivo:
+            tokens_24h_map[d_nome] = soma_dir
+
+    if not ultimo_token_count or not isinstance(ultimo_token_count.get("rate_limits"), dict):
+        return {
+            **vazio_codex,
+            "por_diretor": [{"diretor": d, "tokens_24h": tokens_24h_map[d]} for d in diretores],
+            "tokens_24h_estimativa": sum(v for v in tokens_24h_map.values() if v is not None) if any(v is not None for v in tokens_24h_map.values()) else None,
+        }
+
+    rl = ultimo_token_count["rate_limits"]
+    pri = rl.get("primary") if isinstance(rl.get("primary"), dict) else None
+    sec = rl.get("secondary") if isinstance(rl.get("secondary"), dict) else None
+
+    pri_perc = pri.get("used_percent") if pri else None
+    pri_dias = round(pri["window_minutes"] / 1440.0, 1) if pri and isinstance(pri.get("window_minutes"), (int, float)) else None
+    pri_reset = None
+    if pri and pri.get("resets_at"):
+        try:
+            pri_reset = datetime.fromtimestamp(float(pri["resets_at"]), tz=timezone.utc).isoformat()
+        except Exception:
+            pri_reset = None
+
+    sec_perc = sec.get("used_percent") if sec else None
+    sec_reset = None
+    if sec and sec.get("resets_at"):
+        try:
+            sec_reset = datetime.fromtimestamp(float(sec["resets_at"]), tz=timezone.utc).isoformat()
+        except Exception:
+            sec_reset = None
+
+    plano = ultimo_token_count.get("plan_type") or rl.get("plan_type")
+    soma_total = sum(v for v in tokens_24h_map.values() if v is not None)
+
+    return {
+        "primario_percentual": pri_perc,
+        "primario_janela_dias": pri_dias,
+        "primario_reset": pri_reset,
+        "secundario_percentual": sec_perc,
+        "secundario_reset": sec_reset,
+        "plano": str(plano) if plano else "prolite",
+        "conta_compartilhada": True,
+        "tokens_24h_estimativa": soma_total if any(v is not None for v in tokens_24h_map.values()) else None,
+        "por_diretor": [{"diretor": d, "tokens_24h": tokens_24h_map[d]} for d in diretores],
+    }
+
+
+def ler_uso_planos_claude(pasta_projetos=PROJETOS):
+    """Calcula estimativa de volume de tokens do Claude por diretor em 24h.
+
+    Regra dura: Não fabrica percentual oficial (sessao_5h/semana_7d saem como None/indeterminado).
+    """
+    diretores = ["luana", "renato", "bia"]
+    vazio_claude = {
+        "sessao_5h_percentual": None,
+        "sessao_5h_reset": None,
+        "semana_7d_percentual": None,
+        "semana_7d_reset": None,
+        "fonte_percentual_oficial": False,
+        "tokens_24h_estimativa": None,
+        "por_diretor": [{"diretor": d, "tokens_24h": None} for d in diretores],
+    }
+
+    if not isinstance(pasta_projetos, Path):
+        pasta_projetos = Path(pasta_projetos)
+
+    if not pasta_projetos.is_dir():
+        return vazio_claude
+
+    agora = agora_utc()
+    limite_24h = agora - timedelta(hours=24)
+    tokens_map = {d: None for d in diretores}
+
+    try:
+        for arq in pasta_projetos.rglob("*.jsonl"):
+            try:
+                st = arq.stat()
+                if datetime.fromtimestamp(st.st_mtime, tz=timezone.utc) < limite_24h:
+                    continue
+            except OSError:
+                continue
+
+            caminho_str = str(arq).lower()
+            d_alvo = None
+            if "luana" in caminho_str:
+                d_alvo = "luana"
+            elif "renato" in caminho_str:
+                d_alvo = "renato"
+            elif "bia" in caminho_str:
+                d_alvo = "bia"
+
+            if not d_alvo:
+                continue
+
+            if tokens_map[d_alvo] is None:
+                tokens_map[d_alvo] = 0
+
+            try:
+                size = st.st_size
+                with arq.open("r", encoding="utf-8", errors="replace") as fh:
+                    if size > 65536:
+                        fh.seek(size - 65536)
+                        fh.readline()
+                    for line in fh:
+                        if not line.strip():
+                            continue
+                        try:
+                            obj = json.loads(line)
+                            if isinstance(obj, dict):
+                                usg = obj.get("usage") or obj.get("message", {}).get("usage")
+                                if isinstance(usg, dict):
+                                    in_t = int(usg.get("input_tokens", 0) or 0)
+                                    out_t = int(usg.get("output_tokens", 0) or 0)
+                                    cc_t = int(usg.get("cache_creation_input_tokens", 0) or 0)
+                                    cr_t = int(usg.get("cache_read_input_tokens", 0) or 0)
+                                    tokens_map[d_alvo] += (in_t + out_t + cc_t + cr_t)
+                        except Exception:
+                            continue
+            except OSError:
+                continue
+    except Exception:
+        pass
+
+    soma_total = sum(v for v in tokens_map.values() if v is not None)
+    return {
+        "sessao_5h_percentual": None,
+        "sessao_5h_reset": None,
+        "semana_7d_percentual": None,
+        "semana_7d_reset": None,
+        "fonte_percentual_oficial": False,
+        "tokens_24h_estimativa": soma_total if any(v is not None for v in tokens_map.values()) else None,
+        "por_diretor": [{"diretor": d, "tokens_24h": tokens_map[d]} for d in diretores],
+    }
+
+
+def ler_uso_planos(caminho_cache=CACHE_USO_PLANOS, buscar_codex=None, pasta_projetos=PROJETOS, pastas_sessoes_codex=None):
+    """Agrega uso dos planos Claude e Codex com cache TTL de 5 minutos."""
+    agora_iso = agora_utc().isoformat()
+
+    if buscar_codex is None and caminho_cache and Path(caminho_cache).is_file():
+        try:
+            st = Path(caminho_cache).stat()
+            idade_s = (datetime.now(timezone.utc).timestamp() - st.st_mtime)
+            if idade_s < 300:
+                cache_obj = json.loads(Path(caminho_cache).read_text(encoding="utf-8"))
+                if isinstance(cache_obj, dict) and cache_obj.get("status") in ("pronto", "indeterminado"):
+                    return cache_obj
+        except Exception:
+            pass
+
+    codex_dados = ler_uso_planos_codex(buscar=buscar_codex, pastas_sessoes=pastas_sessoes_codex)
+    claude_dados = ler_uso_planos_claude(pasta_projetos=pasta_projetos)
+
+    resultado = {
+        "status": "pronto" if (codex_dados or claude_dados) else "indeterminado",
+        "atualizado_em": agora_iso,
+        "erro": None,
+        "claude": claude_dados,
+        "codex": codex_dados,
+    }
+
+    if caminho_cache:
+        try:
+            gravar_atomico(Path(caminho_cache), resultado)
+        except Exception:
+            pass
+
+    return resultado
+
+
 def ler_cobrancas(buscar=None):
     """Lê o relatório canônico e descarta PII antes de montar o estado."""
     fonte = "API financeira /reports/overdue, somente leitura"
@@ -2003,7 +2271,7 @@ def _apelido_codex(caminho_agente: str | None, apelidos: dict[str, str]) -> str:
 _CACHE_JSONL_CODEX = {}
 
 
-def _ler_convocacoes_codex(pasta: Path = SESSOES_CODEX):
+def _ler_convocacoes_codex(pasta=PASTAS_SESSOES_CODEX):
     """Lê somente metadados estruturados de colaboração dos rollouts Codex.
 
     Briefings, mensagens e respostas podem conter dados de cliente e são
@@ -2014,11 +2282,20 @@ def _ler_convocacoes_codex(pasta: Path = SESSOES_CODEX):
         "chamadas": {}, "retornos": {}, "arestas": {}, "arquivos": 0,
         "repetidas_descartadas": 0, "erro": None, "lista_chamadas": [],
     }
-    if not pasta.is_dir():
+    if isinstance(pasta, (list, tuple)):
+        pastas = [Path(p) for p in pasta if Path(p).is_dir()]
+    elif isinstance(pasta, (str, Path)) and Path(pasta).is_dir():
+        pastas = [Path(pasta)]
+    else:
+        pastas = []
+
+    if not pastas:
         vazio["erro"] = "catálogo de sessões Codex não encontrado"
         return vazio
 
-    arquivos = sorted(pasta.rglob("*.jsonl"))
+    arquivos = []
+    for p in pastas:
+        arquivos.extend(sorted(p.rglob("*.jsonl")))
     metadados = {}
     apelidos = {}
     concluidos = {}
@@ -4883,6 +5160,7 @@ def main():
     pipeline = ler_pipeline()
     followup = ler_followup()
     calendario = ler_calendario()
+    uso_planos = ler_uso_planos()
     diretiva = carregar_diretiva(DIRETIVA_JSON)
     if isinstance(diretiva, dict) and diretiva.get("objetivo"):
         limpo = rotulo_seguro(diretiva["objetivo"], limite=500)
@@ -5005,6 +5283,7 @@ def main():
         "followup": followup,
         "calendario": calendario,
         "diretiva": diretiva,
+        "uso_planos": uso_planos,
         "squads": SQUADS,
         "sessao": sessao,
         "agentes": agentes,

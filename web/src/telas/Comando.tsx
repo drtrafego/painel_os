@@ -4,7 +4,7 @@ import { Icone } from '../ui/Icone'
 import { VISTAS, type VistaId, type Vista } from '../nav/rotas'
 import { dadoDaVista } from '../nav/rotulo'
 import { corDaSessao, corDoSquad, corPorIndice, IDENTIDADE } from '../ui/paleta'
-import { maisAntiga, reprovadas, situacaoDaDiretiva, type SituacaoDiretiva } from '../dados/estado'
+import { maisAntiga, reprovadas } from '../dados/estado'
 import { horaGastao, horaUtc, proximosDisparos } from '../dados/cron'
 import { porModeloGeral } from '../dados/modelos'
 import type { Origem } from '../dados/useEstado'
@@ -54,13 +54,6 @@ export function Comando({
   const pipelineOk = Boolean(pipeline && !pipeline.erro && pipeline.total !== null)
   const followup = estado.followup
   const followupOk = Boolean(followup && followup.status === 'pronto' && followup.envios_registrados_no_log !== null)
-  const diretiva = estado.diretiva
-  // ‼️ A checagem antiga era `objetivo && prazo`: ela conferia se o campo
-  // EXISTIA e nunca o comparava com o relogio. Em 10/09 o cartao mais
-  // importante da tela inicial mostrava como ATIVA uma diretiva com prazo
-  // 09/09. A comparacao com a data mora agora em `situacaoDaDiretiva`, junto
-  // do dado, e nao dentro desta tela: outro leitor herda a regra.
-  const situacao = situacaoDaDiretiva(diretiva, agora.getTime())
 
   return (
     <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
@@ -128,14 +121,7 @@ export function Comando({
 
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
         <Saude estado={estado} antiga={antiga} aoIr={aoIr} />
-        {situacao.estado === 'sem-fonte'
-          ? <SemFonteGrande titulo="diretiva atual" oQue="a frase que orienta o dia, assinada e com hora" falta={situacao.porque} />
-          : <Diretiva diretiva={diretiva} situacao={situacao} />}
-        <SemFonteGrande
-          titulo="contexto de raciocínio"
-          oQue="o que a operação está pensando agora, ao vivo"
-          falta="isso existiria lendo os transcripts em tempo real, e eles têm conversa de cliente com nome e telefone dentro: é dado que não pode ir para tela"
-        />
+        <UsoDosPlanos uso={estado.uso_planos} />
       </div>
 
       <DeOndeVieram estado={estado} />
@@ -405,56 +391,141 @@ function PorModelo({ estado }: { estado: Estado }) {
  * "ativa" no cabecalho, e quem batia o olho lia ATIVA. Vencida vira ambar, o
  * cabecalho diz ha quantos dias, e a frase escreve que ninguem substituiu.
  */
-function Diretiva({
-  diretiva, situacao,
-}: {
-  diretiva: Estado['diretiva']
-  situacao: Exclude<SituacaoDiretiva, { estado: 'sem-fonte' }>
-}) {
-  const vencida = situacao.estado === 'vencida'
-  const meta =
-    situacao.estado === 'vencida'
-      ? `vencida há ${situacao.diasVencida} ${situacao.diasVencida === 1 ? 'dia' : 'dias'}`
-      : situacao.estado === 'encerrada'
-        ? situacao.rotulo
-        : situacao.diasAteVencer === 0
-          ? 'ativa · vence hoje'
-          : `ativa · ${situacao.diasAteVencer} ${situacao.diasAteVencer === 1 ? 'dia' : 'dias'}`
-  return (
-    <section
-      className={'carta p-4' + (vencida ? ' !border-ambar/35 !bg-ambar/6' : '')}
-      data-diretiva={situacao.estado}
-    >
-      <Cabecalho cor={vencida ? 'var(--color-ambar)' : 'var(--color-lima)'} meta={meta}>
-        diretiva atual
-      </Cabecalho>
-      <p className={'text-[14px] leading-relaxed ' + (vencida ? 'text-tinta-2' : 'text-tinta')}>
-        {diretiva?.objetivo}
-      </p>
-      {vencida && (
-        <p className="mt-2.5 text-[12px] leading-[1.55] text-ambar">
-          O prazo desta diretiva passou e ninguém escreveu outra no lugar. Ela continua sendo a
-          última que existe, e por isso segue aqui, mas não descreve o dia de hoje.
+function UsoDosPlanos({ uso }: { uso?: Estado['uso_planos'] }) {
+  if (!uso || uso.status === 'erro' || (!uso.claude && !uso.codex)) {
+    return (
+      <section className="carta p-4 lg:col-span-2">
+        <Cabecalho meta="sem dados">uso dos planos</Cabecalho>
+        <p className="mt-2 text-[12px] leading-relaxed text-tinta-2">
+          {uso?.erro || 'Coleta de uso dos planos ainda não iniciada ou sem arquivos recentes nos diretores.'}
         </p>
-      )}
-      <div className="mt-3 border-t border-linha pt-3 text-[11px] text-tinta-3">
-        <span className={'rotulo' + (vencida ? ' !text-ambar' : '')}>prazo</span>
-        <span className={'ml-2 ' + (vencida ? 'text-ambar' : 'text-tinta-2')}>{diretiva?.prazo}</span>
-        <span className="mx-2">·</span>
-        <span>origem {diretiva?.origem?.canal} #{diretiva?.origem?.mensagem_id}</span>
-      </div>
-    </section>
-  )
-}
+      </section>
+    )
+  }
 
-function SemFonteGrande({ titulo, oQue, falta }: { titulo: string; oQue: string; falta: string }) {
+  const claude = uso.claude
+  const codex = uso.codex
+
   return (
-    <section className="rounded-xl border border-dashed border-linha-forte p-4">
-      <Cabecalho meta="sem fonte">{titulo}</Cabecalho>
-      <p className="text-[12px] leading-[1.6] text-tinta-2">
-        Aqui ficaria {oQue}. Não tem dado ainda, e por isso não tem número nem frase de mentira no
-        lugar: {falta}.
-      </p>
+    <section className="carta p-4 lg:col-span-2" data-uso-planos>
+      <Cabecalho cor="var(--color-lima)" meta={`atualizado ${uso.atualizado_em ? new Date(uso.atualizado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'há pouco'}`}>
+        uso dos planos (claude & codex)
+      </Cabecalho>
+
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        {/* Bloco Claude */}
+        <div className="rounded-lg border border-linha bg-white/2 p-3">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-xs font-bold text-tinta">Claude</span>
+            <span className="rotulo text-[10px]">conta compartilhada</span>
+          </div>
+
+          <div className="mt-2 space-y-1.5 text-[11.5px]">
+            <div className="flex justify-between border-b border-linha/50 pb-1">
+              <span className="text-tinta-3">janela 5h (sessão):</span>
+              <span className="font-mono text-tinta">
+                {claude?.sessao_5h_percentual !== null && claude?.sessao_5h_percentual !== undefined
+                  ? `${claude.sessao_5h_percentual}%`
+                  : 'indeterminado'}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-linha/50 pb-1">
+              <span className="text-tinta-3">janela 7d (semana):</span>
+              <span className="font-mono text-tinta">
+                {claude?.semana_7d_percentual !== null && claude?.semana_7d_percentual !== undefined
+                  ? `${claude.semana_7d_percentual}%`
+                  : 'indeterminado'}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-linha/50 pb-1">
+              <span className="text-tinta-3">estimativa 24h:</span>
+              <span className="font-mono text-lima font-bold">
+                {claude?.tokens_24h_estimativa !== null && claude?.tokens_24h_estimativa !== undefined
+                  ? `${claude.tokens_24h_estimativa.toLocaleString('pt-BR')} tokens`
+                  : 'sem registros em 24h'}
+              </span>
+            </div>
+          </div>
+
+          {/* Por diretor */}
+          {claude?.por_diretor && claude.por_diretor.length > 0 && (
+            <div className="mt-2.5 pt-2 border-t border-linha/40">
+              <div className="rotulo text-[9.5px] mb-1">volume 24h por diretor</div>
+              <div className="flex flex-wrap gap-2 text-[10.5px]">
+                {claude.por_diretor.map((d) => (
+                  <span key={d.diretor} className="rounded bg-black/20 px-2 py-0.5 font-mono text-tinta-2 border border-linha/30">
+                    {d.diretor}: <strong className="text-tinta">{d.tokens_24h !== null && d.tokens_24h !== undefined ? d.tokens_24h.toLocaleString('pt-BR') : '—'}</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="mt-2.5 text-[9.5px] leading-snug text-tinta-3">
+            {claude?.fonte_percentual_oficial
+              ? '● percentual oficial retornado via cabeçalhos ratelimit'
+              : 'ⓘ percentuais oficiais 5h/7d dependem de cabeçalho ratelimit; volume de tokens é estimativa local.'}
+          </p>
+        </div>
+
+        {/* Bloco Codex */}
+        <div className="rounded-lg border border-linha bg-white/2 p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-xs font-bold text-tinta">Codex</span>
+              {codex?.plano && <span className="rounded bg-azul/15 border border-azul/30 px-1.5 py-0.5 font-mono text-[9.5px] text-azul">{codex.plano}</span>}
+            </div>
+            <span className="rotulo text-[10px]">conta compartilhada</span>
+          </div>
+
+          <div className="mt-2 space-y-1.5 text-[11.5px]">
+            <div className="flex justify-between border-b border-linha/50 pb-1">
+              <span className="text-tinta-3">
+                uso semanal ({codex?.primario_janela_dias ? `${codex.primario_janela_dias}d` : '7d'}):
+              </span>
+              <span className="font-mono text-tinta font-bold">
+                {codex?.primario_percentual !== null && codex?.primario_percentual !== undefined
+                  ? `${codex.primario_percentual}%`
+                  : 'indeterminado'}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-linha/50 pb-1">
+              <span className="text-tinta-3">uso secundário:</span>
+              <span className="font-mono text-tinta">
+                {codex?.secundario_percentual !== null && codex?.secundario_percentual !== undefined
+                  ? `${codex.secundario_percentual}%`
+                  : 'não informado'}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-linha/50 pb-1">
+              <span className="text-tinta-3">estimativa 24h:</span>
+              <span className="font-mono text-lima font-bold">
+                {codex?.tokens_24h_estimativa !== null && codex?.tokens_24h_estimativa !== undefined
+                  ? `${codex.tokens_24h_estimativa.toLocaleString('pt-BR')} tokens`
+                  : 'sem registros em 24h'}
+              </span>
+            </div>
+          </div>
+
+          {/* Por diretor */}
+          {codex?.por_diretor && codex.por_diretor.length > 0 && (
+            <div className="mt-2.5 pt-2 border-t border-linha/40">
+              <div className="rotulo text-[9.5px] mb-1">volume 24h por diretor</div>
+              <div className="flex flex-wrap gap-2 text-[10.5px]">
+                {codex.por_diretor.map((d) => (
+                  <span key={d.diretor} className="rounded bg-black/20 px-2 py-0.5 font-mono text-tinta-2 border border-linha/30">
+                    {d.diretor}: <strong className="text-tinta">{d.tokens_24h !== null && d.tokens_24h !== undefined ? d.tokens_24h.toLocaleString('pt-BR') : '—'}</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="mt-2.5 text-[9.5px] leading-snug text-tinta-3">
+            ● percentual oficial medido nos eventos rate_limits do runtime Codex (mesmo account_id entre Luana, Renato e Bia).
+          </p>
+        </div>
+      </div>
     </section>
   )
 }

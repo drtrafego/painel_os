@@ -104,8 +104,8 @@
       background-image: radial-gradient(var(--card-border) 1px, transparent 1px);
       background-size: 24px 24px;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      align-items: flex-start;
+      justify-content: flex-start;
     }
     svg {
       display: block;
@@ -178,7 +178,7 @@
     </div>
   </div>
   <div class="canvas-container" id="container">
-    <svg viewBox="0 0 1040 550" width="1040" height="550">
+    <svg viewBox="5 -95 950 500" width="1040" height="550">
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--edge)"/>
@@ -296,6 +296,12 @@
         container.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
       });
     }
+  </script>
+
+  <script>
+    window.addEventListener('wheel', function(e) {
+      if (!e.ctrlKey && !e.metaKey) {}
+    }, { passive: true });
   </script>
 </body>
 </html>

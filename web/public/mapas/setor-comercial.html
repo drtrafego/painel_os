@@ -208,7 +208,7 @@
     </div>
   </header>
   <div id="viewport">
-    <svg id="svg-root" viewBox="0 0 1670 280" preserveAspectRatio="xMidYMid meet">
+    <svg id="svg-root" viewBox="5 25 2390 130" preserveAspectRatio="xMidYMid meet">
       <defs>
         <marker id="arrow-default" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b949e"/>
@@ -519,6 +519,12 @@
         if (saved) document.documentElement.setAttribute('data-theme', saved);
       } catch (_) {}
     })();
+  </script>
+
+  <script>
+    window.addEventListener('wheel', function(e) {
+      if (!e.ctrlKey && !e.metaKey) {}
+    }, { passive: true });
   </script>
 </body>
 </html>

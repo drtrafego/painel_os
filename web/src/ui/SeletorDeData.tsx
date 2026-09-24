@@ -149,33 +149,117 @@ export function SeletorDeData({
     }
   }, [aberto])
 
-  // Navegação rápida de mês na barra superior (botões < Mês Ano >)
-  const navegarMesAnterior = () => {
-    const ref = faixaAtiva.fim || faixaAtiva.inicio
-    const novoInicio = new Date(ref.getFullYear(), ref.getMonth() - 1, 1)
-    const novoFim = new Date(novoInicio.getFullYear(), novoInicio.getMonth() + 1, 0)
-    const nova: FaixaDeData = { inicio: novoInicio, fim: novoFim, rotulo: `${NOMES_MESES[novoInicio.getMonth()]} ${novoInicio.getFullYear()}` }
+  // Navegação rápida de período (botões < [Data/Rótulo] >)
+  const navegarPeriodoAnterior = () => {
+    const hoje = obterHojeSp()
+    const eUnicoDia = mesmoDia(faixaAtiva.inicio, faixaAtiva.fim)
+
+    if (eUnicoDia) {
+      const novodia = new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth(), faixaAtiva.inicio.getDate() - 1)
+      const ontem = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 1)
+      let rotulo = formatarDataBr(novodia)
+      if (mesmoDia(novodia, hoje)) rotulo = 'Hoje'
+      else if (mesmoDia(novodia, ontem)) rotulo = 'Ontem'
+
+      const nova: FaixaDeData = { inicio: novodia, fim: novodia, rotulo }
+      setFaixaAtiva(nova)
+      setRascunhoInicio(novodia)
+      setRascunhoFim(novodia)
+      setMesVisivel(new Date(novodia.getFullYear(), novodia.getMonth(), 1))
+      aoMudarFaixa?.(nova)
+      return
+    }
+
+    const eMesCheio = faixaAtiva.inicio.getDate() === 1 &&
+      faixaAtiva.fim.getDate() === new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth() + 1, 0).getDate()
+
+    if (eMesCheio) {
+      const novoInicio = new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth() - 1, 1)
+      const novoFim = new Date(novoInicio.getFullYear(), novoInicio.getMonth() + 1, 0)
+      let rotulo = `${NOMES_MESES[novoInicio.getMonth()]} ${novoInicio.getFullYear()}`
+      if (novoInicio.getMonth() === hoje.getMonth() - 1 && novoInicio.getFullYear() === hoje.getFullYear()) {
+        rotulo = 'Mês anterior'
+      } else if (novoInicio.getMonth() === hoje.getMonth() && novoInicio.getFullYear() === hoje.getFullYear()) {
+        rotulo = `${NOMES_MESES[hoje.getMonth()]} ${hoje.getFullYear()}`
+      }
+      const nova: FaixaDeData = { inicio: novoInicio, fim: novoFim, rotulo }
+      setFaixaAtiva(nova)
+      setRascunhoInicio(novoInicio)
+      setRascunhoFim(novoFim)
+      setMesVisivel(novoInicio)
+      aoMudarFaixa?.(nova)
+      return
+    }
+
+    const diffMs = faixaAtiva.fim.getTime() - faixaAtiva.inicio.getTime()
+    const diffDias = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24))) + 1
+
+    const novoInicio = new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth(), faixaAtiva.inicio.getDate() - diffDias)
+    const novoFim = new Date(faixaAtiva.fim.getFullYear(), faixaAtiva.fim.getMonth(), faixaAtiva.fim.getDate() - diffDias)
+    const nova: FaixaDeData = { inicio: novoInicio, fim: novoFim, rotulo: `${formatarDataBr(novoInicio)} — ${formatarDataBr(novoFim)}` }
     setFaixaAtiva(nova)
     setRascunhoInicio(novoInicio)
     setRascunhoFim(novoFim)
-    setMesVisivel(novoInicio)
+    setMesVisivel(new Date(novoFim.getFullYear(), novoFim.getMonth(), 1))
     aoMudarFaixa?.(nova)
   }
 
-  const navegarProximoMes = () => {
-    const ref = faixaAtiva.fim || faixaAtiva.inicio
-    const novoInicio = new Date(ref.getFullYear(), ref.getMonth() + 1, 1)
-    const novoFim = new Date(novoInicio.getFullYear(), novoInicio.getMonth() + 1, 0)
-    const nova: FaixaDeData = { inicio: novoInicio, fim: novoFim, rotulo: `${NOMES_MESES[novoInicio.getMonth()]} ${novoInicio.getFullYear()}` }
+  const navegarProximoPeriodo = () => {
+    const hoje = obterHojeSp()
+    const eUnicoDia = mesmoDia(faixaAtiva.inicio, faixaAtiva.fim)
+
+    if (eUnicoDia) {
+      const novodia = new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth(), faixaAtiva.inicio.getDate() + 1)
+      const ontem = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 1)
+      let rotulo = formatarDataBr(novodia)
+      if (mesmoDia(novodia, hoje)) rotulo = 'Hoje'
+      else if (mesmoDia(novodia, ontem)) rotulo = 'Ontem'
+
+      const nova: FaixaDeData = { inicio: novodia, fim: novodia, rotulo }
+      setFaixaAtiva(nova)
+      setRascunhoInicio(novodia)
+      setRascunhoFim(novodia)
+      setMesVisivel(new Date(novodia.getFullYear(), novodia.getMonth(), 1))
+      aoMudarFaixa?.(nova)
+      return
+    }
+
+    const eMesCheio = faixaAtiva.inicio.getDate() === 1 &&
+      faixaAtiva.fim.getDate() === new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth() + 1, 0).getDate()
+
+    if (eMesCheio) {
+      const novoInicio = new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth() + 1, 1)
+      const novoFim = new Date(novoInicio.getFullYear(), novoInicio.getMonth() + 1, 0)
+      let rotulo = `${NOMES_MESES[novoInicio.getMonth()]} ${novoInicio.getFullYear()}`
+      if (novoInicio.getMonth() === hoje.getMonth() - 1 && novoInicio.getFullYear() === hoje.getFullYear()) {
+        rotulo = 'Mês anterior'
+      } else if (novoInicio.getMonth() === hoje.getMonth() && novoInicio.getFullYear() === hoje.getFullYear()) {
+        rotulo = `${NOMES_MESES[hoje.getMonth()]} ${hoje.getFullYear()}`
+      }
+      const nova: FaixaDeData = { inicio: novoInicio, fim: novoFim, rotulo }
+      setFaixaAtiva(nova)
+      setRascunhoInicio(novoInicio)
+      setRascunhoFim(novoFim)
+      setMesVisivel(novoInicio)
+      aoMudarFaixa?.(nova)
+      return
+    }
+
+    const diffMs = faixaAtiva.fim.getTime() - faixaAtiva.inicio.getTime()
+    const diffDias = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24))) + 1
+
+    const novoInicio = new Date(faixaAtiva.inicio.getFullYear(), faixaAtiva.inicio.getMonth(), faixaAtiva.inicio.getDate() + diffDias)
+    const novoFim = new Date(faixaAtiva.fim.getFullYear(), faixaAtiva.fim.getMonth(), faixaAtiva.fim.getDate() + diffDias)
+    const nova: FaixaDeData = { inicio: novoInicio, fim: novoFim, rotulo: `${formatarDataBr(novoInicio)} — ${formatarDataBr(novoFim)}` }
     setFaixaAtiva(nova)
     setRascunhoInicio(novoInicio)
     setRascunhoFim(novoFim)
-    setMesVisivel(novoInicio)
+    setMesVisivel(new Date(novoFim.getFullYear(), novoFim.getMonth(), 1))
     aoMudarFaixa?.(nova)
   }
 
-  // Presets da coluna esquerda (Hoje, Últimos 7 dias, etc.)
-  const aplicarPreset = (tipo: 'hoje' | '7dias' | '30dias' | 'esteMes' | 'tudo') => {
+  // Presets da coluna esquerda (Hoje, Ontem, Últimos 7 dias, Este mês, Mês anterior, etc.)
+  const aplicarPreset = (tipo: 'hoje' | 'ontem' | '7dias' | '30dias' | 'esteMes' | 'mesAnterior' | 'tudo') => {
     const hoje = obterHojeSp()
     let ini = new Date(hoje)
     let fim = new Date(hoje)
@@ -185,6 +269,13 @@ export function SeletorDeData({
       case 'hoje':
         rotulo = 'Hoje'
         break
+      case 'ontem': {
+        const ontem = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 1)
+        ini = new Date(ontem)
+        fim = new Date(ontem)
+        rotulo = 'Ontem'
+        break
+      }
       case '7dias':
         ini = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 6)
         rotulo = 'Últimos 7 dias'
@@ -198,6 +289,12 @@ export function SeletorDeData({
         fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
         rotulo = `${NOMES_MESES[hoje.getMonth()]} ${hoje.getFullYear()}`
         break
+      case 'mesAnterior': {
+        ini = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
+        fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0)
+        rotulo = 'Mês anterior'
+        break
+      }
       case 'tudo':
         ini = new Date(2026, 0, 1)
         rotulo = 'Total histórico'
@@ -285,49 +382,48 @@ export function SeletorDeData({
   const gridMes1 = gerarGridMes(mes1.getFullYear(), mes1.getMonth())
   const gridMes2 = gerarGridMes(mes2.getFullYear(), mes2.getMonth())
 
-  const nomeMesAnoAtivo = `${NOMES_MESES[faixaAtiva.fim.getMonth()]} ${faixaAtiva.fim.getFullYear()}`
   const textoFaixaFormatada = `${formatarDataBr(faixaAtiva.inicio)} — ${formatarDataBr(faixaAtiva.fim)}`
+  const hojeSp = obterHojeSp()
 
   return (
     <div ref={containerRef} className="relative inline-flex max-w-full items-center text-[var(--color-tinta)] font-sans">
       {/* BARRA DE NAVEGAÇÃO E SELETOR DE DATAS DA CABEÇA */}
       <div className="flex max-w-full items-center gap-1.5 sm:gap-2">
-        {/* Controles rápidos de mês: < Mês Ano > */}
+        {/* Controles rápidos de período: < [Rótulo / Data] > */}
         <div className="flex items-center rounded-xl border border-[var(--color-linha)] bg-[var(--color-carta)] p-0.5 shadow-sm">
           <button
             type="button"
-            onClick={navegarMesAnterior}
-            title="Mês anterior"
-            className="flex size-7 items-center justify-center rounded-lg text-[var(--color-tinta-2)] transition-colors hover:bg-[var(--color-fundo)] hover:text-[var(--color-tinta)] active:scale-95"
+            onClick={navegarPeriodoAnterior}
+            title="Período anterior"
+            className="flex size-7 items-center justify-center rounded-lg text-[var(--color-tinta-2)] transition-colors hover:bg-[var(--color-fundo)] hover:text-[var(--color-tinta)] active:scale-95 shrink-0"
           >
-            <span className="text-xs">‹</span>
+            <span className="text-sm font-bold">‹</span>
           </button>
-          <span className="px-1.5 font-mono text-[11px] font-semibold text-[var(--color-tinta)] sm:px-2.5 sm:text-[12px]">
-            {nomeMesAnoAtivo}
-          </span>
+
           <button
             type="button"
-            onClick={navegarProximoMes}
-            title="Próximo mês"
-            className="flex size-7 items-center justify-center rounded-lg text-[var(--color-tinta-2)] transition-colors hover:bg-[var(--color-fundo)] hover:text-[var(--color-tinta)] active:scale-95"
+            onClick={() => setAberto((a) => !a)}
+            aria-expanded={aberto}
+            className="flex min-w-0 items-center gap-1.5 px-2 py-1.5 font-mono text-[11px] font-medium text-[var(--color-tinta)] transition-all hover:text-white active:scale-95 sm:gap-2 sm:px-3 sm:text-[12px]"
           >
-            <span className="text-xs">›</span>
+            <span className="opacity-80 shrink-0">📅</span>
+            <span className="whitespace-nowrap">
+              {faixaAtiva.rotulo ? (
+                <span className="font-bold mr-1">{faixaAtiva.rotulo} ·</span>
+              ) : null}
+              {textoFaixaFormatada}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={navegarProximoPeriodo}
+            title="Próximo período"
+            className="flex size-7 items-center justify-center rounded-lg text-[var(--color-tinta-2)] transition-colors hover:bg-[var(--color-fundo)] hover:text-[var(--color-tinta)] active:scale-95 shrink-0"
+          >
+            <span className="text-sm font-bold">›</span>
           </button>
         </div>
-
-        {/* Botão de Intervalo com Ícone de Calendário */}
-        <button
-          type="button"
-          onClick={() => setAberto((a) => !a)}
-          aria-expanded={aberto}
-          className="flex min-w-0 items-center gap-1.5 rounded-xl border border-[var(--color-linha)] bg-[var(--color-carta)] px-2 py-1.5 font-mono text-[11px] font-medium text-[var(--color-tinta)] shadow-sm transition-all hover:border-[var(--color-linha-forte)] hover:bg-[var(--color-fundo)] active:scale-95 sm:gap-2.5 sm:px-3.5 sm:text-[12px]"
-        >
-          <span className="opacity-80">📅</span>
-          <span className="whitespace-nowrap">
-            {faixaAtiva.rotulo && <span className="hidden md:inline font-bold mr-1">{faixaAtiva.rotulo} ·</span>}
-            {textoFaixaFormatada}
-          </span>
-        </button>
       </div>
 
       {/* POPOVER MODAL COMPLETO */}
@@ -338,14 +434,19 @@ export function SeletorDeData({
             <div className="space-y-1">
               {[
                 { key: 'hoje', label: 'Hoje' },
+                { key: 'ontem', label: 'Ontem' },
                 { key: '7dias', label: 'Últimos 7 dias' },
                 { key: '30dias', label: 'Últimos 30 dias' },
                 { key: 'esteMes', label: 'Este mês' },
+                { key: 'mesAnterior', label: 'Mês anterior' },
                 { key: 'tudo', label: 'Total histórico' },
               ].map((p) => {
                 const ativo = (p.key === 'hoje' && faixaAtiva.rotulo === 'Hoje') ||
+                              (p.key === 'ontem' && faixaAtiva.rotulo === 'Ontem') ||
                               (p.key === '7dias' && faixaAtiva.rotulo === 'Últimos 7 dias') ||
                               (p.key === '30dias' && faixaAtiva.rotulo === 'Últimos 30 dias') ||
+                              (p.key === 'esteMes' && faixaAtiva.rotulo === `${NOMES_MESES[hojeSp.getMonth()]} ${hojeSp.getFullYear()}`) ||
+                              (p.key === 'mesAnterior' && faixaAtiva.rotulo === 'Mês anterior') ||
                               (p.key === 'tudo' && faixaAtiva.rotulo === 'Total histórico')
                 return (
                   <button
