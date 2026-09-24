@@ -255,8 +255,21 @@ guarda = (c.NOMES_CLIENTE, c.NEGACAO)
 c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(tmp)
 sem_nome("nome que so existe no arquivo de teste",
          "/opt/x/run.sh # fecha o mes da Padaria Zilda Nogueira")
-conferir("e o do arquivo de verdade NAO esta mais na lista (prova que trocou)",
-         c.achou_nome_de_cliente("Dr. Lucas") == [], True)
+conferir("e um nome que so existiria no arquivo de verdade NAO esta na lista (prova que trocou)",
+         c.achou_nome_de_cliente("Fulana Exemplo") == [], True)
+# ‼️ 24/09/2026: nome de PESSOA FISICA de cliente (Dr. Wagner, Willian,
+# Dr. Lucas) saiu do texto livre de clientes.md e passou a viver em
+# privacidade_nomes_cliente.txt, fora de memoria/ e conexoes/ (o verificador
+# de dado pessoal so varre essas duas pastas, e clientes.md tinha que ficar
+# limpo). Esse arquivo NAO segue o parametro `caminho` desta funcao: ele e
+# fixo, de proposito, porque protege pessoa fisica em QUALQUER clientes.md,
+# inclusive um de teste que nunca ouviu falar dela. Por isso "Dr. Lucas"
+# continua mascarado mesmo com o clientes.md trocado pra este arquivo de
+# teste, diferente de "Fulana Exemplo" acima (nome fictício, claramente
+# inventado, que nunca esteve em lista nenhuma).
+conferir("mas nome de pessoa fisica (privacidade_nomes_cliente.txt) "
+         "continua mascarado mesmo com o clientes.md trocado",
+         bool(c.achou_nome_de_cliente("Dr. Lucas")), True)
 
 print("\n--- SEM a lista, nada de texto livre sai (falha FECHADA)")
 c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(Path("/nao/existe/clientes.md"))

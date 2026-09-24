@@ -2767,6 +2767,38 @@ def redigir(texto: str) -> str:
 # corte continua existindo so pra encurtar, nunca pra proteger.
 # ---------------------------------------------------------------------------
 
+# Nome de pessoa fisica de cliente (Dr. Wagner, Willian, Dr. Lucas...) mora
+# FORA de memoria/ e conexoes/ de proposito (24/09/2026): e o unico jeito de
+# clientes.md ficar limpo pro verificador de dado pessoal (grupo `pessoal`,
+# que so varre essas duas pastas) sem o painel perder a capacidade de
+# mascarar esses nomes. Ver o cabecalho do proprio arquivo.
+_NOMES_PESSOA_FISICA = RAIZ / "luana/privacidade_nomes_cliente.txt"
+
+
+def _carregar_nomes_pessoa_fisica(caminho: Path = _NOMES_PESSOA_FISICA) -> list:
+    """Nome de pessoa fisica de cliente, um por linha, fora de memoria/ e
+    conexoes/. Formato: 'Nome: contexto livre' ou so 'Nome'; '#' e comentario.
+
+    Arquivo ausente NAO e erro: devolve lista vazia. clientes.md sozinho
+    ainda cobre nome de empresa/marca, e a checagem `pessoal` continua limpa
+    mesmo sem este arquivo — so o mascaramento de pessoa fisica no painel
+    fica mais fraco, silenciosamente, ate alguem notar no proprio painel.
+    """
+    try:
+        texto = caminho.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    nomes = []
+    for linha in texto.splitlines():
+        linha = linha.split("#", 1)[0].strip()
+        if not linha:
+            continue
+        nome = linha.split(":", 1)[0].strip()
+        if nome:
+            nomes.append(nome)
+    return nomes
+
+
 _PADRAO_CLIENTES = RAIZ / "luana/memoria/clientes.md"
 _ENV_CLIENTES = os.environ.get("PAINEL_OS_CLIENTES_MD")
 if _ENV_CLIENTES:
@@ -2898,6 +2930,11 @@ def carregar_nomes_de_cliente(caminho: Path = CLIENTES_MD):
         if len(nome.split()) > 5 or len(nome) < 2:
             continue  # frase longa nao e nome de cliente
         brutos.append(nome)
+
+    # Nome de pessoa fisica nao mora mais em clientes.md (24/09/2026): vem de
+    # um arquivo a parte, fora de memoria/ e conexoes/. Mesmo pipeline dai pra
+    # frente (permitidos, decomposicao por parte), so muda a origem do bruto.
+    brutos.extend(_carregar_nomes_pessoa_fisica())
 
     nomes = {}
     for nome in brutos:
