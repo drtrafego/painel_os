@@ -58,6 +58,7 @@ export const COR_DO_SQUAD: Record<string, string> = {
 export const COR_DA_SESSAO: Record<string, string> = {
   luana: IDENTIDADE.lima,
   renato: IDENTIDADE.agua,
+  bia: IDENTIDADE.pervinca,
 }
 
 export function corDoSquad(squad: string): string {

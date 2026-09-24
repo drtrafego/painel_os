@@ -166,8 +166,11 @@ export default function App() {
               />
             </div>
             <div
-              className="lg:fixed lg:top-11 lg:right-0 lg:bottom-0 lg:z-40 transition-all duration-300"
-              style={{ left: `${sidebarWidth}px` }}
+              className="w-full lg:fixed lg:top-11 lg:right-0 lg:bottom-0 lg:z-40 lg:left-[var(--sidebar-w)] transition-all duration-300"
+              style={{
+                ['--sidebar-w' as string]: `${sidebarWidth}px`,
+                ['--drawer-w' as string]: `min(720px, calc(100vw - ${sidebarWidth}px))`,
+              } as React.CSSProperties}
             >
               <button
                 type="button"
@@ -180,8 +183,7 @@ export default function App() {
                 aria-modal="true"
                 aria-label="ficha do agente"
                 data-ficha-drawer
-                style={{ width: `min(720px, calc(100vw - ${sidebarWidth}px))` }}
-                className="bg-fundo lg:absolute lg:inset-y-0 lg:right-0 lg:overflow-y-auto lg:border-l lg:border-linha lg:shadow-[-24px_0_70px_rgba(0,0,0,.42)] transition-all duration-300"
+                className="w-full bg-fundo lg:absolute lg:inset-y-0 lg:right-0 lg:w-[var(--drawer-w)] lg:overflow-y-auto lg:border-l lg:border-linha lg:shadow-[-24px_0_70px_rgba(0,0,0,.42)] transition-all duration-300"
               >
                 <Diretor {...comum} quem={rota.quem} aoIr={ir} compacto />
               </aside>

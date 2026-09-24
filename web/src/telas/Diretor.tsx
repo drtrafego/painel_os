@@ -22,7 +22,54 @@ const ICONE_POR_ID: Record<string, NomeIcone> = {
   'cleo-produtor': 'texto', 'dani-designer': 'pincel', guardiao: 'escudo', maestro: 'coroa',
   'cont-radar': 'radar', 'cont-estrategista': 'comando', 'cont-copy': 'texto',
   'cont-designer': 'pincel', 'cont-qa': 'escudo', 'cont-corretor': 'escudo',
-  luana: 'coroa', renato: 'bot',
+  luana: 'coroa', renato: 'bot', bia: 'megafone',
+}
+
+type MapaDiretor = {
+  titulo: string
+  src: string
+  descricao: string
+}
+
+const MAPAS_DIRETORES: Record<string, MapaDiretor> = {
+  luana: {
+    titulo: 'Diretora Luana: operação orquestrada',
+    src: '/mapas/diretor-luana.html',
+    descricao: 'Pipeline de conteúdo, tráfego pago e portões automáticos com governança e checkpoints de aprovação.',
+  },
+  renato: {
+    titulo: 'Diretor Renato: manutenção dos bots Hermes',
+    src: '/mapas/diretor-renato.html',
+    descricao: 'Fluxo de diagnóstico, correção e teste em conversas reais, com travas de banco e proteção de dados.',
+  },
+  bia: {
+    titulo: 'Diretora Bia: tráfego e engenharia de IA',
+    src: '/mapas/diretor-bia.html',
+    descricao: 'Gestão de tráfego pago no Meta Ads, produção de conteúdo e esteira de engenharia de IA com controle de escopo.',
+  },
+}
+
+const SESSAO_CONHECIDA: Record<string, AgenteSessao> = {
+  bia: {
+    id: 'bia',
+    nome: 'Bia',
+    papel: 'Diretora de Tráfego e IA',
+    camada: 'Tráfego & IA',
+    cor: 'rosa',
+    resumo: 'Coordena tráfego pago no Meta Ads, produção de conteúdo e esteira de engenharia de IA com controle de escopo.',
+    verificador: {
+      checagens: null,
+      reprovadas: null,
+      indeterminadas: null,
+      vencido: false,
+      falhas: [],
+      arquivo: '',
+    },
+    motores: null,
+    memoria: { linhas: 0, arquivos: 0 },
+    diario: { arquivos: 0 },
+    cron_linhas: 0,
+  },
 }
 
 const TOM_ATIVIDADE: Record<string, Tom> = {
@@ -54,8 +101,9 @@ export function Diretor({
   vista: Vista
   compacto?: boolean
 }) {
+  const quemNormalizado = quem?.trim().toLowerCase() ?? ''
   const agente = acharAgente(estado, quem)
-  const sessao = agente ? null : acharSessao(estado, quem)
+  const sessao = agente ? null : (acharSessao(estado, quem) ?? SESSAO_CONHECIDA[quemNormalizado] ?? null)
 
   if (!agente && !sessao) {
     return (
@@ -83,6 +131,7 @@ export function Diretor({
   const sops = sopsLigados(estado, quem)
   const { dados: aoVivo } = useAgentesVivos()
   const aoVivoItem = aoVivo?.agentes?.find((a) => a.id === quem || a.id.includes(quem))
+  const mapaFluxo = MAPAS_DIRETORES[quemNormalizado]
 
   return (
     <div className={`${compacto ? 'max-w-none px-5 py-5' : 'w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10'}`}>
@@ -110,6 +159,8 @@ export function Diretor({
           <p className="mt-2 font-mono text-[12.5px] leading-relaxed text-tinta">{aoVivoItem.etapa}</p>
         </section>
       )}
+
+      {mapaFluxo && <SecaoMapaDoFluxo mapa={mapaFluxo} cor={cor} />}
 
       <div className={`mt-3 grid gap-3 ${compacto ? 'grid-cols-1' : 'lg:grid-cols-2'}`}>
         <div className="space-y-3">
@@ -359,11 +410,55 @@ function CabecalhoAgente({ agente, cor, agora }: { agente: Agente; cor: string; 
   )
 }
 
+function SecaoMapaDoFluxo({ mapa, cor }: { mapa: MapaDiretor; cor: string }) {
+  return (
+    <section className="carta mt-3 w-full min-w-0 overflow-hidden" aria-labelledby="mapa-fluxo-diretor">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-linha px-4 py-4">
+        <div className="min-w-0 max-w-2xl flex-1">
+          <Cabecalho cor={cor} meta="workflow interativo">
+            Mapa do fluxo
+          </Cabecalho>
+          <p id="mapa-fluxo-diretor" className="mt-1 text-[12px] leading-relaxed text-tinta-2">
+            {mapa.descricao}
+          </p>
+        </div>
+        <a
+          className="inline-flex shrink-0 items-center justify-center rounded-md border border-linha px-3 py-2 text-[11px] transition-colors hover:border-linha-forte hover:bg-white/5"
+          style={{ color: cor }}
+          href={mapa.src}
+          target="_blank"
+          rel="noreferrer"
+        >
+          abrir mapa completo
+        </a>
+      </div>
+      <div className="bg-black/10 p-2 sm:p-3">
+        <iframe
+          className="h-[min(76vw,520px)] min-h-[340px] w-full rounded-lg border border-linha bg-[#101215]"
+          src={mapa.src}
+          title={`Mapa do fluxo - ${mapa.titulo}`}
+          loading="lazy"
+        />
+      </div>
+      <p className="border-t border-linha px-4 py-3 text-[10.5px] leading-relaxed text-tinta-3">
+        O mapa é um artefato versionado do diretor. Use o link para abrir a leitura completa, com tema, foco e exportação do próprio Archify.
+      </p>
+    </section>
+  )
+}
+
 function CabecalhoSessao({ sessao, cor }: { sessao: AgenteSessao; cor: string }) {
-  const v = sessao.verificador
+  const v = sessao.verificador ?? {
+    checagens: null,
+    reprovadas: null,
+    indeterminadas: null,
+    vencido: false,
+    falhas: [],
+    arquivo: '',
+  }
   const motor = lerMotores(sessao.motores)
   const verdes =
-    v.checagens !== null && v.reprovadas !== null && v.indeterminadas !== null
+    v.checagens !== null && v.checagens !== undefined && v.reprovadas !== null && v.indeterminadas !== null
       ? v.checagens - v.reprovadas - v.indeterminadas
       : null
   return (
@@ -430,7 +525,7 @@ function CabecalhoSessao({ sessao, cor }: { sessao: AgenteSessao; cor: string })
         <Numero rotulo="checagens" valor={v.checagens} tamanho="text-[27px]" />
         <Numero rotulo="reprovadas" valor={v.reprovadas} tamanho="text-[27px]" cor={v.reprovadas ? 'text-ambar' : 'text-tinta'} />
         <Numero rotulo="indeterminadas" valor={v.indeterminadas} tamanho="text-[27px]" cor={v.indeterminadas ? 'text-ambar' : 'text-tinta'} />
-        <Numero rotulo="memória (linhas)" valor={sessao.memoria.linhas} tamanho="text-[27px]" cor="text-tinta-2" />
+        <Numero rotulo="memória (linhas)" valor={sessao.memoria?.linhas ?? 0} tamanho="text-[27px]" cor="text-tinta-2" />
       </div>
       <div className="mt-3">
         <Barra fracao={verdes !== null && v.checagens ? verdes / v.checagens : null} cor={cor} />
