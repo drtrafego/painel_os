@@ -54,6 +54,7 @@ export const SUPERFICIE = {
 export const COR_DO_SQUAD: Record<string, string> = {
   global: IDENTIDADE.ciano,
   conteudo: IDENTIDADE.ambar,
+  comercial: IDENTIDADE.verde,
   'pipeline-luana': IDENTIDADE.pervinca,
 }
 
@@ -63,12 +64,27 @@ export const COR_DA_SESSAO: Record<string, string> = {
   bia: IDENTIDADE.pervinca,
 }
 
+/**
+ * Gênero gramatical do diretor por id, fonte única para concordância de
+ * texto (ex.: "ocioso"/"ociosa"). Luana e Bia são "f", Renato é "m".
+ * Id não cadastrado assume "f" (maioria dos agentes da casa é feminina).
+ */
+export const GENERO_DA_SESSAO: Record<string, 'm' | 'f'> = {
+  luana: 'f',
+  renato: 'm',
+  bia: 'f',
+}
+
 export function corDoSquad(squad: string): string {
   return COR_DO_SQUAD[squad] ?? SUPERFICIE.tinta2
 }
 
 export function corDaSessao(id: string): string {
   return COR_DA_SESSAO[id] ?? IDENTIDADE.lima
+}
+
+export function generoDaSessao(id: string): 'm' | 'f' {
+  return GENERO_DA_SESSAO[id] ?? 'f'
 }
 
 /**

@@ -1,0 +1,296 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Setor comercial: aquisição de cliente novo",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "pipeline-completo",
+        "label": "Pipeline completo",
+        "focus": [
+          "zara",
+          "otto",
+          "bento",
+          "gastao_plano",
+          "maya",
+          "olga",
+          "gastao_textos",
+          "caio",
+          "clay",
+          "hugo"
+        ],
+        "note": "Fluxo horizontal completo de aquisição de cliente novo."
+      },
+      {
+        "id": "aprovacoes",
+        "label": "Aprovações do Gastão",
+        "focus": [
+          "gastao_plano",
+          "gastao_textos"
+        ],
+        "note": "Gates humanos obrigatórios: aprovação de plano e aprovação de textos com hash."
+      }
+    ],
+    "output": "web/public/mapas/setor-comercial.html"
+  },
+  "lanes": [
+    {
+      "id": "comercial",
+      "label": "Setor comercial"
+    }
+  ],
+  "phases": [
+    {
+      "id": "sinal-plano",
+      "label": "Sinal e plano",
+      "fromCol": 0,
+      "toCol": 2
+    },
+    {
+      "id": "aprovacao-plano",
+      "label": "Aprovação",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "texto-fiscal",
+      "label": "Texto e fiscal",
+      "fromCol": 4,
+      "toCol": 6,
+      "variant": "security"
+    },
+    {
+      "id": "ativacao-aprendizado",
+      "label": "Ativação, fechamento e aprendizado",
+      "fromCol": 7,
+      "toCol": 9,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "zara",
+    "otto",
+    "bento",
+    "gastao_plano",
+    "maya",
+    "olga",
+    "gastao_textos",
+    "caio",
+    "clay",
+    "hugo"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "zara"
+    ],
+    "allowedTerminals": [
+      "hugo"
+    ],
+    "requiredEdges": [
+      {
+        "from": "bento",
+        "to": "gastao_plano"
+      },
+      {
+        "from": "gastao_plano",
+        "to": "maya"
+      },
+      {
+        "from": "olga",
+        "to": "gastao_textos"
+      },
+      {
+        "from": "gastao_textos",
+        "to": "caio"
+      }
+    ],
+    "requiredPaths": [
+      {
+        "from": "zara",
+        "to": "hugo"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "zara",
+      "lane": "comercial",
+      "col": 0,
+      "type": "backend",
+      "label": "Zara",
+      "sublabel": "triagem e ICP",
+      "width": 125,
+      "yOffset": 0
+    },
+    {
+      "id": "otto",
+      "lane": "comercial",
+      "col": 1,
+      "type": "backend",
+      "label": "Otto",
+      "sublabel": "radar e sinais",
+      "width": 125,
+      "yOffset": 0
+    },
+    {
+      "id": "bento",
+      "lane": "comercial",
+      "col": 2,
+      "type": "backend",
+      "label": "Bento",
+      "sublabel": "estrategista da conta",
+      "width": 135,
+      "yOffset": 0
+    },
+    {
+      "id": "gastao_plano",
+      "lane": "comercial",
+      "col": 3,
+      "type": "security",
+      "label": "Gastão",
+      "sublabel": "aprova o plano",
+      "width": 145,
+      "yOffset": 0,
+      "variant": "security"
+    },
+    {
+      "id": "maya",
+      "lane": "comercial",
+      "col": 4,
+      "type": "backend",
+      "label": "Maya",
+      "sublabel": "copy e abordagem",
+      "width": 135,
+      "yOffset": 0
+    },
+    {
+      "id": "olga",
+      "lane": "comercial",
+      "col": 5,
+      "type": "security",
+      "label": "Olga",
+      "sublabel": "fiscal de copy (PASSA)",
+      "width": 145,
+      "yOffset": 0
+    },
+    {
+      "id": "gastao_textos",
+      "lane": "comercial",
+      "col": 6,
+      "type": "security",
+      "label": "Gastão",
+      "sublabel": "aprova textos e hash",
+      "width": 155,
+      "yOffset": 0,
+      "variant": "security"
+    },
+    {
+      "id": "caio",
+      "lane": "comercial",
+      "col": 7,
+      "type": "backend",
+      "label": "Caio",
+      "sublabel": "operador de envio",
+      "width": 135,
+      "yOffset": 0
+    },
+    {
+      "id": "clay",
+      "lane": "comercial",
+      "col": 8,
+      "type": "backend",
+      "label": "Clay",
+      "sublabel": "closer (reunião)",
+      "width": 125,
+      "yOffset": 0
+    },
+    {
+      "id": "hugo",
+      "lane": "comercial",
+      "col": 9,
+      "type": "database",
+      "label": "Hugo",
+      "sublabel": "analista e métricas",
+      "width": 135,
+      "yOffset": 0
+    }
+  ],
+  "edges": [
+    {
+      "id": "zara-otto",
+      "from": "zara",
+      "to": "otto",
+      "label": "leads ICP",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "otto-bento",
+      "from": "otto",
+      "to": "bento",
+      "label": "sinais",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "bento-gastao",
+      "from": "bento",
+      "to": "gastao_plano",
+      "label": "plano",
+      "variant": "security",
+      "role": "main"
+    },
+    {
+      "id": "gastao-maya",
+      "from": "gastao_plano",
+      "to": "maya",
+      "label": "aprovado",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "maya-olga",
+      "from": "maya",
+      "to": "olga",
+      "label": "peça de copy",
+      "variant": "security",
+      "role": "main"
+    },
+    {
+      "id": "olga-gastao",
+      "from": "olga",
+      "to": "gastao_textos",
+      "label": "PASSA",
+      "variant": "security",
+      "role": "main"
+    },
+    {
+      "id": "gastao-caio",
+      "from": "gastao_textos",
+      "to": "caio",
+      "label": "liberado",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "caio-clay",
+      "from": "caio",
+      "to": "clay",
+      "label": "resposta / reunião",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "clay-hugo",
+      "from": "clay",
+      "to": "hugo",
+      "label": "fechamento e dados",
+      "variant": "dashed",
+      "role": "main"
+    }
+  ],
+  "cards": []
+}

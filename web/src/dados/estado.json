@@ -44,6 +44,10 @@
     "pipeline-luana": {
       "nome": "Comercial & Vendas",
       "descricao": "CRM, contatos, follow-ups e propostas"
+    },
+    "comercial": {
+      "nome": "Setor comercial",
+      "descricao": "Traz cliente novo pra agência vendendo o sistema pronto."
     }
   },
   "sessao": [
@@ -65,7 +69,9 @@
       "motores": {
         "situacao": "um_ativo",
         "motor": "Codex",
-        "ativos": ["luana.service"],
+        "ativos": [
+          "luana.service"
+        ],
         "servicos": [
           {
             "service": "luana.service",
@@ -78,8 +84,13 @@
           }
         ]
       },
-      "memoria": { "linhas": 312, "arquivos": 4 },
-      "diario": { "arquivos": 7 },
+      "memoria": {
+        "linhas": 312,
+        "arquivos": 4
+      },
+      "diario": {
+        "arquivos": 7
+      },
       "cron_linhas": 15
     },
     {
@@ -100,7 +111,9 @@
       "motores": {
         "situacao": "um_ativo",
         "motor": "Claude Code",
-        "ativos": ["renato.service"],
+        "ativos": [
+          "renato.service"
+        ],
         "servicos": [
           {
             "service": "renato.service",
@@ -113,8 +126,13 @@
           }
         ]
       },
-      "memoria": { "linhas": 190, "arquivos": 3 },
-      "diario": { "arquivos": 5 },
+      "memoria": {
+        "linhas": 190,
+        "arquivos": 3
+      },
+      "diario": {
+        "arquivos": 5
+      },
       "cron_linhas": 10
     }
   ],
@@ -133,7 +151,11 @@
       "convocacoes_24h": 32,
       "convocacoes_7d": 180,
       "ultima_convocacao": "2026-09-18T21:00:00Z",
-      "ferramentas": ["bash", "edit_file", "view_file"],
+      "ferramentas": [
+        "bash",
+        "edit_file",
+        "view_file"
+      ],
       "origem": "agente:global/dev.md"
     },
     {
@@ -150,7 +172,10 @@
       "convocacoes_24h": 15,
       "convocacoes_7d": 95,
       "ultima_convocacao": "2026-09-18T20:30:00Z",
-      "ferramentas": ["playwright", "bash"],
+      "ferramentas": [
+        "playwright",
+        "bash"
+      ],
       "origem": "agente:global/qa.md"
     },
     {
@@ -167,7 +192,9 @@
       "convocacoes_24h": 22,
       "convocacoes_7d": 140,
       "ultima_convocacao": "2026-09-18T19:00:00Z",
-      "ferramentas": ["pesquisa_mercado"],
+      "ferramentas": [
+        "pesquisa_mercado"
+      ],
       "origem": "agente:conteudo/copy.md"
     },
     {
@@ -184,26 +211,72 @@
       "convocacoes_24h": 8,
       "convocacoes_7d": 65,
       "ultima_convocacao": "2026-09-18T16:00:00Z",
-      "ferramentas": ["crm_api"],
+      "ferramentas": [
+        "crm_api"
+      ],
       "origem": "agente:pipeline-luana/closer.md"
     }
   ],
   "arestas": [
-    { "de": "luana", "para": "dev", "vezes": 140, "de_tipo": "sessao" },
-    { "de": "luana", "para": "qa", "vezes": 85, "de_tipo": "sessao" },
-    { "de": "luana", "para": "copy", "vezes": 110, "de_tipo": "sessao" },
-    { "de": "renato", "para": "closer", "vezes": 75, "de_tipo": "sessao" },
-    { "de": "dev", "para": "qa", "vezes": 45, "de_tipo": "agente" }
+    {
+      "de": "luana",
+      "para": "dev",
+      "vezes": 140,
+      "de_tipo": "sessao"
+    },
+    {
+      "de": "luana",
+      "para": "qa",
+      "vezes": 85,
+      "de_tipo": "sessao"
+    },
+    {
+      "de": "luana",
+      "para": "copy",
+      "vezes": 110,
+      "de_tipo": "sessao"
+    },
+    {
+      "de": "renato",
+      "para": "closer",
+      "vezes": 75,
+      "de_tipo": "sessao"
+    },
+    {
+      "de": "dev",
+      "para": "qa",
+      "vezes": 45,
+      "de_tipo": "agente"
+    }
   ],
   "janelas": {
     "hoje": {
       "rotulo": "Hoje",
       "total": 12,
-      "por_agente": { "dev": 5, "qa": 3, "copy": 4 },
+      "por_agente": {
+        "dev": 5,
+        "qa": 3,
+        "copy": 4
+      },
       "arestas": [
-        { "de": "luana", "para": "dev", "vezes": 5, "de_tipo": "sessao" },
-        { "de": "luana", "para": "copy", "vezes": 4, "de_tipo": "sessao" },
-        { "de": "luana", "para": "qa", "vezes": 3, "de_tipo": "sessao" }
+        {
+          "de": "luana",
+          "para": "dev",
+          "vezes": 5,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "luana",
+          "para": "copy",
+          "vezes": 4,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "luana",
+          "para": "qa",
+          "vezes": 3,
+          "de_tipo": "sessao"
+        }
       ],
       "convocacoes_fora_da_casa": {},
       "mapa_src": "/mapas/quem-convoca-quem-hoje.html"
@@ -211,11 +284,30 @@
     "7d": {
       "rotulo": "Últimos 7 dias",
       "total": 95,
-      "por_agente": { "dev": 40, "qa": 25, "copy": 30 },
+      "por_agente": {
+        "dev": 40,
+        "qa": 25,
+        "copy": 30
+      },
       "arestas": [
-        { "de": "luana", "para": "dev", "vezes": 40, "de_tipo": "sessao" },
-        { "de": "luana", "para": "copy", "vezes": 30, "de_tipo": "sessao" },
-        { "de": "luana", "para": "qa", "vezes": 25, "de_tipo": "sessao" }
+        {
+          "de": "luana",
+          "para": "dev",
+          "vezes": 40,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "luana",
+          "para": "copy",
+          "vezes": 30,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "luana",
+          "para": "qa",
+          "vezes": 25,
+          "de_tipo": "sessao"
+        }
       ],
       "convocacoes_fora_da_casa": {},
       "mapa_src": "/mapas/quem-convoca-quem-7d.html"
@@ -223,12 +315,37 @@
     "30d": {
       "rotulo": "Últimos 30 dias",
       "total": 310,
-      "por_agente": { "dev": 110, "qa": 65, "copy": 80, "closer": 55 },
+      "por_agente": {
+        "dev": 110,
+        "qa": 65,
+        "copy": 80,
+        "closer": 55
+      },
       "arestas": [
-        { "de": "luana", "para": "dev", "vezes": 110, "de_tipo": "sessao" },
-        { "de": "luana", "para": "copy", "vezes": 80, "de_tipo": "sessao" },
-        { "de": "renato", "para": "closer", "vezes": 55, "de_tipo": "sessao" },
-        { "de": "luana", "para": "qa", "vezes": 65, "de_tipo": "sessao" }
+        {
+          "de": "luana",
+          "para": "dev",
+          "vezes": 110,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "luana",
+          "para": "copy",
+          "vezes": 80,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "renato",
+          "para": "closer",
+          "vezes": 55,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "luana",
+          "para": "qa",
+          "vezes": 65,
+          "de_tipo": "sessao"
+        }
       ],
       "convocacoes_fora_da_casa": {},
       "mapa_src": "/mapas/quem-convoca-quem-30d.html"
@@ -236,13 +353,43 @@
     "total": {
       "rotulo": "Total histórico",
       "total": 455,
-      "por_agente": { "dev": 140, "qa": 85, "copy": 110, "closer": 75 },
+      "por_agente": {
+        "dev": 140,
+        "qa": 85,
+        "copy": 110,
+        "closer": 75
+      },
       "arestas": [
-        { "de": "luana", "para": "dev", "vezes": 140, "de_tipo": "sessao" },
-        { "de": "luana", "para": "copy", "vezes": 110, "de_tipo": "sessao" },
-        { "de": "luana", "para": "qa", "vezes": 85, "de_tipo": "sessao" },
-        { "de": "renato", "para": "closer", "vezes": 75, "de_tipo": "sessao" },
-        { "de": "dev", "para": "qa", "vezes": 45, "de_tipo": "agente" }
+        {
+          "de": "luana",
+          "para": "dev",
+          "vezes": 140,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "luana",
+          "para": "copy",
+          "vezes": 110,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "luana",
+          "para": "qa",
+          "vezes": 85,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "renato",
+          "para": "closer",
+          "vezes": 75,
+          "de_tipo": "sessao"
+        },
+        {
+          "de": "dev",
+          "para": "qa",
+          "vezes": 45,
+          "de_tipo": "agente"
+        }
       ],
       "convocacoes_fora_da_casa": {},
       "mapa_src": "/mapas/quem-convoca-quem-total.html"
@@ -257,10 +404,22 @@
         "nome": "Ciclo Diário de Conteúdo",
         "objetivo": "Produção, revisão e agendamento de posts do estúdio",
         "autonomia": "assistida",
-        "ferramentas": ["editor_video", "copia_segura"],
-        "agentes": ["copy", "designer", "qa"],
-        "entradas": ["pauta"],
-        "saidas": ["video_mp4", "capa_jpg"],
+        "ferramentas": [
+          "editor_video",
+          "copia_segura"
+        ],
+        "agentes": [
+          "copy",
+          "designer",
+          "qa"
+        ],
+        "entradas": [
+          "pauta"
+        ],
+        "saidas": [
+          "video_mp4",
+          "capa_jpg"
+        ],
         "gatilho": "08:00 BRT",
         "frequencia": "diária",
         "fontes": [],
@@ -314,12 +473,27 @@
     "conexoes": 1,
     "cobertura": 100.0,
     "familias": [
-      { "id": "seguranca", "nome": "Segurança" },
-      { "id": "performance", "nome": "Performance" }
+      {
+        "id": "seguranca",
+        "nome": "Segurança"
+      },
+      {
+        "id": "performance",
+        "nome": "Performance"
+      }
     ],
     "areas": [
-      { "id": "transversal", "nome": "Transversal", "sempre_visivel": true, "total": 1 },
-      { "id": "engenharia", "nome": "Engenharia", "total": 1 }
+      {
+        "id": "transversal",
+        "nome": "Transversal",
+        "sempre_visivel": true,
+        "total": 1
+      },
+      {
+        "id": "engenharia",
+        "nome": "Engenharia",
+        "total": 1
+      }
     ],
     "truncados": [],
     "vencidos": [],
@@ -356,7 +530,10 @@
         "tem_video": true,
         "agendado_para": "2026-09-20 18:00 instagram",
         "data": "2026-09-20",
-        "canais": ["instagram", "linkedin"],
+        "canais": [
+          "instagram",
+          "linkedin"
+        ],
         "artefato_disponivel": true,
         "aprovacao_disponivel": true
       }
@@ -371,95 +548,6 @@
     "acoes_habilitadas": true,
     "acoes_bloqueio": null,
     "total": 131
-  },
-  "tarefas": {
-    "total_abertas": 169,
-    "total_backlog": 124,
-    "total_candidatas_arquivar": 3,
-    "por_status": {
-      "doing": 12,
-      "todo": 140,
-      "waiting": 17,
-      "backlog": 124
-    },
-    "por_prazo": {
-      "atrasadas": 2,
-      "hoje": 5,
-      "proximos_7_dias": 10,
-      "sem_prazo": 40,
-      "depois": 112
-    },
-    "por_movimento": {
-      "ultimos_7_dias": 50,
-      "entre_7_e_30_dias": 75,
-      "sem_atualizacao_30_dias": 44
-    },
-    "por_projeto": [
-      { "projeto": "conteudo", "total": 45 },
-      { "projeto": "clientes", "total": 62 }
-    ],
-    "itens": [
-      {
-        "id": "101",
-        "titulo": "Ads",
-        "projeto": "clientes",
-        "status": "todo",
-        "prioridade": "p2",
-        "criada_em": "2026-08-25T10:00:00Z",
-        "prazo": null,
-        "atualizada_em": "2026-08-25T10:00:00Z",
-        "dias_sem_movimento": 30,
-        "parece_abandonada": true
-      },
-      {
-        "id": "102",
-        "titulo": "Enviar",
-        "projeto": "clientes",
-        "status": "todo",
-        "prioridade": "p3",
-        "criada_em": "2026-08-25T11:00:00Z",
-        "prazo": null,
-        "atualizada_em": "2026-08-25T11:00:00Z",
-        "dias_sem_movimento": 30,
-        "parece_abandonada": true
-      },
-      {
-        "id": "103",
-        "titulo": "Fazer Nova Campanha",
-        "projeto": "clientes",
-        "status": "todo",
-        "prioridade": "p2",
-        "criada_em": "2026-08-25T12:00:00Z",
-        "prazo": null,
-        "atualizada_em": "2026-08-25T12:00:00Z",
-        "dias_sem_movimento": 30,
-        "parece_abandonada": true
-      },
-      {
-        "id": "104",
-        "titulo": "Produzir roteiro vídeo institucional",
-        "projeto": "conteudo",
-        "status": "doing",
-        "prioridade": "p1",
-        "criada_em": "2026-09-20T14:00:00Z",
-        "prazo": "2026-09-25T18:00:00Z",
-        "atualizada_em": "2026-09-23T15:00:00Z",
-        "dias_sem_movimento": 1,
-        "parece_abandonada": false
-      },
-      {
-        "id": "105",
-        "titulo": "Ligar para lead [tel:...4321]",
-        "projeto": "clientes",
-        "status": "waiting",
-        "prioridade": "p2",
-        "criada_em": "2026-09-22T09:00:00Z",
-        "prazo": null,
-        "atualizada_em": "2026-09-22T09:00:00Z",
-        "dias_sem_movimento": 2,
-        "parece_abandonada": false
-      }
-    ]
   },
   "aprovacoes": {
     "total": 0,
@@ -486,9 +574,18 @@
     "total": 6563,
     "organizacoes": 19,
     "etapas": [
-      { "etapa": "lead_inicial", "total": 4120 },
-      { "etapa": "qualificado", "total": 1840 },
-      { "etapa": "proposta", "total": 603 }
+      {
+        "etapa": "lead_inicial",
+        "total": 4120
+      },
+      {
+        "etapa": "qualificado",
+        "total": 1840
+      },
+      {
+        "etapa": "proposta",
+        "total": 603
+      }
     ],
     "coletado_em": "2026-09-18T21:00:00Z"
   },
@@ -535,7 +632,9 @@
         "nome": "Playwright Browser Automation",
         "tipo": "MCP",
         "evidencia": "executando local",
-        "proveniencias": ["luana/.mcp.json"],
+        "proveniencias": [
+          "luana/.mcp.json"
+        ],
         "estado": "disponível"
       }
     ],
@@ -558,5 +657,18 @@
       "pronto": 48
     },
     "itens": []
+  },
+  "comercial": {
+    "status": "sem_dado",
+    "atualizado_em": null,
+    "erro": null,
+    "por_checagem": [],
+    "total_passa": null,
+    "total_bloqueia": null,
+    "checagem_mais_disparada": null,
+    "meta_agendamentos": {
+      "status": "sem_dado",
+      "texto": "sem dado, Hugo ainda não mediu"
+    }
   }
 }

@@ -2,26 +2,9 @@ import { useMemo, useState } from 'react'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
 import { montarCatalogoPixel } from '../dados/pixel-agents'
 import { PixelOffice } from '../ui/PixelOffice'
+import { ORDEM_SQUAD, porSquad } from '../dados/estado'
 import type { PropsTela } from './Vazias'
-import type { AgenteVivo, TarefaGtd } from '../dados/tipos'
-
-const STATUS_ATIVAS: [string, string][] = [
-  ['todo', 'a fazer'],
-  ['doing', 'em andamento'],
-  ['waiting', 'aguardando'],
-]
-const PRAZOS: [string, string][] = [
-  ['atrasadas', 'atrasadas'],
-  ['hoje', 'vencem hoje'],
-  ['proximos_7_dias', 'próximos 7 dias'],
-  ['depois', 'depois'],
-  ['sem_prazo', 'sem prazo'],
-]
-const MOVIMENTO: [string, string][] = [
-  ['ultimos_7_dias', 'movidas nos últimos 7 dias'],
-  ['entre_7_e_30_dias', 'sem movimento de 7 a 30 dias'],
-  ['sem_atualizacao_30_dias', 'sem movimento há 30 dias'],
-]
+import type { AgenteVivo } from '../dados/tipos'
 
 const CLASSE_DONO_PIXEL: Record<string, string> = {
   luana: 'bg-[#38bdf8] text-black',
@@ -244,278 +227,20 @@ function InspectorAgente({
   )
 }
 
-type FiltroTarefas = 'todas' | 'abandonadas' | 'sem_prazo' | 'sem_movimento'
-
-function formatarData(iso?: string | null): string {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    if (isNaN(d.getTime())) return iso
-    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  } catch {
-    return iso
-  }
-}
-
-function formatarMovimento(dias?: number | null, atualizadaEm?: string | null): string {
-  if (dias !== null && dias !== undefined) {
-    if (dias === 0) return 'hoje'
-    if (dias === 1) return 'ontem'
-    return `há ${dias} dias`
-  }
-  if (atualizadaEm) return formatarData(atualizadaEm)
-  return '—'
-}
-
-function ListaTarefasAbertas({
-  itens,
-  filtroAtivo,
-  aoMudarFiltro,
-  aoFechar,
-}: {
-  itens: TarefaGtd[]
-  filtroAtivo: FiltroTarefas
-  aoMudarFiltro: (filtro: FiltroTarefas) => void
-  aoFechar: () => void
-}) {
-  const [busca, setBusca] = useState('')
-
-  const itensFiltrados = useMemo(() => {
-    return itens.filter((t) => {
-      if (filtroAtivo === 'abandonadas' && !t.parece_abandonada) return false
-      if (filtroAtivo === 'sem_prazo' && t.prazo) return false
-      if (filtroAtivo === 'sem_movimento' && (t.dias_sem_movimento ?? 0) < 21) return false
-
-      if (busca.trim()) {
-        const q = busca.toLowerCase()
-        const matchTitulo = t.titulo?.toLowerCase().includes(q)
-        const matchProj = t.projeto?.toLowerCase().includes(q)
-        const matchStatus = t.status?.toLowerCase().includes(q)
-        return Boolean(matchTitulo || matchProj || matchStatus)
-      }
-      return true
-    })
-  }, [itens, filtroAtivo, busca])
-
-  const tarefasPorProjeto = useMemo(() => {
-    const grupos = new Map<string, TarefaGtd[]>()
-    for (const item of itensFiltrados) {
-      const proj = item.projeto || 'sem projeto'
-      const lista = grupos.get(proj) ?? []
-      lista.push(item)
-      grupos.set(proj, lista)
-    }
-    return Array.from(grupos.entries()).sort(
-      (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])
-    )
-  }, [itensFiltrados])
-
-  const totalAbandonadas = useMemo(() => itens.filter((i) => i.parece_abandonada).length, [itens])
-  const totalSemPrazo = useMemo(() => itens.filter((i) => !i.prazo).length, [itens])
-  const totalSemMovimento = useMemo(() => itens.filter((i) => (i.dias_sem_movimento ?? 0) >= 21).length, [itens])
-
-  return (
-    <PixelJanela
-      titulo="📋 LISTA DE TAREFAS ATIVAS (GTD)"
-      subtitulo={`${itensFiltrados.length} de ${itens.length} tarefas exibidas · agrupadas por projeto`}
-      badge={`${itensFiltrados.length} ITENS`}
-      corBadge="text-[#facc15]"
-    >
-      <div className="space-y-4">
-        {/* Controles de Filtro, Busca e Fechar */}
-        <div className="flex flex-col gap-3 border-b-2 border-slate-700 pb-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => aoMudarFiltro('todas')}
-              className={`border-2 border-black px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 ${
-                filtroAtivo === 'todas'
-                  ? 'bg-[#facc15] text-black'
-                  : 'bg-[#0f172a] text-slate-300 hover:text-white'
-              }`}
-            >
-              TODAS ({itens.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => aoMudarFiltro('abandonadas')}
-              className={`border-2 border-black px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 ${
-                filtroAtivo === 'abandonadas'
-                  ? 'bg-[#fb923c] text-black'
-                  : 'bg-[#0f172a] text-[#fb923c] hover:bg-slate-800'
-              }`}
-            >
-              📦 PARECE ABANDONADA ({totalAbandonadas})
-            </button>
-            <button
-              type="button"
-              onClick={() => aoMudarFiltro('sem_prazo')}
-              className={`border-2 border-black px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 ${
-                filtroAtivo === 'sem_prazo'
-                  ? 'bg-[#fbbf24] text-black'
-                  : 'bg-[#0f172a] text-[#fbbf24] hover:bg-slate-800'
-              }`}
-            >
-              SEM PRAZO ({totalSemPrazo})
-            </button>
-            <button
-              type="button"
-              onClick={() => aoMudarFiltro('sem_movimento')}
-              className={`border-2 border-black px-2.5 py-1 text-xs font-black uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 ${
-                filtroAtivo === 'sem_movimento'
-                  ? 'bg-[#a3e635] text-black'
-                  : 'bg-[#0f172a] text-[#a3e635] hover:bg-slate-800'
-              }`}
-            >
-              SEM MOVIMENTO ({totalSemMovimento})
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              placeholder="Buscar título, projeto..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="w-full sm:w-64 border-2 border-black bg-[#0f172a] px-3 py-1 text-xs text-white placeholder-slate-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] outline-none focus:border-[#facc15]"
-            />
-            {busca && (
-              <button
-                type="button"
-                onClick={() => setBusca('')}
-                className="border-2 border-black bg-[#1e293b] px-2 py-1 text-[11px] font-bold text-slate-300 hover:bg-slate-700 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
-              >
-                LIMPAR
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={aoFechar}
-              className="border-2 border-black bg-[#ef4444] px-3 py-1 text-xs font-black uppercase text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
-            >
-              ✕ FECHAR LISTA
-            </button>
-          </div>
-        </div>
-
-        {/* Lista de Projetos e suas Tarefas */}
-        {tarefasPorProjeto.length > 0 ? (
-          <div className="space-y-4">
-            {tarefasPorProjeto.map(([projeto, tarefasDoProjeto]) => (
-              <div
-                key={projeto}
-                className="border-2 border-black bg-[#0f172a] p-3.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] space-y-2.5 min-w-0"
-              >
-                <div className="flex items-center justify-between border-b border-slate-700 pb-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="size-2.5 bg-[#c084fc] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0" />
-                    <span className="text-xs font-black uppercase text-[#c084fc] truncate">
-                      PROJETO: {projeto.toUpperCase()}
-                    </span>
-                  </div>
-                  <span className="border border-black bg-[#1e293b] px-2 py-0.5 text-[10px] font-black text-slate-300 shrink-0">
-                    {tarefasDoProjeto.length} {tarefasDoProjeto.length === 1 ? 'tarefa' : 'tarefas'}
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  {tarefasDoProjeto.map((t, idx) => (
-                    <div
-                      key={t.id || `${projeto}-${idx}`}
-                      className={`border-2 border-black bg-[#1e293b] p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors hover:bg-slate-800 flex flex-col gap-2 min-w-0 ${
-                        t.parece_abandonada ? 'border-l-4 border-l-[#fb923c]' : ''
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 min-w-0">
-                        <div className="flex items-start gap-2 min-w-0 flex-1">
-                          <span
-                            className={`shrink-0 border border-black px-1.5 py-0.5 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                              t.status === 'doing'
-                                ? 'bg-[#38bdf8] text-black'
-                                : t.status === 'waiting'
-                                ? 'bg-[#fbbf24] text-black'
-                                : 'bg-slate-700 text-slate-200'
-                            }`}
-                          >
-                            {t.status}
-                          </span>
-                          <span className="text-xs sm:text-sm font-bold text-slate-100 break-words min-w-0">
-                            {t.titulo}
-                          </span>
-                        </div>
-
-                        {t.parece_abandonada && (
-                          <span
-                            className="shrink-0 self-start border-2 border-black bg-[#fb923c] px-2 py-0.5 text-[10px] font-black uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                            title="Sem prazo, sem movimento há mais de 21 dias e título curto. Candidata a arquivar (decisão humana)."
-                          >
-                            📦 PARECE ABANDONADA
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400 border-t border-slate-700/60 pt-2 min-w-0">
-                        <div className="flex items-center gap-1 min-w-0">
-                          <span className="text-slate-500">📅 Criada:</span>
-                          <span className="text-slate-300 font-mono">{formatarData(t.criada_em)}</span>
-                        </div>
-
-                        <div className="flex items-center gap-1 min-w-0">
-                          <span className="text-slate-500">⏰ Prazo:</span>
-                          <span
-                            className={`font-mono ${
-                              t.prazo ? 'text-[#facc15] font-semibold' : 'text-slate-500 italic'
-                            }`}
-                          >
-                            {t.prazo ? formatarData(t.prazo) : 'sem prazo'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1 min-w-0">
-                          <span className="text-slate-500">⏱️ Movimento:</span>
-                          <span
-                            className={`font-mono ${
-                              (t.dias_sem_movimento ?? 0) >= 21
-                                ? 'text-[#fb923c] font-semibold'
-                                : 'text-slate-300'
-                            }`}
-                          >
-                            {formatarMovimento(t.dias_sem_movimento, t.atualizada_em)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="border-2 border-dashed border-slate-700 bg-[#0f172a]/60 p-6 text-center text-xs text-slate-400">
-            Nenhuma tarefa encontrada com os filtros selecionados.
-          </div>
-        )}
-      </div>
-    </PixelJanela>
-  )
-}
-
 export function Tarefas({ estado, vista }: PropsTela) {
-  const dados = estado.tarefas
   const { dados: vivos, carregando: carregandoVivos, erro: erroVivos, falhouHaSegundos } = useAgentesVivos()
-  const erro = dados?.erro ?? (!dados ? 'a medição de tarefas não veio no estado atual' : null)
   const ativos = vivos?.contagem?.trabalhando ?? 0
+  const totalVivos = (vivos?.contagem?.trabalhando ?? 0) + (vivos?.contagem?.silencioso ?? 0)
   // A sonda é a única fonte de presença; o catálogo do escritório completa o restante.
   const listaVivos = vivos?.agentes ?? []
   const catalogoPixel = useMemo(() => montarCatalogoPixel(estado.agentes, estado.sessao), [estado.agentes, estado.sessao])
 
   const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal' | 'squad'>('office')
   const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
-  const [filtroListaTarefas, setFiltroListaTarefas] = useState<FiltroTarefas | null>(null)
 
-  const alternarFiltro = (filtro: FiltroTarefas) => {
-    setFiltroListaTarefas((atual) => (atual === filtro ? null : filtro))
-  }
+  const aprovacoesItens = estado.aprovacoes?.itens ?? []
+  const aprovacoesPendentes = aprovacoesItens.filter((i) => i.estado === 'aguardando' || i.estado === 'pendente')
+  const totalRetornos = estado.agentes.reduce((s, a) => s + (a.retornos_registrados || 0), 0)
 
   const agenteSelecionado: AgenteVivo | undefined =
     listaVivos.find((a) =>
@@ -548,7 +273,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
             <div className="flex items-center gap-2.5">
               <span className="inline-block size-5 bg-[#a3e635] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] animate-pulse" />
               <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-[#facc15]">
-                [ 👾 PIXEL AGENTS & TAREFAS GTD ]
+                [ 👾 ESCRITÓRIO DOS AGENTES ]
               </h1>
             </div>
             <p className="mt-2 text-xs sm:text-sm text-slate-300 max-w-4xl leading-relaxed">
@@ -597,7 +322,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
             </div>
 
             <div className="border-2 border-black bg-[#0f172a] px-3.5 py-2 text-xs font-bold text-[#38bdf8] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              {dados?.coletado_em ? `📡 SYNC: ${new Date(dados.coletado_em).toLocaleString('pt-BR')}` : 'OFFLINE'}
+              {estado?.gerado_em ? `📡 SYNC: ${new Date(estado.gerado_em).toLocaleString('pt-BR')}` : 'OFFLINE'}
             </div>
           </div>
         </div>
@@ -821,191 +546,124 @@ export function Tarefas({ estado, vista }: PropsTela) {
         </PixelJanela>
       )}
 
-      {erro ? (
-        <section
-          className="border-4 border-black bg-[#450a0a] p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
-          data-erro-tarefas
+      {/* Grid de KPIs Pixel Art com Números Grandes */}
+      <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+        <PixelKpi
+          rotulo="AGENTES VIVOS"
+          valor={totalVivos}
+          cor="text-[#a3e635]"
+          nota={`${ativos} executando agora`}
+        />
+        <PixelKpi
+          rotulo="CATÁLOGO FROTA"
+          valor={catalogoPixel.length}
+          cor="text-[#38bdf8]"
+          nota="agentes catalogados"
+        />
+        <PixelKpi
+          rotulo="APROVAÇÕES PENDENTES"
+          valor={aprovacoesPendentes.length}
+          cor="text-[#facc15]"
+          nota="aguardando decisão humana"
+        />
+        <PixelKpi
+          rotulo="CONVOCAÇÕES TOTAIS"
+          valor={estado.resumo.convocacoes_total}
+          cor="text-[#c084fc]"
+          nota="chamadas registradas"
+        />
+        <PixelKpi
+          rotulo="RETORNOS CONFIRMADOS"
+          valor={totalRetornos}
+          cor="text-[#34d399]"
+          nota="relatórios e entregas"
+        />
+        <PixelKpi
+          rotulo="DEPARTAMENTOS"
+          valor={Object.keys(estado.squads).length}
+          cor="text-[#fb923c]"
+          nota="squads estruturados"
+        />
+      </div>
+
+      {/* Janelas Secundárias de Trabalho dos Agentes */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <PixelJanela
+          titulo="FILA DE APROVAÇÕES DE AGENTES"
+          badge={`${aprovacoesPendentes.length} PENDENTES`}
+          corBadge={aprovacoesPendentes.length > 0 ? 'text-[#facc15]' : 'text-[#a3e635]'}
         >
-          <div className="flex items-center gap-2 text-sm font-black uppercase text-[#f87171]">
-            <span>⚠ FONTE INCOMPLETA</span>
-          </div>
-          <p className="mt-2 text-xs text-slate-200">{erro}</p>
-          <p className="mt-2 text-[11px] text-slate-400">
-            Nenhuma contagem parcial virou zero. A carteira reaparece quando a API responder.
-          </p>
-        </section>
-      ) : (
-        <>
-          {dados?.truncado && (
-            <div className="border-3 border-black bg-[#451a03] p-3.5 text-xs text-[#fbbf24] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              ⚠️ Limite de 200 itens atingido num estado. Os números exibidos representam contagens mínimas.
-            </div>
-          )}
-
-          {/* Grid de KPIs Pixel Art com Números Grandes */}
-          <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-            <PixelKpi
-              rotulo="TAREFAS ABERTAS"
-              valor={dados?.total_abertas}
-              cor="text-[#facc15]"
-              nota="carteira GTD total ativa · clique p/ ver"
-              onClick={() => alternarFiltro('todas')}
-              ativo={filtroListaTarefas === 'todas'}
-            />
-            <PixelKpi
-              rotulo="CANDIDATAS A ARQUIVAR"
-              valor={
-                dados?.total_candidatas_arquivar ??
-                dados?.itens?.filter((i) => i.parece_abandonada).length ??
-                0
-              }
-              cor="text-[#fb923c]"
-              nota="sem prazo, +21d paradas · clique p/ ver"
-              onClick={() => alternarFiltro('abandonadas')}
-              ativo={filtroListaTarefas === 'abandonadas'}
-            />
-            <PixelKpi
-              rotulo="BACKLOG · GUARDADAS"
-              valor={dados?.total_backlog ?? dados?.por_status?.backlog}
-              cor="text-slate-400"
-              nota="fora da carteira ativa"
-            />
-            <PixelKpi
-              rotulo="EM ANDAMENTO"
-              valor={dados?.por_status?.doing}
-              cor="text-[#38bdf8]"
-              nota="sendo executadas agora"
-            />
-            <PixelKpi
-              rotulo="ATRASADAS"
-              valor={dados?.por_prazo?.atrasadas}
-              cor={(dados?.por_prazo?.atrasadas ?? 0) > 0 ? 'text-[#f87171]' : 'text-[#a3e635]'}
-              nota="requerem atenção urgente"
-            />
-            <PixelKpi
-              rotulo="SEM PRAZO"
-              valor={dados?.por_prazo?.sem_prazo}
-              cor="text-[#fbbf24]"
-              nota="não agendadas no calendário · clique p/ ver"
-              onClick={() => alternarFiltro('sem_prazo')}
-              ativo={filtroListaTarefas === 'sem_prazo'}
-            />
-          </div>
-
-          {/* Lista Expandida de Tarefas Abertas */}
-          {filtroListaTarefas && (
-            <div id="lista-tarefas-abertas">
-              <ListaTarefasAbertas
-                itens={dados?.itens ?? []}
-                filtroAtivo={filtroListaTarefas}
-                aoMudarFiltro={(f) => setFiltroListaTarefas(f)}
-                aoFechar={() => setFiltroListaTarefas(null)}
-              />
-            </div>
-          )}
-
-          {/* 3 Janelas Secundárias de GTD */}
-          <div className="grid gap-5 lg:grid-cols-3">
-            <PixelJanela titulo="ESTADO DA CARTEIRA" badge={`${dados?.total_abertas ?? 0} ATIVAS`}>
-              <div className="space-y-4">
-                {STATUS_ATIVAS.map(([chave, nome]) => (
-                  <PixelLinha
-                    key={chave}
-                    nome={nome}
-                    valor={dados?.por_status?.[chave]}
-                    total={dados?.total_abertas}
-                    cor="bg-[#38bdf8]"
-                  />
-                ))}
-                <div className="border-t border-slate-700/80 pt-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold uppercase text-slate-400">Backlog · guardadas</span>
-                    <span className="font-black tabular-nums text-slate-300">
-                      {dados?.total_backlog ?? dados?.por_status?.backlog ?? '—'}
+          {aprovacoesPendentes.length > 0 ? (
+            <div className="space-y-2.5">
+              {aprovacoesPendentes.slice(0, 6).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex flex-wrap items-center justify-between gap-2 border-2 border-black bg-[#0f172a] p-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block size-2 rounded-full bg-[#facc15]" />
+                      <span className="truncate font-mono text-xs font-bold text-white">
+                        {item.titulo || item.id}
+                      </span>
+                    </div>
+                    <span className="mt-0.5 block text-[10.5px] text-slate-400">
+                      Origem: {item.origem} · Tipo: {item.tipo}
                     </span>
                   </div>
-                  <div className="mt-1 text-[10px] text-slate-500">
-                    tarefas estagnadas guardadas, fora da carteira ativa
-                  </div>
-                </div>
-              </div>
-            </PixelJanela>
-
-            <PixelJanela titulo="PRESSÃO DE PRAZO" badge="DEADLINES" corBadge="text-[#facc15]">
-              <div className="space-y-4">
-                {PRAZOS.map(([chave, nome]) => (
-                  <PixelLinha
-                    key={chave}
-                    nome={nome}
-                    valor={dados?.por_prazo[chave]}
-                    total={dados?.total_abertas}
-                    cor={chave === 'atrasadas' ? 'bg-[#f87171]' : 'bg-[#facc15]'}
-                    onClick={chave === 'sem_prazo' ? () => alternarFiltro('sem_prazo') : undefined}
-                    clicavel={chave === 'sem_prazo'}
-                  />
-                ))}
-              </div>
-            </PixelJanela>
-
-            <PixelJanela titulo="MOVIMENTO CADASTRO" badge="ATIVIDADE" corBadge="text-[#a3e635]">
-              <div className="flex flex-col justify-between h-full">
-                <div className="space-y-4">
-                  {MOVIMENTO.map(([chave, nome]) => (
-                    <PixelLinha
-                      key={chave}
-                      nome={nome}
-                      valor={dados?.por_movimento[chave]}
-                      total={dados?.total_abertas}
-                      cor="bg-[#a3e635]"
-                      onClick={
-                        chave === 'sem_atualizacao_30_dias'
-                          ? () => alternarFiltro('sem_movimento')
-                          : undefined
-                      }
-                      clicavel={chave === 'sem_atualizacao_30_dias'}
-                    />
-                  ))}
-                </div>
-                <div className="mt-4 pt-3 border-t border-slate-700/80 flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-slate-400">
-                    Mede a última alteração do registro no sistema GTD.
+                  <span className="border border-black bg-[#facc15]/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-[#facc15]">
+                    {item.estado}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => alternarFiltro('sem_movimento')}
-                    className="border border-black bg-[#1e293b] px-2 py-1 text-[10px] font-bold text-[#a3e635] hover:bg-slate-700 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
-                  >
-                    {filtroListaTarefas === 'sem_movimento' ? '▲ FECHAR' : 'VER SEM MOVIMENTO ▼'}
-                  </button>
                 </div>
-              </div>
-            </PixelJanela>
-          </div>
-
-          {/* Carga por Projeto — Expansão Multi-Coluna */}
-          <PixelJanela
-            titulo="CARGA POR PROJETO"
-            subtitulo="Estoque de tarefas abertas por projeto no gerenciador GTD"
-            badge={`${dados?.por_projeto.length ?? 0} PROJETOS`}
-            corBadge="text-[#c084fc]"
-          >
-            <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
-              {dados?.por_projeto.map((p) => (
-                <PixelLinha
-                  key={p.projeto}
-                  nome={p.projeto}
-                  valor={p.total}
-                  total={dados.total_abertas}
-                  cor="bg-[#c084fc]"
-                />
               ))}
+              {aprovacoesPendentes.length > 6 && (
+                <div className="text-center text-[11px] text-slate-400 pt-1">
+                  + {aprovacoesPendentes.length - 6} item(ns) aguardando na fila
+                </div>
+              )}
             </div>
-            <p className="mt-5 border-t border-slate-700 pt-3 text-xs text-slate-400">
-              Estoque de tarefas abertas por projeto no gerenciador GTD. Títulos e dados sensíveis são omitidos por segurança.
-            </p>
-          </PixelJanela>
-        </>
-      )}
+          ) : (
+            <div className="p-6 text-center text-xs text-slate-400 border-2 border-dashed border-slate-700 bg-[#0f172a]/50">
+              Nenhuma aprovação pendente no momento. Toda a frota está liberada para execução.
+            </div>
+          )}
+        </PixelJanela>
+
+        <PixelJanela
+          titulo="DISTRIBUIÇÃO POR DEPARTAMENTO"
+          badge={`${estado.agentes.length} AGENTES`}
+          corBadge="text-[#38bdf8]"
+        >
+          <div className="space-y-4">
+            {ORDEM_SQUAD.map((squadId) => {
+              const squadAgentes = porSquad(estado, squadId)
+              const nome = estado.squads[squadId]?.nome ?? squadId
+              return (
+                <PixelLinha
+                  key={squadId}
+                  nome={nome}
+                  valor={squadAgentes.length}
+                  total={estado.agentes.length}
+                  cor="bg-[#38bdf8]"
+                />
+              )
+            })}
+          </div>
+          <p className="mt-4 border-t border-slate-700 pt-2.5 text-[10.5px] text-slate-400">
+            Mede o efetivo catalogado em cada departamento ativo do painel.
+          </p>
+        </PixelJanela>
+      </div>
+
+      {/* Nota de Governança de Arquitetura */}
+      <div className="border-2 border-black bg-[#0f172a] p-4 text-xs text-slate-300 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[#a3e635]">
+          <span>🛡️ ISOLAMENTO DE CARTEIRA PESSOAL</span>
+        </div>
+        <p className="mt-1.5 text-[11px] leading-relaxed text-slate-300">
+          O Painel OS exibe exclusivamente a operação e o trabalho dos agentes autônomos. As tarefas pessoais e compromissos GTD foram isolados no sistema pessoal do Gastão, sem cruzamento com o painel público.
+        </p>
+      </div>
     </div>
   )
 }

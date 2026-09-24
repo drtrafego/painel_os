@@ -47,8 +47,9 @@ export function Comando({
   const antiga = maisAntiga(estado)
   const { disparos, ilegiveis } = proximosDisparos(estado.cron.jobs ?? [], agora, 60)
   const hora = new Date(medidoEm).toLocaleTimeString('pt-BR', { timeZone: 'UTC', hour12: false })
-  const tarefas = estado.tarefas
-  const tarefasOk = Boolean(tarefas && !tarefas.erro && tarefas.total_abertas !== null)
+  const aprovacoes = estado.aprovacoes
+  const aprovacoesOk = Boolean(aprovacoes && !aprovacoes.erro && typeof aprovacoes.total === 'number')
+  const totalPendentes = aprovacoesOk ? (aprovacoes?.itens.filter((i) => i.estado === 'aguardando' || i.estado === 'pendente').length ?? 0) : null
   const pipeline = estado.pipeline
   const pipelineOk = Boolean(pipeline && !pipeline.erro && pipeline.total !== null)
   const followup = estado.followup
@@ -100,9 +101,9 @@ export function Comando({
           }
         />
         <Kpi
-          rotulo="tarefas abertas no GTD"
-          valor={tarefasOk ? tarefas?.total_abertas : null}
-          nota={tarefasOk ? `${tarefas?.por_status.doing ?? 0} em andamento · ${tarefas?.por_prazo.sem_prazo ?? 0} sem prazo` + (tarefas?.total_backlog ? ` · ${tarefas.total_backlog} guardadas` : '') : (tarefas?.erro ?? 'fonte ainda não veio no estado')}
+          rotulo="aprovações pendentes"
+          valor={aprovacoesOk ? totalPendentes : null}
+          nota={aprovacoesOk ? `${totalPendentes} aguardando decisão humana` : (aprovacoes?.erro ?? 'fila de aprovações')}
         />
         <Kpi
           rotulo="convocações medidas"
@@ -123,7 +124,7 @@ export function Comando({
         />
       </div>
 
-      <Cobertura estado={estado} tarefasOk={tarefasOk} pipelineOk={pipelineOk} followupOk={followupOk} />
+      <Cobertura estado={estado} aprovacoesOk={aprovacoesOk} totalPendentes={totalPendentes} pipelineOk={pipelineOk} followupOk={followupOk} />
 
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
         <Saude estado={estado} antiga={antiga} aoIr={aoIr} />
@@ -178,9 +179,9 @@ export function Comando({
   )
 }
 
-function Cobertura({ estado, tarefasOk, pipelineOk, followupOk }: { estado: Estado; tarefasOk: boolean; pipelineOk: boolean; followupOk: boolean }) {
+function Cobertura({ estado, aprovacoesOk, totalPendentes, pipelineOk, followupOk }: { estado: Estado; aprovacoesOk: boolean; totalPendentes: number | null; pipelineOk: boolean; followupOk: boolean }) {
   const fontes = [
-    ['tarefas', tarefasOk, tarefasOk ? `${estado.tarefas?.total_abertas} abertas no GTD, não fila de agentes` : (estado.tarefas?.erro ?? 'não medida')],
+    ['aprovações', aprovacoesOk, aprovacoesOk ? `${totalPendentes} aguardando decisão humana` : (estado.aprovacoes?.erro ?? 'não medida')],
     ['CRM agregado', pipelineOk, pipelineOk ? `${estado.pipeline?.total} registros em ${estado.pipeline?.organizacoes} organizações isoladas` : (estado.pipeline?.erro ?? 'não medido')],
     ['follow-up', followupOk, followupOk ? `${estado.followup?.envios_registrados_no_log} envios registrados no log` : (estado.followup?.erro ?? 'não medido')],
     ['verificadores', estado.sessao.some((s) => !ilegivel(s)), `${estado.sessao.filter((s) => !ilegivel(s)).length} de ${estado.sessao.length} lidos`],

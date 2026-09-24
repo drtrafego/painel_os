@@ -129,12 +129,13 @@ const SONDAS: Partial<Record<VistaId, Sonda>> = {
   },
 
   tarefas: (e) => {
-    const d = e.tarefas
-    if (!d) return { respondeu: false, porque: 'a API de tarefas não veio no estado atual' }
-    if (d.erro || d.total_abertas === null) {
-      return { respondeu: false, porque: d.erro ?? 'a API respondeu e não deu para contar' }
+    if (!e.agentes || !e.agentes.length) {
+      return { respondeu: false, porque: 'o catálogo de agentes operacionais não veio no estado atual' }
     }
-    return { respondeu: true, fonte: `${d.total_abertas} tarefa(s) abertas na API do gestor, somente leitura` }
+    return {
+      respondeu: true,
+      fonte: `${e.agentes.length} agente(s) no catálogo operacional · escritório integrado com terminal ao vivo`,
+    }
   },
 
   pipeline: (e) => {

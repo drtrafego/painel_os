@@ -28,17 +28,24 @@ export type Ferramenta = {
   estado: 'disponível' | 'fallback' | 'ausente'
 }
 
-export type TarefaGtd = {
-  id: string
-  titulo: string
-  projeto: string
-  status: 'todo' | 'doing' | 'waiting' | 'backlog'
-  prioridade?: string
-  criada_em?: string | null
-  prazo?: string | null
-  atualizada_em?: string | null
-  dias_sem_movimento?: number
-  parece_abandonada?: boolean
+export type ChecagemFiscal = {
+  checagem: string
+  passa: number
+  bloqueia: number
+}
+
+export type DadosFiscalComercial = {
+  status: 'pronto' | 'sem_dado' | 'erro'
+  atualizado_em: string | null
+  erro?: string | null
+  por_checagem: ChecagemFiscal[]
+  total_passa: number | null
+  total_bloqueia: number | null
+  checagem_mais_disparada: string | null
+  meta_agendamentos?: {
+    status: string
+    texto: string
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -379,19 +386,7 @@ export type Estado = {
 
   pecas: Pecas
 
-  tarefas?: {
-    erro?: string
-    total_abertas: number | null
-    total_backlog?: number | null
-    total_candidatas_arquivar?: number | null
-    por_status: Record<string, number>
-    por_prazo: Record<string, number>
-    por_movimento: Record<string, number>
-    por_projeto: { projeto: string; total: number }[]
-    itens?: TarefaGtd[]
-    truncado?: boolean
-    coletado_em?: string
-  }
+  comercial?: DadosFiscalComercial
 
   aprovacoes?: {
     erro?: string

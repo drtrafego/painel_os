@@ -8,7 +8,7 @@ export function CardComando({ agente }: { agente: AgenteSessao }) {
   const v = agente.verificador
   const motor = lerMotores(agente.motores)
   const cor = corDoCardComando(agente.id)
-  const leituraSessao = leituraEstadoSessao(agente.estado, agente.ultima_atividade)
+  const leituraSessao = leituraEstadoSessao(agente.estado, agente.ultima_atividade, agente.id)
   // Indeterminada NAO passou: o verificador nao conseguiu medir aquela. Sair
   // da conta dos verdes era contar como aprovada a checagem que nao olhou.
   const verdes =

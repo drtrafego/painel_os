@@ -135,7 +135,7 @@ export const VISTAS: readonly Vista[] = [
   },
   {
     id: 'tarefas',
-    nome: 'Tarefas',
+    nome: 'Escritório',
     pergunta: 'o que está em aberto, de quem é, e o que vence primeiro',
     icone: 'tarefas',
     dado: {

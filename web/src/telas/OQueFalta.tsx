@@ -31,11 +31,6 @@ export function OQueFalta({ estado, agora, vista }: PropsTela) {
   const falhasLuana = verifLuana?.falhas ?? []
   const falhasRenato = verifRenato?.falhas ?? []
 
-  // 5. Tarefas sem prazo ou paradas
-  const tarefas = estado.tarefas
-  const tarefasSemPrazo = tarefas?.por_prazo?.sem_prazo ?? 0
-  const tarefasSemMovimento = tarefas?.por_movimento?.sem_atualizacao_30_dias ?? 0
-
   return (
     <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       <TituloDaTela
@@ -147,17 +142,6 @@ export function OQueFalta({ estado, agora, vista }: PropsTela) {
                 No coletor, peças marcadas como <code className="text-tinta">pendente</code> não possuem pasta em disco porque ainda não foram geradas, tornando o botão "enviar para aprovação" desabilitado em 100% dos casos.
               </p>
               <span className="mt-2 block font-mono text-[9.5px] text-tinta-3">O dono precisa definir o vocabulário: qual status identifica "peça produzida aguardando decisão"?</span>
-            </div>
-
-            <div className="poco p-3">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[12px] font-semibold text-tinta">Tarefas Paradas na Carteira GTD</span>
-                <Pilula tom={tarefasSemMovimento > 0 ? 'ambar' : 'neutro'}>{tarefasSemMovimento} estagnadas</Pilula>
-              </div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-tinta-2">
-                {tarefasSemPrazo} tarefas sem prazo definido e {tarefasSemMovimento} tarefas sem movimentação de cadastro há mais de 30 dias na carteira aberta.
-              </p>
-              <span className="mt-2 block font-mono text-[9.5px] text-tinta-3">Falta: triagem e encerramento ou priorização no gestor de tarefas.</span>
             </div>
           </div>
         </section>

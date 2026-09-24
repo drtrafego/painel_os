@@ -1,5 +1,5 @@
 import type { AgenteSessao } from '../dados/tipos'
-import { corDaSessao } from './paleta.ts'
+import { corDaSessao, generoDaSessao } from './paleta.ts'
 
 export function corDoCardComando(agenteId: string): string {
   return corDaSessao(agenteId)
@@ -38,6 +38,7 @@ function formatarIdadeCurta(ms: number): string {
 export function leituraEstadoSessao(
   estado: AgenteSessao['estado'],
   ultimaAtividade: string | null | undefined,
+  agenteId: string,
   agora = new Date(),
 ): LeituraEstadoSessao {
   if (!estado || estado === 'sem_sessao' || estado === 'indeterminado') {
@@ -54,8 +55,9 @@ export function leituraEstadoSessao(
   }
 
   if (estado === 'ocioso' && ultima) {
+    const ocioso = generoDaSessao(agenteId) === 'm' ? 'ocioso' : 'ociosa'
     return {
-      texto: `ociosa há ${formatarIdadeCurta(agora.getTime() - ultima.getTime())}`,
+      texto: `${ocioso} há ${formatarIdadeCurta(agora.getTime() - ultima.getTime())}`,
       tom: 'ambar',
       titulo: `última atividade ${formatarHorarioBrasilia(ultima)}`,
     }

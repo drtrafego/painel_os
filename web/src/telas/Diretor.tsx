@@ -23,10 +23,13 @@ const ICONE_POR_ID: Record<string, NomeIcone> = {
   'cleo-produtor': 'texto', 'dani-designer': 'pincel', guardiao: 'escudo', maestro: 'coroa',
   'cont-radar': 'radar', 'cont-estrategista': 'comando', 'cont-copy': 'texto',
   'cont-designer': 'pincel', 'cont-qa': 'escudo', 'cont-corretor': 'escudo',
+  'otto-radar': 'radar', 'zara-triagem': 'radar', 'bento-estrategista': 'comando',
+  'maya-abordagem': 'texto', 'olga-fiscal': 'escudo', 'caio-operador': 'pipeline',
+  'hugo-analista': 'grafico',
   luana: 'coroa', renato: 'bot', bia: 'megafone',
 }
 
-type MapaDiretor = {
+export type MapaDiretor = {
   titulo: string
   src: string
   descricao: string
@@ -204,8 +207,6 @@ export function Diretor({
           </section>
 
           {agente && <ContratoOperacional sops={sops} estado={estado} cor={cor} aoIr={aoIr} />}
-
-          <CargaETarefas agente={agente} estado={estado} cor={cor} />
         </div>
 
         <div className="space-y-3">
@@ -411,7 +412,7 @@ function CabecalhoAgente({ agente, cor, agora }: { agente: Agente; cor: string; 
   )
 }
 
-function SecaoMapaDoFluxo({ mapa, cor }: { mapa: MapaDiretor; cor: string }) {
+export function SecaoMapaDoFluxo({ mapa, cor }: { mapa: MapaDiretor; cor: string }) {
   return (
     <section className="carta mt-3 w-full min-w-0 overflow-hidden" aria-labelledby="mapa-fluxo-diretor">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-linha px-4 py-4">
@@ -588,26 +589,6 @@ function Lado({
         </ul>
       )}
     </div>
-  )
-}
-
-function CargaETarefas({ agente, estado, cor }: { agente: Agente | null; estado: Estado; cor: string }) {
-  const tarefas = estado.tarefas
-  const tarefasOk = Boolean(tarefas && !tarefas.erro && tarefas.total_abertas !== null)
-  return (
-    <section className="carta p-4" data-carga-agente>
-      <Cabecalho cor={cor} meta="fontes independentes">atividade e tarefas</Cabecalho>
-      <div className="grid grid-cols-3 gap-2">
-        <Numero rotulo="convoc. 24h" valor={agente ? agente.convocacoes_24h ?? 0 : null} tamanho="text-[22px]" />
-        <Numero rotulo="convoc. 7d" valor={agente ? agente.convocacoes_7d ?? 0 : null} tamanho="text-[22px]" />
-        <Numero rotulo="carteira GTD" valor={tarefasOk ? tarefas?.total_abertas : null} tamanho="text-[22px]" cor="text-tinta-2" />
-      </div>
-      <p className="mt-3 border-t border-linha pt-2.5 text-[10.5px] leading-relaxed text-tinta-3">
-        Convocação é chamada registrada em transcript, não tarefa em execução. A API de tarefas mede
-        {tarefasOk ? ` ${tarefas?.total_abertas} abertas, ${tarefas?.por_status.doing ?? 0} em andamento e ${tarefas?.por_prazo.sem_prazo ?? 0} sem prazo` : ' a carteira como indisponível'},
-        mas não oferece responsável. Por isso nenhuma dessas tarefas foi atribuída a este agente na ficha.
-      </p>
-    </section>
   )
 }
 

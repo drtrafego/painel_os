@@ -4,7 +4,7 @@
 
 import type { Agente, AgenteSessao, Aresta, Estado } from './tipos'
 
-export const ORDEM_SQUAD = ['global', 'conteudo', 'pipeline-luana']
+export const ORDEM_SQUAD = ['global', 'conteudo', 'comercial', 'pipeline-luana']
 
 export type SituacaoDiretiva =
   | { estado: 'sem-fonte'; porque: string }
