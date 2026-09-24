@@ -1,12 +1,13 @@
 import { Icone } from './Icone'
 import { reprovadas } from '../dados/estado'
 import { horaGastao, horaUtc, proximosDisparos } from '../dados/cron'
+import { COR_DA_SESSAO } from './paleta'
 import type { Estado } from '../dados/tipos'
 import type { FiltroId } from './Acoes'
 
 const CORES_DONO: Record<string, string> = {
-  luana: 'var(--color-lima)',
-  renato: 'var(--color-ciano)',
+  luana: COR_DA_SESSAO.luana,
+  renato: COR_DA_SESSAO.renato,
 }
 
 export function Detalhe({

@@ -14,6 +14,7 @@ export const ACENTO = {
   latao: '#F5A623',
   azul: '#3E6E8E',
   tabaco: '#7A6A57',
+  renato: '#C2410C',
 } as const
 
 /** Identidade visual dos grupos, separada do estado transitório. */
@@ -24,6 +25,7 @@ export const IDENTIDADE = {
   verde: ACENTO.azul,
   agua: ACENTO.azul,
   pervinca: ACENTO.tabaco,
+  renato: ACENTO.renato,
 } as const
 
 export type CorIdentidade = keyof typeof IDENTIDADE
@@ -57,7 +59,7 @@ export const COR_DO_SQUAD: Record<string, string> = {
 
 export const COR_DA_SESSAO: Record<string, string> = {
   luana: IDENTIDADE.lima,
-  renato: IDENTIDADE.agua,
+  renato: IDENTIDADE.renato,
   bia: IDENTIDADE.pervinca,
 }
 

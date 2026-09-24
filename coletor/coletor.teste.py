@@ -14,6 +14,7 @@ import importlib
 import datetime
 import io
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -605,7 +606,7 @@ print("\n--- ferramentas: estados separados e saída sem segredo")
 ferramentas = c.ler_ferramentas()
 conferir("inventário tem itens", ferramentas["medidos"] > 0, True)
 conferir("as três classes estão contadas", set(ferramentas["contagem"]), {"disponível", "fallback", "ausente"})
-conferir("Meta é fallback, não disponibilidade completa", next(x for x in ferramentas["itens"] if x["nome"] == "Meta Ads")["estado"], "fallback")
+conferir("Meta é fallback, não disponibilidade completa", next(x for x in ferramentas["itens"] if x["id"] == "integracao-meta")["estado"], "fallback")
 conferir("inventário é maior que os três MCPs", ferramentas["medidos"] > ferramentas["por_tipo"]["MCP"], True)
 conferir("cada item declara proveniência", all(x["proveniencias"] for x in ferramentas["itens"]), True)
 serializado = str(ferramentas).lower()
@@ -926,6 +927,8 @@ conferir("notificação sem id vira buraco declarado, não retorno",
 conferir("as sete chamadas continuam contadas como convocação",
          conv["por_agente"], {"so-lancou": 1, "voltou": 1, "sincrono": 1,
                               "com-erro": 1, "morto": 1, "com-bash": 1})
+conferir("fixture Agent não deixa o total de convocações zerar",
+         conv["total"], sum(conv["por_agente"].values()))
 shutil.rmtree(tmp_claude, ignore_errors=True)
 shutil.rmtree(tmp_sem_codex, ignore_errors=True)
 
@@ -1278,10 +1281,73 @@ squads_teste = {
 }
 wf_hoje = c.gerar_workflow_quem_convoca_quem("hoje", janelas["hoje"], agentes_teste, squads_teste)
 conferir("workflow schema_version é 2", wf_hoje.get("schema_version"), 2)
-conferir("arestas sem chamadas não aparecem no workflow", all(e.get("calls", 0) > 0 for e in wf_hoje.get("edges", [])), True)
+conferir("arestas sem chamadas não aparecem no workflow", all(not str(e.get("label", "")).startswith("0 chamada") for e in wf_hoje.get("edges", [])), True)
+conferir("workflow mantém os três diretores mesmo com zero chamadas na janela",
+         [n["id"] for n in wf_hoje.get("nodes", []) if n.get("lane") == "diretoria"],
+         ["luana", "renato", "bia"])
+renato_wf = next((n for n in wf_hoje.get("nodes", []) if n.get("id") == "renato"), {})
+conferir("workflow mantém Renato na diretoria", renato_wf.get("lane"), "diretoria")
 html_hoje = c.renderizar_html_workflow_quem_convoca_quem(wf_hoje)
 conferir("mapa html gerado é documento válido", "<!DOCTYPE html>" in html_hoje and "<svg" in html_hoje, True)
+conferir("mapa html colore Renato de laranja", f'stroke="{c.COR_RENATO}"' in html_hoje, True)
+
+janela_origem_luana = {
+    "rotulo": "Origem capitalizada",
+    "total": 2,
+    "por_agente": {"copywriter": 2},
+    "convocacoes_fora_da_casa": {},
+    "arestas": [{"de": "Luana", "de_tipo": "sessao", "para": "copywriter", "vezes": 2}],
+}
+wf_origem_luana = c.gerar_workflow_quem_convoca_quem("teste", janela_origem_luana, agentes_teste, squads_teste)
+conferir("workflow não zera arestas de sessão Luana capitalizada",
+         [(e.get("from"), e.get("to"), e.get("label")) for e in wf_origem_luana.get("edges", [])],
+         [("luana", "copywriter", "2 chamadas")])
+
+agentes_mapa_largo = [
+    {"id": "luana", "nome": "Luana", "papel": "CEO"},
+    {"id": "renato", "nome": "Renato", "papel": "CRO"},
+    {"id": "bia", "nome": "Bia", "papel": "Diretora"},
+]
+agentes_mapa_largo.extend({"id": f"global-{i}", "nome": f"Global {i}", "squad": "global"} for i in range(18))
+agentes_mapa_largo.extend({"id": f"conteudo-{i}", "nome": f"Conteúdo {i}", "squad": "conteudo"} for i in range(8))
+agentes_mapa_largo.extend({"id": f"pipeline-{i}", "nome": f"Pipeline {i}", "squad": "pipeline-luana"} for i in range(6))
+janela_mapa_largo = {
+    "rotulo": "Teste largo",
+    "total": len(agentes_mapa_largo),
+    "por_agente": {},
+    "convocacoes_fora_da_casa": {"fora": 2},
+    "arestas": [{"de": "luana", "de_tipo": "sessao", "para": ag["id"], "vezes": 1} for ag in agentes_mapa_largo if ag["id"] not in {"luana", "renato", "bia"}],
+}
+wf_largo = c.gerar_workflow_quem_convoca_quem("teste", janela_mapa_largo, agentes_mapa_largo, c.SQUADS)
+cols_largas = {}
+for node in wf_largo.get("nodes", []):
+    if node.get("lane") != "diretoria":
+        cols_largas[node.get("col")] = cols_largas.get(node.get("col"), 0) + 1
+conferir("workflow horizontal usa as cinco colunas à direita", sorted(cols_largas), [1, 2, 3, 4, 5])
+conferir("workflow evita coluna vertical comprida", max(cols_largas.values()), 8)
+
+print("\n--- sessões de diretoras sempre visíveis")
+conferir("catálogo de sessão tem os três diretores", [s["id"] for s in c.SESSAO], ["luana", "renato", "bia"])
+tmp_sessao = Path(tempfile.mkdtemp())
+try:
+    pasta_bia = tmp_sessao / "casa" / "bia"
+    projetos = tmp_sessao / "projects"
+    projeto_bia = projetos / c._projeto_claude_da_pasta(pasta_bia)
+    projeto_bia.mkdir(parents=True)
+    antigo = projeto_bia / "antigo.jsonl"
+    novo = projeto_bia / "novo.jsonl"
+    antigo.write_text("{}\n", encoding="utf-8")
+    novo.write_text("{}\n", encoding="utf-8")
+    t_antigo = agora_ref.timestamp() - 7200
+    t_novo = agora_ref.timestamp() - 900
+    os.utime(antigo, (t_antigo, t_antigo))
+    os.utime(novo, (t_novo, t_novo))
+    presenca = c.ler_presenca_sessao({"pasta": pasta_bia}, projetos=projetos, agora=agora_ref)
+    esperado_ultima = datetime.datetime.fromtimestamp(t_novo, tz=datetime.timezone.utc).isoformat()
+    conferir("presença usa o jsonl mais novo", (presenca["estado"], presenca["ultima_atividade"]), ("ocioso", esperado_ultima))
+    conferir("presença não publica caminho", c.auditar_estado_publico(presenca), [])
+finally:
+    shutil.rmtree(tmp_sessao, ignore_errors=True)
 
 print("\n" + ("TODOS PASSARAM" if falhas == 0 else f"{falhas} FALHA(S)"))
 sys.exit(0 if falhas == 0 else 1)
-

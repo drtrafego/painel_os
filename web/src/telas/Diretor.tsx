@@ -4,6 +4,7 @@ import { descreverServico, lerMotores, nomeMotor } from '../dados/motores'
 import { corDaSessao, corDoSquad } from '../ui/paleta'
 import { acharAgente, acharSessao, atividade, convocadores, convocados, diasParado } from '../dados/estado'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
+import { acharAgenteAoVivoDoDiretor } from './diretor-vivo'
 import type { VistaId, Vista } from '../nav/rotas'
 import type { Agente, AgenteSessao, Estado, Sop } from '../dados/tipos'
 
@@ -83,7 +84,7 @@ const TOM_ATIVIDADE: Record<string, Tom> = {
  * quatro dos seis detalhes na referencia e achou template IDENTICO, trocando
  * so cor, icone e conteudo. Isso e o mesmo principio do arquivo de estado:
  * acrescentar um diretor e acrescentar uma entrada, nao refazer a tela. Aqui
- * ele vale duas vezes, porque a mesma tela desenha os 31 especialistas E os 2
+ * ele vale duas vezes, porque a mesma tela desenha os 31 especialistas E os 3
  * agentes de sessao, que sao coisas diferentes com campos diferentes.
  *
  * O QUE E MEDIDO E O QUE NAO E, e isto vai NA TELA e nao aqui no comentario:
@@ -130,7 +131,7 @@ export function Diretor({
   const chegam = convocadores(estado, quem)
   const sops = sopsLigados(estado, quem)
   const { dados: aoVivo } = useAgentesVivos()
-  const aoVivoItem = aoVivo?.agentes?.find((a) => a.id === quem || a.id.includes(quem))
+  const aoVivoItem = acharAgenteAoVivoDoDiretor(aoVivo?.agentes ?? [], quemNormalizado)
   const mapaFluxo = MAPAS_DIRETORES[quemNormalizado]
 
   return (

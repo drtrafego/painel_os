@@ -4,6 +4,8 @@
  * de /api/agentes-vivos; um item sem sessão nunca é promovido a "executando".
  */
 
+import { corDaSessao } from '../ui/paleta.ts'
+
 export type PixelAgentSquad = 'coordenação' | 'radar' | 'conteúdo' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex'
 
 export type PixelAgent = {
@@ -133,7 +135,7 @@ export function obterAtivosNoCatalogo<T extends { id: string; dono?: string | nu
 ): Set<string> {
   return new Set(
     agentes
-      .filter((agente) => agente.estado === 'trabalhando' || agente.estado === 'silencioso')
+      .filter((agente) => agente.estado === 'trabalhando')
       .map((agente) => {
         const chave = chaveAgente(agente.dono, agente.id)
         const itemCat = resolverAgenteNoCatalogo(agente, catalogoVisual)
@@ -244,6 +246,11 @@ const normalizarSquad = (squad: string): PixelAgentSquad => {
   return 'coordenação'
 }
 
+const corDaSessaoPixel = (sessaoId: string, index: number) => {
+  if (sessaoId === 'renato') return corDaSessao(sessaoId)
+  return index % 2 ? '#22d3ee' : '#c084fc'
+}
+
 /** Une o catálogo estático vigente aos registros medidos no estado do painel. */
 export function montarCatalogoPixel(agentes: Array<{ id: string; nome: string; descricao?: string; squad: string }>, sessoes: Array<{ id: string; nome: string; papel: string; camada: string; resumo: string }>) {
   const catalogo = PIXEL_AGENTS.map((agente) => ({ ...agente }))
@@ -253,6 +260,6 @@ export function montarCatalogoPixel(agentes: Array<{ id: string; nome: string; d
     catalogo.push(item)
   }
   agentes.forEach((agente, index) => inserir({ id: agente.id, nome: agente.nome || agente.id, papel: agente.descricao?.split(':')[0] || 'Agente operacional', squad: normalizarSquad(agente.squad), área: agente.squad, abreviação: (agente.nome || agente.id).slice(0, 2).toUpperCase(), cor: PIXEL_AGENT_SQUADS[index % PIXEL_AGENT_SQUADS.length].cor, descricao: agente.descricao }))
-  sessoes.filter((sessao) => sessao.id !== 'gastao' && sessao.nome.toLowerCase() !== 'gastão').forEach((sessao, index) => inserir({ id: sessao.id, nome: sessao.nome, papel: sessao.papel, squad: 'coordenação', área: sessao.camada, abreviação: sessao.nome.slice(0, 2).toUpperCase(), cor: index % 2 ? '#22d3ee' : '#c084fc', descricao: sessao.resumo }))
+  sessoes.filter((sessao) => sessao.id !== 'gastao' && sessao.nome.toLowerCase() !== 'gastão').forEach((sessao, index) => inserir({ id: sessao.id, nome: sessao.nome, papel: sessao.papel, squad: 'coordenação', área: sessao.camada, abreviação: sessao.nome.slice(0, 2).toUpperCase(), cor: corDaSessaoPixel(sessao.id, index), descricao: sessao.resumo }))
   return catalogo
 }

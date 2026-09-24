@@ -86,6 +86,20 @@ function estragando(caminho: string[], valor: unknown, base: unknown = real): un
   return c
 }
 
+function temCaminho(base: unknown, caminho: string[]): boolean {
+  let alvo: any = base
+  for (const passo of caminho) {
+    if (/^\d+$/.test(passo)) {
+      if (!Array.isArray(alvo) || !(Number(passo) in alvo)) return false
+      alvo = alvo[Number(passo)]
+      continue
+    }
+    if (alvo === null || typeof alvo !== 'object' || !(passo in alvo)) return false
+    alvo = alvo[passo]
+  }
+  return true
+}
+
 console.log('\nO CASO BOM: o estado.json de verdade')
 {
   const r = validarEstado(real)
@@ -162,6 +176,10 @@ if (operacional !== null) {
   ]
   for (const caminho of nulosPermitidos) {
     const nome = caminho.join('.')
+    if (!temCaminho(operacional, caminho)) {
+      ok(`${nome}: ausente no operacional; caso de nulo pulado`, true)
+      continue
+    }
     ok(`${nome}: null permitido`, validarEstado(estragando(caminho, null, operacional)).ok)
     for (const valor of [42, {}]) {
       const r = validarEstado(estragando(caminho, valor, operacional))

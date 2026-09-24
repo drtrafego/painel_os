@@ -74,7 +74,7 @@ conferir('formatarRotulo não duplica múltiplas tags [B] [B] Cleo', formatarRot
 conferir('formatarRotulo remove tag no final para não duplicar', formatarRotulo('Cleo [B]', '[B] '), '[B] Cleo')
 conferir('formatarRotulo sem tag do dono preserva nome', formatarRotulo('Cleo', ''), 'Cleo')
 
-// Teste da Rodada 5: Office e Terminal contam com a mesma régua (3 trabalhando + 1 silencioso = 4)
+// Ativos no escritório são só quem está trabalhando; silencioso aparece apenas em TODOS.
 const agentesMistos = [
   { id: 'ag1', dono: 'luana', identidade: 'cleo', estado: 'trabalhando' as const, silencio_s: 1 },
   { id: 'ag2', dono: 'luana', identidade: 'vega', estado: 'trabalhando' as const, silencio_s: 5 },
@@ -83,7 +83,12 @@ const agentesMistos = [
 ]
 const catMisto = mesclarRuntimesNoCatalogo(base, agentesMistos)
 const ativosMistos = obterAtivosNoCatalogo(agentesMistos, catMisto)
-conferir('Office e Terminal com a mesma régua: 3 trabalhando + 1 silencioso totalizam 4 ativos', ativosMistos.size, 4)
+conferir('Office ativos conta só 3 trabalhando', ativosMistos.size, 3)
+conferir(
+  'agente silencioso continua no catálogo para a aba todos',
+  catMisto.some((agente) => agente.id === 'bia:ag4' || agente.aliases?.includes('ag4')),
+  true,
+)
 
 if (falhas) process.exit(1)
 console.log('APROVADO: catálogo vivo deduplica aliases e preserva etapa textual.')

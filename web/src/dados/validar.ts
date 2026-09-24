@@ -14,6 +14,7 @@ const TIPOS_ARESTA_SOP = new Set(['fundamenta', 'responsável', 'executa', 'usa'
 const TIPOS_ARQUIVO_ESTUDIO = new Set(['docx', 'jpeg', 'jpg', 'json', 'mp4', 'pdf', 'png', 'python', 'svg', 'txt', 'webp', 'zip'])
 const ESTADOS_FONTE = new Set(['recebido_nao_importado', 'importado'])
 const ESTADOS_MOTOR = new Set(['um_ativo', 'varios_ativos', 'nenhum_ativo', 'indeterminado'])
+const ESTADOS_SESSAO = new Set(['ativo', 'ocioso', 'sem_sessao', 'indeterminado'])
 const STATUS_DIRETIVA = new Set(['ativa', 'concluida', 'cancelada', 'pausada', 'erro'])
 
 function objeto(v: unknown): v is Registro {
@@ -63,9 +64,9 @@ function validarAgentes(ctx: Contexto, v: unknown) {
 
 function validarVerificador(ctx: Contexto, v: unknown, p: string) {
   if (!objetoObrigatorio(ctx, v, p)) return
-  opcionalNumero(ctx, v.checagens, `${p}.checagens`, true, true, true); opcionalNumero(ctx, v.reprovadas, `${p}.reprovadas`, true, true, true); opcionalNumero(ctx, v.indeterminadas, `${p}.indeterminadas`, true, true, true); booleano(ctx, v.vencido, `${p}.vencido`); texto(ctx, v.arquivo, `${p}.arquivo`); lista(ctx, v.falhas, `${p}.falhas`)
+  opcionalNumero(ctx, v.checagens, `${p}.checagens`, true, true, true); opcionalNumero(ctx, v.reprovadas, `${p}.reprovadas`, true, true, true); opcionalNumero(ctx, v.indeterminadas, `${p}.indeterminadas`, true, true, true); if (v.vencido !== null) booleano(ctx, v.vencido, `${p}.vencido`); texto(ctx, v.arquivo, `${p}.arquivo`); lista(ctx, v.falhas, `${p}.falhas`)
   if (Array.isArray(v.falhas)) v.falhas.forEach((falha, i) => { const fp = `${p}.falhas[${i}]`; if (objetoObrigatorio(ctx, falha, fp)) { texto(ctx, falha.o_que, `${fp}.o_que`); opcionalTexto(ctx, falha.desde, `${fp}.desde`) } })
-  opcionalTexto(ctx, v.erro_leitura, `${p}.erro_leitura`, true); opcionalTexto(ctx, v.rodada, `${p}.rodada`)
+  opcionalTexto(ctx, v.erro_leitura, `${p}.erro_leitura`, true); opcionalTexto(ctx, v.rodada, `${p}.rodada`, true)
 }
 
 function validarMotores(ctx: Contexto, v: unknown, p: string) {
@@ -79,7 +80,33 @@ function validarMotores(ctx: Contexto, v: unknown, p: string) {
 
 function validarSessao(ctx: Contexto, v: unknown) {
   if (!lista(ctx, v, 'estado.sessao')) return
-  v.forEach((item, i) => { const p = `estado.sessao[${i}]`; if (!objetoObrigatorio(ctx, item, p)) return; if (texto(ctx, item.id, `${p}.id`)) ctx.idsSessoes.add(item.id); texto(ctx, item.nome, `${p}.nome`); texto(ctx, item.papel, `${p}.papel`); texto(ctx, item.camada, `${p}.camada`); texto(ctx, item.cor, `${p}.cor`); texto(ctx, item.resumo, `${p}.resumo`); validarVerificador(ctx, item.verificador, `${p}.verificador`); validarMotores(ctx, item.motores, `${p}.motores`); if (item.service_prefixo !== undefined) texto(ctx, item.service_prefixo, `${p}.service_prefixo`); if (item.memoria === undefined || !objetoObrigatorio(ctx, item.memoria, `${p}.memoria`)) return; numero(ctx, item.memoria.linhas, `${p}.memoria.linhas`, true, true); numero(ctx, item.memoria.arquivos, `${p}.memoria.arquivos`, true, true); if (item.diario === undefined || !objetoObrigatorio(ctx, item.diario, `${p}.diario`)) return; numero(ctx, item.diario.arquivos, `${p}.diario.arquivos`, true, true); numero(ctx, item.cron_linhas, `${p}.cron_linhas`, true, true) })
+  v.forEach((item, i) => {
+    const p = `estado.sessao[${i}]`
+    if (!objetoObrigatorio(ctx, item, p)) return
+    if (texto(ctx, item.id, `${p}.id`)) ctx.idsSessoes.add(item.id)
+    texto(ctx, item.nome, `${p}.nome`)
+    texto(ctx, item.papel, `${p}.papel`)
+    texto(ctx, item.camada, `${p}.camada`)
+    texto(ctx, item.cor, `${p}.cor`)
+    texto(ctx, item.resumo, `${p}.resumo`)
+    const estadoSessao = item.estado
+    if (estadoSessao !== undefined) {
+      const estadoOk = texto(ctx, estadoSessao, `${p}.estado`)
+      if (estadoOk && !ESTADOS_SESSAO.has(estadoSessao)) ctx.problemas.push(`${p}.estado: estado de sessão não permitido`)
+    }
+    if (item.ultima_atividade !== undefined && item.ultima_atividade !== null) dataIso(ctx, item.ultima_atividade, `${p}.ultima_atividade`)
+    opcionalTexto(ctx, item.fonte_atividade, `${p}.fonte_atividade`)
+    opcionalTexto(ctx, item.erro_atividade, `${p}.erro_atividade`, true)
+    validarVerificador(ctx, item.verificador, `${p}.verificador`)
+    validarMotores(ctx, item.motores, `${p}.motores`)
+    if (item.service_prefixo !== undefined) texto(ctx, item.service_prefixo, `${p}.service_prefixo`)
+    if (item.memoria === undefined || !objetoObrigatorio(ctx, item.memoria, `${p}.memoria`)) return
+    numero(ctx, item.memoria.linhas, `${p}.memoria.linhas`, true, true)
+    numero(ctx, item.memoria.arquivos, `${p}.memoria.arquivos`, true, true)
+    if (item.diario === undefined || !objetoObrigatorio(ctx, item.diario, `${p}.diario`)) return
+    numero(ctx, item.diario.arquivos, `${p}.diario.arquivos`, true, true)
+    numero(ctx, item.cron_linhas, `${p}.cron_linhas`, true, true)
+  })
 }
 
 function validarSops(ctx: Contexto, v: unknown) {

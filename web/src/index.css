@@ -53,6 +53,7 @@
   --color-verde: #3e6e8e;
   --color-ciano: #3e6e8e;
   --color-agua: #3e6e8e;
+  --color-renato: #c2410c;      /* Laranja Renato, 4,97:1 no Creme Alto e 4,61:1 no Creme */
   --color-dourado: #f5a623;
   --color-pervinca: #7a6a57;
   --color-laranja: #7a4a0f;
@@ -193,4 +194,3 @@
     transition-duration: 1ms !important;
   }
 }
-

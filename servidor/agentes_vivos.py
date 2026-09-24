@@ -84,8 +84,9 @@ _CODEX_PADRAO = object()
 CAUDA_BYTES = 256 * 1024
 CAUDA_PAI_BYTES = 4 * 1024 * 1024
 
-# So abre o transcript de quem escreveu nas ultimas N horas. Quem nao escreve
-# ha mais que isso e historico: entra na contagem de parados sem custo de I/O.
+# So abre o transcript de quem escreveu nas ultimas N horas. A sessao pai tem
+# mais uma rede: se escreveu hoje, aparece como silenciosa mesmo depois do limiar
+# de vivo, porque diretor sem subagente pendente ainda e presença operacional.
 JANELA_CANDIDATO_S = 6 * 3600
 RAIZ_CODEX = Path.home() / ".codex-luana" / "sessions"
 # Cada sessão da casa tem o próprio CODEX_HOME. Sem este mapa, a agregação
@@ -406,6 +407,10 @@ def _ts_para_epoch(ts: object) -> float | None:
         return None
 
 
+def _mesmo_dia_brt(epoch: float, agora: float) -> bool:
+    return datetime.fromtimestamp(epoch, BRT).date() == datetime.fromtimestamp(agora, BRT).date()
+
+
 _CACHE_PATH = Path(tempfile.gettempdir()) / "painel_os_metricas_cache.json"
 
 
@@ -648,13 +653,6 @@ def _ultima_evidencia_sessao(dir_sessao: Path) -> float:
         if pasta.is_dir():
             arquivos = [p for p in pasta.iterdir() if p.is_file()]
             evidencias.extend(p.stat().st_mtime for p in arquivos)
-            evidencias.append(pasta.stat().st_mtime)
-    except OSError:
-        pass
-
-    try:
-        if dir_sessao.exists():
-            evidencias.append(dir_sessao.stat().st_mtime)
     except OSError:
         pass
     return max(evidencias, default=0.0)
@@ -896,7 +894,8 @@ def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float) -> dict
         return None
 
     silencio = max(0.0, agora - st.st_mtime)
-    if silencio > LIMIAR_VIVO_S:
+    sessao_de_hoje = _mesmo_dia_brt(st.st_mtime, agora)
+    if silencio > LIMIAR_VIVO_S and not sessao_de_hoje:
         return None
 
     try:
@@ -905,7 +904,7 @@ def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float) -> dict
         return None
 
     estado = _classificar(cauda["fase"], silencio)
-    if estado == PARADO and cauda["fase"] == "entregou" and silencio <= LIMIAR_VIVO_S:
+    if estado == PARADO and sessao_de_hoje:
         estado = SILENCIOSO
     if estado == PARADO:
         return None

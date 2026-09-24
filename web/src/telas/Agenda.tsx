@@ -5,7 +5,7 @@ import { IDENTIDADE } from '../ui/paleta'
 import type { Vista } from '../nav/rotas'
 import type { Estado } from '../dados/tipos'
 
-const COR_DONO: Record<string, string> = { luana: IDENTIDADE.lima, renato: IDENTIDADE.agua }
+const COR_DONO: Record<string, string> = { luana: IDENTIDADE.lima, renato: IDENTIDADE.renato }
 
 /**
  * AGENDA.

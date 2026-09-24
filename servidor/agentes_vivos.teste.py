@@ -14,6 +14,7 @@ import os
 import shutil
 import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
 
 import agentes_vivos as mod
@@ -280,6 +281,30 @@ def testar_agentes_vivos():
         conferir("sessão pai recente entregue também aparece", r_bia_sessao["agentes"][0]["id"], f"sessao-{sessao_fallback[-8:]}")
         conferir("fallback da sessão pai mantém dono bia", r_bia_sessao["agentes"][0]["dono"], "bia")
         conferir("fallback da sessão pai entregue fica ocioso", r_bia_sessao["agentes"][0]["estado"], SILENCIOSO)
+        conferir("sessão pai ociosa não conta como trabalhando", r_bia_sessao["contagem"]["trabalhando"], 0)
+        conferir("sessão pai ociosa conta como silenciosa", r_bia_sessao["contagem"]["silencioso"], 1)
+
+        print("\n--- Teste 4c: Diretora com sessão de hoje e sem subagente vivo continua listada")
+        agora_original = mod._agora
+        try:
+            agora_fixo = datetime(2026, 9, 24, 15, 0, tzinfo=mod.BRT).timestamp()
+            mod._agora = lambda: agora_fixo
+            projeto_bia_hoje = tmp / "-opt-gastaomatos-bia-hoje"
+            projeto_bia_hoje.mkdir(parents=True, exist_ok=True)
+            sessao_hoje = "sessao-bia-hoje"
+            transcript_hoje = projeto_bia_hoje / f"{sessao_hoje}.jsonl"
+            transcript_hoje.write_text(json.dumps({
+                "type": "assistant",
+                "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "fim sintetico"}]},
+            }) + "\n", encoding="utf-8")
+            mtime_hoje = agora_fixo - mod.LIMIAR_VIVO_S - 120
+            os.utime(transcript_hoje, (mtime_hoje, mtime_hoje))
+            casa_bia_hoje = ler_agentes_da_casa(projetos={"bia": "-opt-gastaomatos-bia-hoje"}, raiz=tmp)
+            conferir("agregação lista Bia com sessão de hoje", [(a["dono"], a["estado"]) for a in casa_bia_hoje["agentes"]], [("bia", SILENCIOSO)])
+            conferir("não inventa subagente para a sessão pai", casa_bia_hoje["agentes"][0]["tipo"], "sessao_claude")
+            conferir("contagem agregada de trabalhando exclui Bia ociosa", casa_bia_hoje["contagem"]["trabalhando"], 0)
+        finally:
+            mod._agora = agora_original
 
         print("\n--- Teste 5: Agregação resiliente quando uma sessão falha")
         projetos_com_falha = {

@@ -23,6 +23,16 @@ const MOVIMENTO: [string, string][] = [
   ['sem_atualizacao_30_dias', 'sem movimento há 30 dias'],
 ]
 
+const CLASSE_DONO_PIXEL: Record<string, string> = {
+  luana: 'bg-[#38bdf8] text-black',
+  renato: 'bg-renato text-black',
+  bia: 'bg-[#f472b6] text-black',
+}
+
+const classeDonoPixel = (dono: string | undefined) => (
+  dono ? CLASSE_DONO_PIXEL[dono] ?? 'bg-slate-300 text-black' : 'bg-slate-300 text-black'
+)
+
 /** Janela Estilo Pixel Art Retrô com Barra de Título e Botões */
 function PixelJanela({
   titulo,
@@ -124,13 +134,7 @@ function InspectorAgente({
           {donoFormatado && (
             <span
               className={`border border-black px-2 py-0.5 text-[10px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                agente.dono === 'luana'
-                  ? 'bg-[#38bdf8] text-black'
-                  : agente.dono === 'renato'
-                  ? 'bg-[#c084fc] text-black'
-                  : agente.dono === 'bia'
-                  ? 'bg-[#f472b6] text-black'
-                  : 'bg-slate-300 text-black'
+                classeDonoPixel(agente.dono)
               }`}
             >
               {donoFormatado}
@@ -707,13 +711,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
                           {ag.dono && (
                             <span
                               className={`shrink-0 border border-black px-1.5 py-0.5 text-[8.5px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                                ag.dono === 'luana'
-                                  ? 'bg-[#38bdf8] text-black'
-                                  : ag.dono === 'renato'
-                                  ? 'bg-[#c084fc] text-black'
-                                  : ag.dono === 'bia'
-                                  ? 'bg-[#f472b6] text-black'
-                                  : 'bg-slate-300 text-black'
+                                classeDonoPixel(ag.dono)
                               }`}
                               title={`Origem: ${ag.dono.toUpperCase()}`}
                             >

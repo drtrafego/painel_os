@@ -30,12 +30,14 @@ entra no JSON. Nome, telefone e e-mail nao aparecem em tela nenhuma.
 
 import json
 import hashlib
+import math
 import os
 import re
 import shutil
 import stat as stat_mod
 import subprocess
 import sys
+import tempfile
 import tomllib
 import urllib.error
 import urllib.request
@@ -56,7 +58,8 @@ PAINEL_OS_DIR = Path(__file__).resolve().parent.parent
 DATA_MAPAS = PAINEL_OS_DIR / "data" / "mapas"
 DIST_MAPAS = PAINEL_OS_DIR / "web" / "dist" / "mapas"
 PUBLIC_MAPAS = PAINEL_OS_DIR / "web" / "public" / "mapas"
-ARCHIFY_CLI = Path(os.environ.get("ARCHIFY_CLI", "/home/claude/.codex-luana/skills/archify/bin/archify.mjs"))
+_ARCHIFY_CLI_ENV = os.environ.get("ARCHIFY_CLI")
+ARCHIFY_CLI = Path(_ARCHIFY_CLI_ENV) if _ARCHIFY_CLI_ENV else None
 CASA_CLAUDE = Path.home() / ".claude"
 AGENTES_GLOBAIS = CASA_CLAUDE / "agents"
 PROJETOS = CASA_CLAUDE / "projects"
@@ -85,6 +88,7 @@ APROVACAO_TIPOS = ("conteudo", "documento", "campanha", "outro")
 TAREFAS_PROJETOS_PUBLICOS = {
     "charcutaria", "clientes", "gramado-plazza", "pessoal", "curso", "conteudo"
 }
+COR_RENATO = "#c2410c"
 MEMORIA_RAIZ = RAIZ / "luana/memoria"
 # Cofre de conhecimento: UM arquivo, na mesma pasta de dados curados do painel
 # (aprovacoes/calendario/diretiva). Cada registro é um APRENDIZADO com autor e
@@ -139,7 +143,18 @@ SESSAO = [
         "pasta": RAIZ / "renato",
         "verificador": RAIZ / "renato/verificar_bots_ULTIMO.txt",
         "service_prefixo": "renato",
-        "cor": "ciano",
+        "cor": "renato",
+    },
+    {
+        "id": "bia",
+        "nome": "Bia",
+        "papel": "Diretora de Tráfego e IA",
+        "camada": "TRÁFEGO & IA",
+        "resumo": "Coordena tráfego pago, produção de conteúdo e automações de IA com controle de escopo.",
+        "pasta": RAIZ / "bia",
+        "verificador": RAIZ / "bia/verificar_bia_ULTIMO.txt",
+        "service_prefixo": "bia",
+        "cor": "rosa",
     },
 ]
 
@@ -162,6 +177,51 @@ SQUADS = {
 
 def agora_utc():
     return datetime.now(timezone.utc)
+
+
+def _projeto_claude_da_pasta(pasta: Path) -> str:
+    try:
+        partes = Path(pasta).resolve().parts
+    except OSError:
+        partes = Path(pasta).parts
+    return "-" + "-".join(p for p in partes if p and p != Path(p).anchor)
+
+
+def ler_presenca_sessao(item: dict, projetos: Path = PROJETOS, agora: datetime | None = None):
+    """Resume a presença da sessão pelo transcript Claude Code mais recente."""
+    agora = (agora or agora_utc()).astimezone(timezone.utc)
+    vazio = {
+        "estado": "sem_sessao",
+        "ultima_atividade": None,
+        "fonte_atividade": "transcript Claude Code mais recente",
+        "erro_atividade": None,
+    }
+    projeto = _projeto_claude_da_pasta(item["pasta"])
+    pasta = Path(projetos) / projeto
+    if not pasta.is_dir():
+        return {**vazio, "erro_atividade": "catálogo de sessão Claude Code não encontrado"}
+    try:
+        candidatos = []
+        for arq in pasta.glob("*.jsonl"):
+            if not arq.is_file():
+                continue
+            try:
+                candidatos.append((arq.stat().st_mtime, arq))
+            except OSError:
+                continue
+    except OSError as exc:
+        return {**vazio, "estado": "indeterminado", "erro_atividade": f"falha ao listar sessões ({type(exc).__name__})"}
+    if not candidatos:
+        return {**vazio, "erro_atividade": "nenhum transcript Claude Code encontrado"}
+    mtime, _ = max(candidatos, key=lambda par: par[0])
+    instante = datetime.fromtimestamp(mtime, tz=timezone.utc)
+    estado = "ativo" if agora - instante <= timedelta(minutes=10) else "ocioso"
+    return {
+        **vazio,
+        "estado": estado,
+        "ultima_atividade": instante.isoformat(),
+        "erro_atividade": None,
+    }
 
 
 def ler_calendario(caminho=CALENDARIO_JSON):
@@ -1195,7 +1255,7 @@ def ler_sops(agentes=None, pasta_skills: Path = SKILLS_RAIZ,
     """Materializa somente workflows declarados e relações comprováveis."""
     vazio = {"status": "erro", "erro": None, "total": None, "itens": [], "arestas": []}
     agentes_ids = {a.get("id") for a in (agentes or descobrir_agentes())}
-    agentes_ids.update({"luana", "renato"})
+    agentes_ids.update({item["id"] for item in SESSAO})
     itens, arestas = [], []
     try:
         for d in SOPS_DECLARADOS:
@@ -2489,6 +2549,8 @@ def ler_convocacoes(projetos: Path = PROJETOS, sessoes_codex: Path = SESSOES_COD
     saida["arquivos"] = arquivos + codex["arquivos"]
     todas_chamadas.extend(codex.get("lista_chamadas", []))
     saida["todas_chamadas"] = todas_chamadas
+    saida["total"] = len(todas_chamadas)
+    saida["repetidas_descartadas"] = repetidas + codex["repetidas_descartadas"]
     erros = [x for x in saida["erros_por_motor"].values() if x]
     saida["erro"] = "; ".join(erros) if erros else None
     return saida
@@ -2590,24 +2652,22 @@ def gerar_workflow_quem_convoca_quem(janela_key: str, janela_info: dict, agentes
 
     diretores = [
         {"id": "luana", "label": "Luana", "sublabel": "CEO Operacional", "col": 0},
-        {"id": "renato", "label": "Renato", "sublabel": "CRO Comercial", "col": 0},
+        {"id": "renato", "label": "Renato", "sublabel": "CRO Comercial", "col": 0, "color": COR_RENATO},
         {"id": "bia", "label": "Bia", "sublabel": "Tráfego & IA", "col": 0},
     ]
     ids_diretores = {d["id"] for d in diretores}
 
-    especialistas = []
+    especialistas_por_squad = {}
     for ag in agentes:
         ag_id = ag.get("id")
         if not ag_id or ag_id in ids_diretores:
             continue
         squad_id = ag.get("squad", "global")
-        col = 1 if squad_id == "global" else (2 if squad_id == "conteudo" else 3)
-        especialistas.append({
+        especialistas_por_squad.setdefault(squad_id, []).append({
             "id": ag_id,
             "label": ag.get("nome", ag_id),
             "sublabel": ag.get("funcao", squad_id),
             "squad": squad_id,
-            "col": col,
         })
 
     qtd_fora = sum(fora_da_casa.values())
@@ -2617,53 +2677,87 @@ def gerar_workflow_quem_convoca_quem(janela_key: str, janela_info: dict, agentes
             "id": "outros",
             "label": f"outros ({len(fora_da_casa)})",
             "sublabel": f"{qtd_fora} chamada{'s' if qtd_fora != 1 else ''} sem ficha",
-            "col": 4,
             "type": "external",
         })
 
-    nodes = []
-    y_offsets = {0: -100, 1: -120, 2: -120, 3: -120, 4: 0}
+    ordem_squads = [s for s in ("global", "conteudo", "pipeline-luana") if s in especialistas_por_squad]
+    ordem_squads.extend(sorted(s for s in especialistas_por_squad if s not in ordem_squads))
 
-    for d in diretores:
-        nodes.append({
+    def distribuir_colunas(limite_linhas: int) -> list[dict]:
+        colunas = []
+        for squad_id in ordem_squads:
+            itens = especialistas_por_squad[squad_id]
+            partes = max(1, math.ceil(len(itens) / limite_linhas))
+            tamanho = math.ceil(len(itens) / partes)
+            for inicio in range(0, len(itens), tamanho):
+                colunas.append({"squad": squad_id, "itens": itens[inicio:inicio + tamanho]})
+        return colunas
+
+    colunas_agentes = []
+    for limite_linhas in range(6, 16):
+        colunas_agentes = distribuir_colunas(limite_linhas)
+        if len(colunas_agentes) <= 5:
+            break
+    if len(colunas_agentes) > 5:
+        colunas_agentes = [
+            *colunas_agentes[:4],
+            {
+                "squad": colunas_agentes[4]["squad"],
+                "itens": [item for coluna in colunas_agentes[4:] for item in coluna["itens"]],
+            },
+        ]
+    if nos_outros:
+        if colunas_agentes and len(colunas_agentes[-1]["itens"]) < 8:
+            colunas_agentes[-1]["itens"].extend(nos_outros)
+        elif len(colunas_agentes) < 5:
+            colunas_agentes.append({"squad": "outros", "itens": nos_outros})
+        else:
+            colunas_agentes[-1]["itens"].extend(nos_outros)
+
+    nodes = []
+    def offsets_centralizados(qtd: int, passo: int) -> list[int]:
+        inicio = -((qtd - 1) * passo) / 2
+        return [round(inicio + i * passo) for i in range(qtd)]
+
+    for d, y_offset in zip(diretores, offsets_centralizados(len(diretores), 82)):
+        node = {
             "id": d["id"],
             "lane": "diretoria",
             "col": d["col"],
-            "type": "director",
+            "type": "frontend",
             "label": d["label"],
             "sublabel": d["sublabel"],
             "width": 136,
-            "yOffset": y_offsets[0],
-        })
-        y_offsets[0] += 90
+            "yOffset": y_offset,
+        }
+        nodes.append(node)
 
-    for esp in especialistas:
-        col = esp["col"]
-        nodes.append({
-            "id": esp["id"],
-            "lane": "operacao",
-            "col": col,
-            "type": "backend",
-            "label": esp["label"],
-            "sublabel": esp["sublabel"],
-            "width": 130,
-            "yOffset": y_offsets[col],
-        })
-        y_offsets[col] += 70
-
-    for out in nos_outros:
-        nodes.append({
-            "id": out["id"],
-            "lane": "operacao",
-            "col": out["col"],
-            "type": out["type"],
-            "label": out["label"],
-            "sublabel": out["sublabel"],
-            "width": 140,
-            "yOffset": y_offsets[4],
-        })
+    colunas_squad = {}
+    for idx_col, coluna in enumerate(colunas_agentes, start=1):
+        colunas_squad.setdefault(coluna["squad"], []).append(idx_col)
+        for item, y_offset in zip(coluna["itens"], offsets_centralizados(len(coluna["itens"]), 90)):
+            nodes.append({
+                "id": item["id"],
+                "lane": "operacao",
+                "col": idx_col,
+                "type": item.get("type", "backend"),
+                "label": item["label"],
+                "sublabel": item["sublabel"],
+                "width": 124 if item.get("type") != "external" else 136,
+                "yOffset": y_offset,
+            })
 
     ids_todos_nodes = {n["id"] for n in nodes}
+    origem_diretor_por_rotulo = {}
+    for d in diretores:
+        for chave in (d.get("id"), d.get("label")):
+            if isinstance(chave, str):
+                origem_diretor_por_rotulo[chave.casefold()] = d["id"]
+    origem_fallback = (
+        "luana"
+        if "luana" in ids_todos_nodes
+        else (sorted(ids_todos_nodes)[0] if ids_todos_nodes else "sessao")
+    )
     edges_map = {}
     for a in arestas:
         origem = a.get("de")
@@ -2671,12 +2765,14 @@ def gerar_workflow_quem_convoca_quem(janela_key: str, janela_info: dict, agentes
         vezes = a.get("vezes", 0)
         if vezes <= 0:
             continue
+        if isinstance(origem, str):
+            origem = origem_diretor_por_rotulo.get(origem.casefold(), origem)
         if destino not in ids_todos_nodes:
             destino = "outros" if "outros" in ids_todos_nodes else None
         if not destino:
             continue
         if origem not in ids_todos_nodes:
-            origem = "luana" if "luana" in ids_todos_nodes else (list(ids_todos_nodes)[0] if ids_todos_nodes else "sessao")
+            origem = origem_fallback
 
         chave_edge = (origem, destino)
         edges_map[chave_edge] = edges_map.get(chave_edge, 0) + vezes
@@ -2693,7 +2789,7 @@ def gerar_workflow_quem_convoca_quem(janela_key: str, janela_info: dict, agentes
             "label": f"{n} chamada{'s' if n != 1 else ''}",
             "variant": variant,
             "role": role,
-            "calls": n,
+            "width": min(4, max(1.2, n / 10)),
         })
 
     return {
@@ -2703,8 +2799,6 @@ def gerar_workflow_quem_convoca_quem(janela_key: str, janela_info: dict, agentes
             "title": f"Quem convoca quem ({rotulo})",
             "animation": "trace",
             "quality_profile": "showcase",
-            "janela": janela_key,
-            "total_convocacoes": janela_info.get("total", 0),
             "output": f"quem-convoca-quem-{janela_key}.html",
         },
         "lanes": [
@@ -2713,23 +2807,49 @@ def gerar_workflow_quem_convoca_quem(janela_key: str, janela_info: dict, agentes
         ],
         "phases": [
             {"id": "comando", "label": "Diretoria", "fromCol": 0, "toCol": 0, "variant": "emphasis"},
-            {"id": "global", "label": "Orquestração", "fromCol": 1, "toCol": 1},
-            {"id": "conteudo", "label": "Conteúdo e Tráfego", "fromCol": 2, "toCol": 2},
-            {"id": "pipeline", "label": "Execução Especializada", "fromCol": 3, "toCol": 4},
+            *[
+                {
+                    "id": f"squad-{squad_id}",
+                    "label": squads.get(squad_id, {}).get("nome", squad_id),
+                    "fromCol": min(colunas),
+                    "toCol": max(colunas),
+                }
+                for squad_id, colunas in colunas_squad.items()
+            ],
         ],
         "nodes": nodes,
         "edges": edges,
     }
 
 
+def _cor_hex_rgba(cor: str, alfa: float) -> str:
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})", str(cor).strip())
+    if not m:
+        return "rgba(126, 231, 135, 0.15)"
+    valor = m.group(1)
+    r = int(valor[0:2], 16)
+    g = int(valor[2:4], 16)
+    b = int(valor[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alfa})"
+
+
+def _sem_espaco_fim_de_linha(texto: str) -> str:
+    resultado = "\n".join(linha.rstrip() for linha in texto.splitlines())
+    return resultado + ("\n" if texto.endswith("\n") else "")
+
+
 def renderizar_html_workflow_quem_convoca_quem(workflow: dict) -> str:
     meta = workflow.get("meta", {})
     titulo = meta.get("title", "Quem convoca quem")
-    total_convocacoes = meta.get("total_convocacoes", 0)
     nodes = workflow.get("nodes", [])
     edges = workflow.get("edges", [])
+    total_convocacoes = 0
+    for edge in edges:
+        m_chamadas = re.match(r"(\d+)\s+chamada", str(edge.get("label", "")))
+        if m_chamadas:
+            total_convocacoes += int(m_chamadas.group(1))
 
-    col_width = 240
+    col_width = 200
     start_x = 40
     start_y = 60
     card_w = 160
@@ -2761,10 +2881,12 @@ def renderizar_html_workflow_quem_convoca_quem(workflow: dict) -> str:
         label = n.get("label", nid)
         sublabel = n.get("sublabel", "")
         ntype = n.get("type", "backend")
+        eh_diretor = n.get("lane") == "diretoria"
 
-        cor_borda = "#7ee787" if ntype == "director" else ("#58a6ff" if ntype == "backend" else "#f0883e")
-        badge_bg = "rgba(126, 231, 135, 0.15)" if ntype == "director" else "rgba(88, 166, 255, 0.15)"
+        cor_borda = COR_RENATO if nid == "renato" else ("#7ee787" if eh_diretor else ("#58a6ff" if ntype == "backend" else "#f0883e"))
+        badge_bg = _cor_hex_rgba(cor_borda, 0.15) if nid == "renato" else ("rgba(126, 231, 135, 0.15)" if eh_diretor else "rgba(88, 166, 255, 0.15)")
         badge_cor = cor_borda
+        badge = "DIR" if eh_diretor else ntype[:3].upper()
 
         svg_nodes.append(f"""
         <g class="node-group" id="node-{nid}" transform="translate({x}, {y})">
@@ -2772,7 +2894,7 @@ def renderizar_html_workflow_quem_convoca_quem(workflow: dict) -> str:
           <text x="12" y="24" class="node-title">{label}</text>
           <text x="12" y="44" class="node-sub">{sublabel}</text>
           <rect x="{card_w - 42}" y="8" width="34" height="18" rx="4" fill="{badge_bg}"/>
-          <text x="{card_w - 25}" y="21" class="node-badge" fill="{badge_cor}" text-anchor="middle">{ntype[:3].upper()}</text>
+          <text x="{card_w - 25}" y="21" class="node-badge" fill="{badge_cor}" text-anchor="middle">{badge}</text>
         </g>
         """)
 
@@ -2811,7 +2933,7 @@ def renderizar_html_workflow_quem_convoca_quem(workflow: dict) -> str:
         mid_x = (p1[0] + p2[0]) / 2
         mid_y = (p1[1] + p2[1]) / 2
 
-        stroke_w = min(4, max(1.5, e.get("calls", 1) / 10))
+        stroke_w = e.get("width", 1.5)
         variant_class = e.get("variant", "default")
 
         svg_edges.append(f"""
@@ -3044,15 +3166,38 @@ def salvar_mapas_quem_convoca_quem(janelas: dict, agentes: list, squads: dict) -
         wf_json = json.dumps(wf, ensure_ascii=False, indent=2)
 
         html_conteudo = None
-        if ARCHIFY_CLI.exists() and shutil.which("node"):
+        if ARCHIFY_CLI and ARCHIFY_CLI.exists() and shutil.which("node"):
             try:
                 with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp_wf:
                     tmp_wf.write(wf_json)
                     tmp_wf_path = Path(tmp_wf.name)
                 tmp_out = tmp_wf_path.with_suffix(".html")
-                res = subprocess.run(["node", str(ARCHIFY_CLI), "build", str(tmp_wf_path), "-o", str(tmp_out)], capture_output=True, text=True, timeout=15)
-                if res.returncode == 0 and tmp_out.is_file():
-                    html_conteudo = tmp_out.read_text(encoding="utf-8")
+                validacao = subprocess.run(
+                    ["node", str(ARCHIFY_CLI), "validate", "workflow", str(tmp_wf_path), "--quality", "showcase", "--json"],
+                    capture_output=True,
+                    text=True,
+                    timeout=20,
+                )
+                if validacao.returncode == 0:
+                    entrega = subprocess.run(
+                        ["node", str(ARCHIFY_CLI), "deliver", "workflow", str(tmp_wf_path), str(tmp_out), "--quality", "showcase", "--json"],
+                        capture_output=True,
+                        text=True,
+                        timeout=25,
+                    )
+                    if entrega.returncode == 0 and tmp_out.is_file():
+                        html_conteudo = tmp_out.read_text(encoding="utf-8")
+                if html_conteudo is None:
+                    renderizador_workflow = ARCHIFY_CLI.parent.parent / "renderers" / "workflow" / "render-workflow.mjs"
+                    if renderizador_workflow.exists():
+                        direto = subprocess.run(
+                            ["node", str(renderizador_workflow), str(tmp_wf_path), str(tmp_out)],
+                            capture_output=True,
+                            text=True,
+                            timeout=25,
+                        )
+                        if direto.returncode == 0 and tmp_out.is_file():
+                            html_conteudo = tmp_out.read_text(encoding="utf-8")
                 try:
                     tmp_wf_path.unlink(missing_ok=True)
                     tmp_out.unlink(missing_ok=True)
@@ -3063,6 +3208,7 @@ def salvar_mapas_quem_convoca_quem(janelas: dict, agentes: list, squads: dict) -
 
         if not html_conteudo:
             html_conteudo = renderizar_html_workflow_quem_convoca_quem(wf)
+        html_conteudo = _sem_espaco_fim_de_linha(html_conteudo)
 
         try:
             DATA_MAPAS.mkdir(parents=True, exist_ok=True)
@@ -4334,8 +4480,10 @@ def main():
     # UMA sonda para todos os agentes: a listagem de units do systemd e a mesma
     # para todo mundo e so precisa ser pedida uma vez (2,28s -> 1,37s medidos).
     sonda_motores = motores.Sonda()
+    agora_sessao = agora_utc()
     for item in SESSAO:
         pasta = item["pasta"]
+        presenca = ler_presenca_sessao(item, agora=agora_sessao)
         sessao.append(
             {
                 "id": item["id"],
@@ -4345,6 +4493,10 @@ def main():
                 "resumo": item["resumo"],
                 "cor": item["cor"],
                 "pasta": f"operação:{item['id']}",
+                "estado": presenca["estado"],
+                "ultima_atividade": presenca["ultima_atividade"],
+                "fonte_atividade": presenca["fonte_atividade"],
+                "erro_atividade": presenca["erro_atividade"],
                 "existe": pasta.is_dir(),
                 "verificador": ler_verificador(item["verificador"]),
                 "memoria": contar_arquivos_linhas(pasta / "memoria", "*.md"),
@@ -4356,7 +4508,7 @@ def main():
         )
 
     # Convocacoes de nomes que NAO sao agentes da casa (embutidos do Claude Code).
-    ids_casa = {a["id"] for a in agentes}
+    ids_casa = {a["id"] for a in agentes} | {s["id"] for s in sessao}
     de_fora = {k: v for k, v in convocacoes.items() if k not in ids_casa}
 
     todas_chamadas = conv.get("todas_chamadas", [])
@@ -4457,7 +4609,6 @@ def main():
         )
 
     SAIDA.parent.mkdir(parents=True, exist_ok=True)
-    import tempfile
     fd, tmp_saida = tempfile.mkstemp(prefix=".estado-", suffix=".json", dir=str(SAIDA.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f_saida:

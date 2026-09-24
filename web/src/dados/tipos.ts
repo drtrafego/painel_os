@@ -127,14 +127,18 @@ export type AgenteSessao = {
   camada: string
   cor: string
   resumo: string
+  estado?: 'ativo' | 'ocioso' | 'sem_sessao' | 'indeterminado'
+  ultima_atividade?: string | null
+  fonte_atividade?: string
+  erro_atividade?: string | null
   verificador: {
     checagens: number | null
     reprovadas: number | null
     indeterminadas: number | null
-    vencido: boolean
+    vencido: boolean | null
     erro_leitura?: string
     falhas: { o_que: string; desde?: string }[]
-    rodada?: string
+    rodada?: string | null
     arquivo: string
   }
   motores?: {

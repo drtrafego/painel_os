@@ -5,8 +5,6 @@
     "title": "Quem convoca quem (Hoje)",
     "animation": "trace",
     "quality_profile": "showcase",
-    "janela": "hoje",
-    "total_convocacoes": 12,
     "output": "quem-convoca-quem-hoje.html"
   },
   "lanes": [
@@ -28,22 +26,22 @@
       "variant": "emphasis"
     },
     {
-      "id": "global",
-      "label": "Orquestração",
+      "id": "squad-global",
+      "label": "Especialistas globais",
       "fromCol": 1,
-      "toCol": 1
-    },
-    {
-      "id": "conteudo",
-      "label": "Conteúdo e Tráfego",
-      "fromCol": 2,
       "toCol": 2
     },
     {
-      "id": "pipeline",
-      "label": "Execução Especializada",
+      "id": "squad-conteudo",
+      "label": "Squad de conteúdo",
       "fromCol": 3,
       "toCol": 4
+    },
+    {
+      "id": "squad-pipeline-luana",
+      "label": "Pipeline local da Luana",
+      "fromCol": 5,
+      "toCol": 5
     }
   ],
   "nodes": [
@@ -51,100 +49,586 @@
       "id": "luana",
       "lane": "diretoria",
       "col": 0,
-      "type": "director",
+      "type": "frontend",
       "label": "Luana",
       "sublabel": "CEO Operacional",
       "width": 136,
-      "yOffset": -100
+      "yOffset": -82
     },
     {
       "id": "renato",
       "lane": "diretoria",
       "col": 0,
-      "type": "director",
+      "type": "frontend",
       "label": "Renato",
       "sublabel": "CRO Comercial",
       "width": 136,
-      "yOffset": -10
+      "yOffset": 0
     },
     {
       "id": "bia",
       "lane": "diretoria",
       "col": 0,
-      "type": "director",
+      "type": "frontend",
       "label": "Bia",
       "sublabel": "Tráfego & IA",
       "width": 136,
-      "yOffset": 80
+      "yOffset": 82
+    },
+    {
+      "id": "analista",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "analista",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": -360
+    },
+    {
+      "id": "arquiteto",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "arquiteto",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": -270
+    },
+    {
+      "id": "ceo",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "ceo",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": -180
+    },
+    {
+      "id": "closer",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "closer",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": -90
+    },
+    {
+      "id": "copy",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "copy",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": 0
+    },
+    {
+      "id": "deployer",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "deployer",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": 90
+    },
+    {
+      "id": "designer",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "designer",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": 180
     },
     {
       "id": "dev",
       "lane": "operacao",
       "col": 1,
       "type": "backend",
-      "label": "Dev Engenheiro",
+      "label": "dev",
       "sublabel": "global",
-      "width": 130,
-      "yOffset": -120
+      "width": 124,
+      "yOffset": 270
+    },
+    {
+      "id": "frank",
+      "lane": "operacao",
+      "col": 1,
+      "type": "backend",
+      "label": "frank",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": 360
+    },
+    {
+      "id": "gestor",
+      "lane": "operacao",
+      "col": 2,
+      "type": "backend",
+      "label": "gestor",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": -360
+    },
+    {
+      "id": "lara",
+      "lane": "operacao",
+      "col": 2,
+      "type": "backend",
+      "label": "lara",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": -270
+    },
+    {
+      "id": "lex",
+      "lane": "operacao",
+      "col": 2,
+      "type": "backend",
+      "label": "lex",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": -180
+    },
+    {
+      "id": "lp",
+      "lane": "operacao",
+      "col": 2,
+      "type": "backend",
+      "label": "lp",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": -90
+    },
+    {
+      "id": "paulo",
+      "lane": "operacao",
+      "col": 2,
+      "type": "backend",
+      "label": "paulo",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": 0
     },
     {
       "id": "qa",
       "lane": "operacao",
-      "col": 1,
+      "col": 2,
       "type": "backend",
-      "label": "QA Verificador",
+      "label": "qa",
       "sublabel": "global",
-      "width": 130,
-      "yOffset": -50
+      "width": 124,
+      "yOffset": 90
     },
     {
-      "id": "copy",
+      "id": "social",
       "lane": "operacao",
       "col": 2,
       "type": "backend",
-      "label": "Copywriter Sênior",
-      "sublabel": "conteudo",
-      "width": 130,
-      "yOffset": -120
+      "label": "social",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": 180
     },
     {
-      "id": "closer",
+      "id": "video-editor",
+      "lane": "operacao",
+      "col": 2,
+      "type": "backend",
+      "label": "video-editor",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": 270
+    },
+    {
+      "id": "video-validator",
+      "lane": "operacao",
+      "col": 2,
+      "type": "backend",
+      "label": "video-validator",
+      "sublabel": "global",
+      "width": 124,
+      "yOffset": 360
+    },
+    {
+      "id": "bento-estrategista",
       "lane": "operacao",
       "col": 3,
       "type": "backend",
-      "label": "Closer de Vendas",
+      "label": "bento-estrategista",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": -315
+    },
+    {
+      "id": "caio-operador",
+      "lane": "operacao",
+      "col": 3,
+      "type": "backend",
+      "label": "caio-operador",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": -225
+    },
+    {
+      "id": "hugo-analista",
+      "lane": "operacao",
+      "col": 3,
+      "type": "backend",
+      "label": "hugo-analista",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": -135
+    },
+    {
+      "id": "maya-abordagem",
+      "lane": "operacao",
+      "col": 3,
+      "type": "backend",
+      "label": "maya-abordagem",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": -45
+    },
+    {
+      "id": "olga-fiscal",
+      "lane": "operacao",
+      "col": 3,
+      "type": "backend",
+      "label": "olga-fiscal",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": 45
+    },
+    {
+      "id": "otto-radar",
+      "lane": "operacao",
+      "col": 3,
+      "type": "backend",
+      "label": "otto-radar",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": 135
+    },
+    {
+      "id": "zara-triagem",
+      "lane": "operacao",
+      "col": 3,
+      "type": "backend",
+      "label": "zara-triagem",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": 225
+    },
+    {
+      "id": "analista-conteudo",
+      "lane": "operacao",
+      "col": 3,
+      "type": "backend",
+      "label": "analista-conteudo",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": 315
+    },
+    {
+      "id": "cleo-produtor",
+      "lane": "operacao",
+      "col": 4,
+      "type": "backend",
+      "label": "cleo-produtor",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": -270
+    },
+    {
+      "id": "dani-designer",
+      "lane": "operacao",
+      "col": 4,
+      "type": "backend",
+      "label": "dani-designer",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": -180
+    },
+    {
+      "id": "guardiao",
+      "lane": "operacao",
+      "col": 4,
+      "type": "backend",
+      "label": "guardiao",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": -90
+    },
+    {
+      "id": "publicador",
+      "lane": "operacao",
+      "col": 4,
+      "type": "backend",
+      "label": "publicador",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": 0
+    },
+    {
+      "id": "suri-estrategista",
+      "lane": "operacao",
+      "col": 4,
+      "type": "backend",
+      "label": "suri-estrategista",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": 90
+    },
+    {
+      "id": "theo-criador",
+      "lane": "operacao",
+      "col": 4,
+      "type": "backend",
+      "label": "theo-criador",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": 180
+    },
+    {
+      "id": "vega-radar",
+      "lane": "operacao",
+      "col": 4,
+      "type": "backend",
+      "label": "vega-radar",
+      "sublabel": "conteudo",
+      "width": 124,
+      "yOffset": 270
+    },
+    {
+      "id": "cont-copy",
+      "lane": "operacao",
+      "col": 5,
+      "type": "backend",
+      "label": "cont-copy",
       "sublabel": "pipeline-luana",
-      "width": 130,
-      "yOffset": -120
+      "width": 124,
+      "yOffset": -270
+    },
+    {
+      "id": "cont-corretor",
+      "lane": "operacao",
+      "col": 5,
+      "type": "backend",
+      "label": "cont-corretor",
+      "sublabel": "pipeline-luana",
+      "width": 124,
+      "yOffset": -180
+    },
+    {
+      "id": "cont-designer",
+      "lane": "operacao",
+      "col": 5,
+      "type": "backend",
+      "label": "cont-designer",
+      "sublabel": "pipeline-luana",
+      "width": 124,
+      "yOffset": -90
+    },
+    {
+      "id": "cont-estrategista",
+      "lane": "operacao",
+      "col": 5,
+      "type": "backend",
+      "label": "cont-estrategista",
+      "sublabel": "pipeline-luana",
+      "width": 124,
+      "yOffset": 0
+    },
+    {
+      "id": "cont-qa",
+      "lane": "operacao",
+      "col": 5,
+      "type": "backend",
+      "label": "cont-qa",
+      "sublabel": "pipeline-luana",
+      "width": 124,
+      "yOffset": 90
+    },
+    {
+      "id": "cont-radar",
+      "lane": "operacao",
+      "col": 5,
+      "type": "backend",
+      "label": "cont-radar",
+      "sublabel": "pipeline-luana",
+      "width": 124,
+      "yOffset": 180
+    },
+    {
+      "id": "outros",
+      "lane": "operacao",
+      "col": 5,
+      "type": "external",
+      "label": "outros (3)",
+      "sublabel": "18 chamadas sem ficha",
+      "width": 136,
+      "yOffset": 270
     }
   ],
   "edges": [
     {
+      "id": "luana-outros",
+      "from": "luana",
+      "to": "outros",
+      "label": "16 chamadas",
+      "variant": "default",
+      "role": "main",
+      "width": 1.6
+    },
+    {
       "id": "luana-dev",
       "from": "luana",
       "to": "dev",
-      "label": "5 chamadas",
+      "label": "15 chamadas",
       "variant": "default",
-      "role": "branch",
-      "calls": 5
-    },
-    {
-      "id": "luana-copy",
-      "from": "luana",
-      "to": "copy",
-      "label": "4 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "calls": 4
+      "role": "main",
+      "width": 1.5
     },
     {
       "id": "luana-qa",
       "from": "luana",
       "to": "qa",
-      "label": "3 chamadas",
+      "label": "12 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-dani-designer",
+      "from": "luana",
+      "to": "dani-designer",
+      "label": "9 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-guardiao",
+      "from": "luana",
+      "to": "guardiao",
+      "label": "8 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-video-validator",
+      "from": "luana",
+      "to": "video-validator",
+      "label": "8 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-theo-criador",
+      "from": "luana",
+      "to": "theo-criador",
+      "label": "6 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-arquiteto",
+      "from": "luana",
+      "to": "arquiteto",
+      "label": "4 chamadas",
       "variant": "dashed",
       "role": "branch",
-      "calls": 3
+      "width": 1.2
+    },
+    {
+      "id": "luana-video-editor",
+      "from": "luana",
+      "to": "video-editor",
+      "label": "4 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-designer",
+      "from": "luana",
+      "to": "designer",
+      "label": "2 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-gestor",
+      "from": "luana",
+      "to": "gestor",
+      "label": "2 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "renato-dev",
+      "from": "renato",
+      "to": "dev",
+      "label": "2 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-analista",
+      "from": "luana",
+      "to": "analista",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-closer",
+      "from": "luana",
+      "to": "closer",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "renato-outros",
+      "from": "renato",
+      "to": "outros",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "renato-qa",
+      "from": "renato",
+      "to": "qa",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "dev-outros",
+      "from": "dev",
+      "to": "outros",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
     }
   ]
 }

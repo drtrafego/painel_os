@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AgenteVivo } from '../dados/tipos'
+import { IDENTIDADE } from './paleta'
 import {
   boundsDoCatalogo,
   chaveAgente,
@@ -35,7 +36,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   const [arrastando, setArrastando] = useState(false)
   const [pontoArrasto, setPontoArrasto] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const [foco, setFoco] = useState<string | null>(agenteSelecionadoId ?? null)
-  const [squad, setSquad] = useState<FiltroOffice>(() => agentes.some((agente) => agente.estado === 'trabalhando' || agente.estado === 'silencioso') ? 'ativos' : 'todos')
+  const [squad, setSquad] = useState<FiltroOffice>(() => agentes.some((agente) => agente.estado === 'trabalhando') ? 'ativos' : 'todos')
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
   const catalogoVisual = useMemo(() => mesclarRuntimesNoCatalogo(catalogo, agentes), [agentes, catalogo])
   const agentesPorCatalogo = useMemo(() => construirMapaAgentesPorCatalogo(agentes, catalogoVisual), [agentes, catalogoVisual])
@@ -48,10 +49,10 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
       ),
     [ativos, catalogoVisual, squad]
   )
-  const ativosAnteriores = useRef(agentes.filter((agente) => agente.estado === 'trabalhando' || agente.estado === 'silencioso').length)
+  const ativosAnteriores = useRef(agentes.filter((agente) => agente.estado === 'trabalhando').length)
 
   useEffect(() => {
-    const quantidade = agentes.filter((agente) => agente.estado === 'trabalhando' || agente.estado === 'silencioso').length
+    const quantidade = agentes.filter((agente) => agente.estado === 'trabalhando').length
     if (ativosAnteriores.current === 0 && quantidade > 0) setSquad('ativos')
     ativosAnteriores.current = quantidade
   }, [agentes])
@@ -83,6 +84,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return
     const ctx = canvas.getContext('2d'); if (!ctx) return
+    const corRenato = getComputedStyle(document.documentElement).getPropertyValue('--color-renato').trim() || IDENTIDADE.renato
     let frame = 0; let tick = 0
     const render = () => {
       const container = containerRef.current
@@ -114,7 +116,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
         if (pulse) { ctx.fillStyle = '#facc15'; ctx.fillRect(8, -17, 4, 4) }; if (selecionado) { ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2; ctx.strokeRect(-18, -22, 36, 46) }
         ctx.fillStyle = '#020617'; ctx.fillRect(-50, 25, 100, 16); ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center'
         const tagDono = runtime?.dono ? `[${runtime.dono[0].toUpperCase()}] ` : ''
-        ctx.fillStyle = runtime?.dono === 'luana' ? '#38bdf8' : runtime?.dono === 'renato' ? '#c084fc' : runtime?.dono === 'bia' ? '#f472b6' : '#f8fafc'
+        ctx.fillStyle = runtime?.dono === 'luana' ? '#38bdf8' : runtime?.dono === 'renato' ? corRenato : runtime?.dono === 'bia' ? '#f472b6' : '#f8fafc'
         ctx.fillText(formatarRotulo(agente.nome, tagDono, 21), 0, 33)
         ctx.font = '6px monospace'; ctx.fillStyle = estado === 'executando' ? '#a3e635' : estado === 'ocioso' ? '#facc15' : '#94a3b8'; ctx.fillText(estado === 'executando' ? 'EXECUTANDO' : estado === 'ocioso' ? 'OCIOSO' : 'FORA DA EXECUÇÃO', 0, 39)
         ctx.restore()

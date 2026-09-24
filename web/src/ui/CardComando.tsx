@@ -2,11 +2,13 @@ import { Icone } from './Icone'
 import { Barra, Numero, Pilula, TEXTO_DO_TOM } from './primitivos'
 import { lerMotores } from '../dados/motores'
 import type { AgenteSessao } from '../dados/tipos'
+import { corDoCardComando, leituraEstadoSessao } from './card-comando-modelo'
 
 export function CardComando({ agente }: { agente: AgenteSessao }) {
   const v = agente.verificador
   const motor = lerMotores(agente.motores)
-  const cor = agente.cor === 'lima' ? 'var(--color-lima)' : 'var(--color-ciano)'
+  const cor = corDoCardComando(agente.id)
+  const leituraSessao = leituraEstadoSessao(agente.estado, agente.ultima_atividade)
   // Indeterminada NAO passou: o verificador nao conseguiu medir aquela. Sair
   // da conta dos verdes era contar como aprovada a checagem que nao olhou.
   const verdes =
@@ -36,6 +38,11 @@ export function CardComando({ agente }: { agente: AgenteSessao }) {
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <h2 className="font-serif text-[26px] leading-none text-tinta">{agente.nome}</h2>
             <span className="rotulo">{agente.papel}</span>
+            <Pilula tom={leituraSessao.tom} ponto={false}>
+              <span title={leituraSessao.titulo} data-estado-sessao={agente.estado ?? 'sem_leitura'}>
+                {leituraSessao.texto}
+              </span>
+            </Pilula>
             <span className="ml-auto shrink-0">
               <Pilula tom={ok ? 'verde' : v.checagens === null ? 'neutro' : 'ambar'}>
                 {v.vencido
