@@ -126,6 +126,18 @@ SENHA_MINIMA = 12  # baixado de 16 pra 12 por pedido dele em 21/09/2026
 # tornar caro varrer a porta. Cada requisição roda na própria thread.
 ATRASO_FALHA = 0.4
 
+# O painel nunca aceita credencial por query string (só Authorization), mas
+# uma tentativa de fora pode mandar ?credencial=... mesmo assim, e o valor
+# tentado chegava em texto claro no log de acesso (achado em 24/09/2026).
+# Mascarar aqui é a PORTA: qualquer log de rota passa por esta função antes
+# de sair, então nenhuma linha nova volta a vazar isto.
+_PADRAO_CREDENCIAL_NA_URL = re.compile(r"(?i)([?&]credencial=)[^&\s]*")
+
+
+def mascarar_credencial_na_rota(texto: str) -> str:
+    return _PADRAO_CREDENCIAL_NA_URL.sub(r"\1***", texto)
+
+
 # Um F5 seguido não pode disparar dois coletores em cima do mesmo arquivo.
 # A coleta roda fora da trava: arquivos estáticos e as demais rotas continuam
 # respondendo enquanto ela mede as fontes lentas.
@@ -811,7 +823,7 @@ class Manipulador(SimpleHTTPRequestHandler):
         self.close_connection = True
         # O header Authorization NUNCA é logado. Só código, origem e rota.
         origem = self.client_address[0] if self.client_address else "?"
-        rota = getattr(self, "path", "?")
+        rota = mascarar_credencial_na_rota(getattr(self, "path", "?"))
         sys.stderr.write(
             f"[{datetime.now(timezone.utc):%H:%M:%S}] RECUSADO {codigo} "
             f"{origem} {rota}" + (f" :: {motivo}" if motivo else "") + "\n"
@@ -1021,7 +1033,8 @@ class Manipulador(SimpleHTTPRequestHandler):
         # thread que estava atendendo a requisicao.
         primeiro = str(args[0]) if args else ""
         if "/api/estado" in primeiro:
-            sys.stderr.write(f"[{datetime.now(timezone.utc):%H:%M:%S}] {formato % args}\n")
+            linha = mascarar_credencial_na_rota(formato % args)
+            sys.stderr.write(f"[{datetime.now(timezone.utc):%H:%M:%S}] {linha}\n")
 
 
 class ServidorPainel(ThreadingHTTPServer):
