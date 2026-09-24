@@ -1105,102 +1105,131 @@ v = c.ler_verificador(Path("/nao/existe/ULTIMO.txt"))
 conferir("arquivo que nao existe diz que nao existe", bool(v["erro_leitura"]), True)
 conferir("e nao inventa numero", v["checagens"], None)
 
-print("\n--- API de tarefas: agregado e falha alta")
-class RespostaFake:
-    def __init__(self, corpo): self.corpo = corpo
-    def __enter__(self): return io.StringIO(json.dumps(self.corpo))
-    def __exit__(self, *args): return False
-
-guarda_env, guarda_urlopen = c._ler_env, c.urllib.request.urlopen
-c._ler_env = lambda *_: "segredo-de-teste"
-def urlopen_ok(req, timeout):
-    status = req.full_url.split("status=")[1].split("&")[0]
-    tarefas = [{"id": "1", "status": "todo", "priority": "p1", "projectSlug": "pessoal", "dueDate": None, "updatedAt": c.agora_utc().isoformat()}] if status == "todo" else []
-    return RespostaFake({"ok": True, "data": {"tasks": tarefas}})
-c.urllib.request.urlopen = urlopen_ok
-t = c.ler_tarefas()
-conferir("sucesso conta a tarefa", t["total_abertas"], 1)
-conferir("campo legado acompanha o total aberto para bundles em cache", t["total"], t["total_abertas"])
-conferir("o total diz explicitamente que é carteira aberta", (t["escopo"], t["total_abertas"], t["status_excluidos"]), ("abertas", 1, ["done"]))
-conferir("JSON agregado não carrega título, nota nem id", any(k in json.dumps(t) for k in ['title', 'notes', 'segredo-de-teste']), False)
-
-# Teste com 43 ativas e 124 no backlog (organização da carteira em 23/09/2026)
-def urlopen_43_124(req, timeout):
-    status = req.full_url.split("status=")[1].split("&")[0]
-    agora = c.agora_utc().isoformat()
-    if status == "todo":
-        tarefas = [{"id": f"todo-{i}", "status": "todo", "priority": "p2", "projectSlug": "clientes", "dueDate": None, "updatedAt": agora} for i in range(40)]
-    elif status == "doing":
-        tarefas = [{"id": f"doing-{i}", "status": "doing", "priority": "p1", "projectSlug": "clientes", "dueDate": None, "updatedAt": agora} for i in range(2)]
-    elif status == "waiting":
-        tarefas = [{"id": "wait-0", "status": "waiting", "priority": "p3", "projectSlug": "pessoal", "dueDate": None, "updatedAt": agora}]
-    elif status == "backlog":
-        tarefas = [{"id": f"backlog-{i}", "status": "backlog", "priority": "p4", "projectSlug": "charcutaria", "dueDate": None, "updatedAt": agora} for i in range(124)]
-    else:
-        tarefas = []
-    return RespostaFake({"ok": True, "data": {"tasks": tarefas}})
-
-c.urllib.request.urlopen = urlopen_43_124
-t = c.ler_tarefas()
-conferir("43 tarefas ativas e 124 no backlog: total_abertas conta só as 43 ativas", t["total_abertas"], 43)
-conferir("total_backlog isola as 124 guardadas", t["total_backlog"], 124)
-conferir("por_prazo soma exatamente as 43 ativas, excluindo backlog", sum(t["por_prazo"].values()), 43)
-conferir("por_movimento soma exatamente as 43 ativas", sum(t["por_movimento"].values()), 43)
-
-# Testes de tarefas abandonadas e redação de leads (Rodada 5)
-def urlopen_abandonadas(req, timeout):
-    status = req.full_url.split("status=")[1].split("&")[0]
-    agora_dt = c.agora_utc()
-    # 25/08/2026 (30 dias antes de 24/09/2026)
-    data_25_ago = (agora_dt - c.timedelta(days=30)).isoformat()
-    data_5_dias = (agora_dt - c.timedelta(days=5)).isoformat()
-    if status == "todo":
-        tarefas = [
-            # 1. Tarefa de 25/08 sem prazo com título "Ads" -> É MARCADAB
-            {"id": "t-ads", "title": "Ads", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
-            # 2. Tarefa de 25/08 sem prazo com título "Enviar" -> É MARCADA
-            {"id": "t-enviar", "title": "Enviar", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
-            # 3. Tarefa de 25/08 sem prazo com título "Fazer Nova Campanha" -> É MARCADA
-            {"id": "t-nova-camp", "title": "Fazer Nova Campanha", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
-            # 4. Tarefa de 25/08 sem prazo com título só telefone -> É MARCADA
-            {"id": "t-fone", "title": "(11) 98765-4321", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
-            # 5. Tarefa com prazo (dueDate) -> NÃO É MARCADA
-            {"id": "t-com-prazo", "title": "Ads", "status": "todo", "projectSlug": "clientes", "dueDate": "2026-09-30T00:00:00Z", "updatedAt": data_25_ago},
-            # 6. Tarefa movimentada há 5 dias (< 21 dias) -> NÃO É MARCADA
-            {"id": "t-recente", "title": "Ads", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_5_dias},
-            # 7. Tarefa sem prazo de 25/08 mas com título longo (4+ palavras) -> NÃO É MARCADA
-            {"id": "t-longa", "title": "Desenvolver nova campanha promocional completa", "status": "todo", "projectSlug": "clientes", "dueDate": None, "updatedAt": data_25_ago},
-        ]
-    else:
-        tarefas = []
-    return RespostaFake({"ok": True, "data": {"tasks": tarefas}})
-
-c.urllib.request.urlopen = urlopen_abandonadas
-t_aband = c.ler_tarefas()
-itens_map = {it["id"]: it for it in t_aband.get("itens", [])}
-
-conferir("total de candidatas a arquivar = 4", t_aband["total_candidatas_arquivar"], 4)
-conferir("tarefa de 25/08 sem prazo 'Ads' É marcada abandonada", itens_map.get("t-ads", {}).get("parece_abandonada"), True)
-conferir("tarefa de 25/08 sem prazo 'Enviar' É marcada abandonada", itens_map.get("t-enviar", {}).get("parece_abandonada"), True)
-conferir("tarefa de 25/08 sem prazo 'Fazer Nova Campanha' É marcada abandonada", itens_map.get("t-nova-camp", {}).get("parece_abandonada"), True)
-conferir("tarefa de 25/08 sem prazo com só telefone É marcada abandonada", itens_map.get("t-fone", {}).get("parece_abandonada"), True)
-conferir("tarefa com prazo NÃO é marcada", itens_map.get("t-com-prazo", {}).get("parece_abandonada"), False)
-conferir("tarefa movimentada há 5 dias NÃO é marcada", itens_map.get("t-recente", {}).get("parece_abandonada"), False)
-conferir("tarefa com título longo (4+ palavras) NÃO é marcada", itens_map.get("t-longa", {}).get("parece_abandonada"), False)
-conferir("telefone no título é redigido mantendo os 4 últimos dígitos", "[tel:...4321]" in itens_map.get("t-fone", {}).get("titulo", ""), True)
-
-# Testes diretos de redigir_texto_livre
+print("\n--- isolamento de tarefas pessoais: ler_tarefas e TAREFAS_BASE removidos")
+conferir("ler_tarefas foi removido do coletor", hasattr(c, "ler_tarefas"), False)
+conferir("TAREFAS_BASE foi removido do coletor", hasattr(c, "TAREFAS_BASE"), False)
 conferir("redigir_texto_livre mascara telefone com 4 últimos dígitos", c.redigir_texto_livre("Ligar (11) 98765-4321", manter_ultimos_4_tel=True), "Ligar [tel:...4321]")
 conferir("redigir_texto_livre sanitiza caminhos absolutos", c.redigir_texto_livre("Salvar em /opt/gastaomatos/dados"), "Salvar em [caminho]")
 
-def urlopen_falha(req, timeout):
-    if "status=doing" in req.full_url: raise c.urllib.error.URLError("fora")
-    return urlopen_ok(req, timeout)
-c.urllib.request.urlopen = urlopen_falha
-t = c.ler_tarefas()
-conferir("falha parcial torna totais indisponíveis, não zero", (t["total"], t["total_abertas"]), (None, None))
-conferir("e o erro viaja explícito", bool(t["erro"]), True)
-c._ler_env, c.urllib.request.urlopen = guarda_env, guarda_urlopen
+print("\n--- descoberta de agentes: mapeamento de squads e comercial-squad")
+pasta_temp_ag = Path(tempfile.mkdtemp())
+try:
+    pasta_global_fake = pasta_temp_ag / "global"
+    pasta_global_fake.mkdir()
+    (pasta_global_fake / "agente_raiz.md").write_text("---\nname: raiz\ndescription: Agente raiz global\n---\nCorpo", encoding="utf-8")
+
+    # Subpasta comercial-squad
+    com_sq = pasta_global_fake / "comercial-squad" / "agents"
+    com_sq.mkdir(parents=True)
+    (com_sq / "otto-radar.md").write_text("---\nname: otto-radar\ndescription: Radar comercial\n---\nCorpo", encoding="utf-8")
+    (com_sq / "zara-triagem.md").write_text("---\nname: zara-triagem\ndescription: Triagem comercial\n---\nCorpo", encoding="utf-8")
+
+    # Subpasta desconhecida
+    desc_sq = pasta_global_fake / "outro-squad" / "agents"
+    desc_sq.mkdir(parents=True)
+    (desc_sq / "novo-agente.md").write_text("---\nname: novo-agente\ndescription: Agente outro\n---\nCorpo", encoding="utf-8")
+
+    # Pasta sem frontmatter name
+    (com_sq / "sem-name.md").write_text("---\ndescription: Sem name\n---\nCorpo", encoding="utf-8")
+
+    desc_achados = c.descobrir_agentes(pasta_codex=Path("/nao/existe"), pasta_global=pasta_global_fake)
+    mapa_achados = {a["id"]: a for a in desc_achados}
+
+    conferir("otto-radar classificado como squad comercial", mapa_achados.get("otto-radar", {}).get("squad"), "comercial")
+    conferir("zara-triagem classificado como squad comercial", mapa_achados.get("zara-triagem", {}).get("squad"), "comercial")
+    conferir("pasta desconhecida classificada como desconhecido", mapa_achados.get("novo-agente", {}).get("squad"), "desconhecido")
+    conferir("agente da raiz classificado como global", mapa_achados.get("raiz", {}).get("squad"), "global")
+    conferir("arquivo sem name: descartado", "sem-name" in mapa_achados, False)
+finally:
+    shutil.rmtree(pasta_temp_ag)
+
+print("\n--- fiscal comercial: métricas agregadas sem texto, lead ou PII")
+# Caso 1: sem arquivos (falha suave sem zero inventado)
+f_vazio = c.ler_fiscal_comercial(caminho_agregado=Path("/nao/existe/agregado.json"), caminho_pipeline=Path("/nao/existe/pipeline.jsonl"))
+conferir("sem arquivos: status sem_dado", f_vazio["status"], "sem_dado")
+conferir("sem arquivos: meta sem dado explicito", f_vazio["meta_agendamentos"]["texto"], "sem dado, Hugo ainda não mediu")
+conferir("sem arquivos: totais são None e não zero", (f_vazio["total_passa"], f_vazio["total_bloqueia"]), (None, None))
+
+# Caso 2: com pipeline.jsonl fixture contendo dados e textos que NÃO podem vazar
+pasta_temp_fisc = Path(tempfile.mkdtemp())
+try:
+    pipe_fake = pasta_temp_fisc / "pipeline.jsonl"
+    linhas_pipe = [
+        # Linha normal de fiscal com checagens
+        json.dumps({
+            "etapa": "fiscal",
+            "status": "PASSA",
+            "texto": "Texto proibido da peça do lead João da Silva (11) 98765-4321",
+            "lead": {"nome": "João da Silva", "telefone": "11987654321"},
+            "checagens": [
+                {"checagem": "C1", "status": "PASSA"},
+                {"checagem": "C2", "status": "PASSA"},
+                {"checagem": "S1", "status": "PASSA"},
+            ]
+        }),
+        # Linha com BLOQUEIA
+        json.dumps({
+            "etapa": "fiscal",
+            "status": "BLOQUEIA",
+            "texto": "Outro texto confidencial",
+            "correcoes_pedidas": ["Remover promessa exagerada"],
+            "checagens": [
+                {"checagem": "C1", "status": "PASSA"},
+                {"checagem": "C2", "status": "BLOQUEIA"},
+            ]
+        }),
+        # Linha de outra etapa (não deve ser contada no fiscal)
+        json.dumps({
+            "etapa": "operador",
+            "status": "PASSA",
+            "texto": "Etapa operador"
+        })
+    ]
+    pipe_fake.write_text("\n".join(linhas_pipe), encoding="utf-8")
+
+    f_pipe = c.ler_fiscal_comercial(caminho_pipeline=pipe_fake)
+    conferir("pipeline: status pronto", f_pipe["status"], "pronto")
+    conferir("pipeline: total_passa = 1", f_pipe["total_passa"], 1)
+    conferir("pipeline: total_bloqueia = 1", f_pipe["total_bloqueia"], 1)
+    conferir("pipeline: checagem_mais_disparada é C2", f_pipe["checagem_mais_disparada"], "C2")
+
+    # Auditoria de privacidade e vazamento
+    dump_pipe = json.dumps(f_pipe)
+    conferir("NENHUM texto de peça vaza no fiscal", "Texto proibido" in dump_pipe or "Outro texto" in dump_pipe, False)
+    conferir("NENHUM nome de lead vaza no fiscal", "João" in dump_pipe or "Silva" in dump_pipe, False)
+    conferir("NENHUM telefone vaza no fiscal", "98765" in dump_pipe, False)
+    conferir("NENHUMA chave texto ou correcoes_pedidas", "correcoes_pedidas" in dump_pipe, False)
+    conferir("auditar_estado_publico aprova o retorno do fiscal", c.auditar_estado_publico(f_pipe), [])
+    conferir("meta de agendamentos continua com aviso do Hugo", f_pipe["meta_agendamentos"]["texto"], "sem dado, Hugo ainda não mediu")
+
+    # Caso 3: com agregado.json
+    agregado_fake = pasta_temp_fisc / "agregado.json"
+    agregado_fake.write_text(json.dumps({
+        "por_checagem": [
+            {"checagem": "C1", "passa": 10, "bloqueia": 1},
+            {"checagem": "C2", "passa": 8, "bloqueia": 3}
+        ],
+        "total_passa": 18,
+        "total_bloqueia": 4,
+        "checagem_mais_disparada": "C2"
+    }), encoding="utf-8")
+    f_agr = c.ler_fiscal_comercial(caminho_agregado=agregado_fake)
+    conferir("agregado: status pronto", f_agr["status"], "pronto")
+    conferir("agregado: total_passa = 18", f_agr["total_passa"], 18)
+    conferir("agregado: total_bloqueia = 4", f_agr["total_bloqueia"], 4)
+    conferir("agregado: checagem_mais_disparada = C2", f_agr["checagem_mais_disparada"], "C2")
+finally:
+    shutil.rmtree(pasta_temp_fisc)
+
+print("\n--- mapa interativo horizontal do setor comercial")
+wf_com = c.gerar_workflow_setor_comercial()
+conferir("workflow comercial schema_version é 2", wf_com.get("schema_version"), 2)
+conferir("workflow comercial tem 4 fases", len(wf_com.get("phases", [])), 4)
+conferir("workflow comercial tem os 2 gates de segurança do Gastão",
+         any(n.get("id") == "gastao_plano" for n in wf_com.get("nodes", [])) and
+         any(n.get("id") == "gastao_textos" for n in wf_com.get("nodes", [])), True)
+html_com = c.renderizar_html_workflow_setor_comercial(wf_com)
+conferir("mapa comercial html gerado é documento válido", "<!DOCTYPE html>" in html_com and "Setor comercial" in html_com, True)
 
 print("\n--- fila persistente de aprovações")
 pasta_ap = Path(tempfile.mkdtemp())

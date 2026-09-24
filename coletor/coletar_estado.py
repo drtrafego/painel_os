@@ -68,23 +68,9 @@ MCP_RUNTIME_TOOLS = Path.home() / ".codex-luana/cache/codex_apps_tools"
 PLUGINS_CODEX = Path.home() / ".codex-luana/plugins/cache/openai-curated-remote"
 PLUGINS_CLAUDE = Path.home() / ".claude/plugins/installed_plugins.json"
 SAIDA = RAIZ / "luana/painel_os/data/estado.json"
-TAREFAS_ENV = RAIZ / "luana/.env.tarefas"
-TAREFAS_BASE = "https://tarefas.casaldotrafego.com/api/v1"
-TAREFAS_STATUS = ("todo", "doing", "waiting", "backlog")
-TAREFAS_STATUS_ATIVAS = ("todo", "doing", "waiting")
-TAREFAS_STATUS_GUARDADAS = ("backlog",)
-# Critérios para marcar tarefas que parecem abandonadas no GTD (Rodada 5):
-#   - sem prazo (dueDate vazio)
-#   - sem movimento há mais de 21 dias (updatedAt)
-#   - título curto (até 3 palavras, ex: "Ads", "Enviar", "Fazer Nova Campanha") OU apenas número de telefone
-ABANDONADA_DIAS_SEM_MOVIMENTO = 21
-ABANDONADA_MAX_PALAVRAS_TITULO = 3
 APROVACOES_JSON = RAIZ / "luana/painel_os/data/aprovacoes.json"
 APROVACAO_ESTADOS = ("aguardando", "aprovado", "reprovado", "cancelado")
 APROVACAO_TIPOS = ("conteudo", "documento", "campanha", "outro")
-TAREFAS_PROJETOS_PUBLICOS = {
-    "charcutaria", "clientes", "gramado-plazza", "pessoal", "curso", "conteudo"
-}
 MEMORIA_RAIZ = RAIZ / "luana/memoria"
 # Cofre de conhecimento: UM arquivo, na mesma pasta de dados curados do painel
 # (aprovacoes/calendario/diretiva). Cada registro é um APRENDIZADO com autor e
@@ -153,11 +139,26 @@ SQUADS = {
         "nome": "Squad de conteúdo",
         "descricao": "Pipeline da peça: radar, estratégia, roteiro, texto, arte e fiscal.",
     },
+    "comercial": {
+        "nome": "Setor comercial",
+        "descricao": "Traz cliente novo pra agência vendendo o sistema pronto.",
+    },
     "pipeline-luana": {
         "nome": "Pipeline local da Luana",
         "descricao": "Versão enxuta do squad de conteúdo, registrada dentro da pasta dela.",
     },
 }
+
+# Mapa explícito pasta de squad -> chave de squad
+MAPA_PASTA_SQUAD = {
+    "conteudo-squad": "conteudo",
+    "squad-conteudo": "conteudo",
+    "conteudo": "conteudo",
+    "comercial-squad": "comercial",
+    "squad-comercial": "comercial",
+    "comercial": "comercial",
+}
+
 
 
 def agora_utc():
@@ -397,168 +398,159 @@ def ler_followup(caminho_estado=FOLLOWUP_ESTADO, caminho_log=FOLLOWUP_LOG):
     }
 
 
-def ler_tarefas():
-    """Lê o estoque do GTD e só devolve agregados, nunca texto ou PII.
+def ler_fiscal_comercial(caminho_agregado=None, caminho_pipeline=None):
+    """Lê o veredito e checagens do fiscal comercial (C1..C13, S1..S3).
 
-    ``todo``, ``doing`` e ``waiting`` são os estados abertos ativos da carteira.
-    ``backlog`` representa tarefas estagnadas/guardadas, medidas separadamente.
-    ``done`` fica fora desta leitura. Os quatro estados precisam responder da API;
-    falha parcial invalida tudo.
+    Regra dura: NUNCA repassa texto de peças, correções pedidas nem dados de leads.
+    Se nem o agregado nem o pipeline.jsonl existirem, devolve status: 'sem_dado' sem inventar zero.
     """
     vazio = {
-        "erro": None,
-        "sistema": "gestor_tarefas",
-        "escopo": "abertas",
-        "status_incluidos": list(TAREFAS_STATUS),
-        "status_excluidos": ["done"],
-        "fonte": "API REST v1 do gestor GTD, agregada sem texto livre nem identificadores",
-        "coletado_em": None,
-        # Compatibilidade de transição com bundles antigos em cache. A UI nova
-        # usa ``total_abertas``; retirar ``total`` de uma vez derruba a tela de
-        # quem ainda tem o validador anterior no navegador.
-        "total": None,
-        "total_abertas": None,
-        "total_backlog": None,
-        "total_candidatas_arquivar": None,
-        "por_status": {},
-        "por_prioridade": {},
-        "por_prazo": {},
-        "por_movimento": {},
-        "por_projeto": [],
-        "itens": [],
-        "truncado": None,
+        "status": "sem_dado",
+        "atualizado_em": None,
+        "erro": "fiscal comercial ainda não mediu peças; fase 1 em andamento",
+        "por_checagem": [],
+        "total_passa": None,
+        "total_bloqueia": None,
+        "checagem_mais_disparada": None,
+        "meta_agendamentos": {
+            "status": "sem_dado",
+            "texto": "sem dado, Hugo ainda não mediu",
+        },
     }
-    try:
-        token = _ler_env(TAREFAS_ENV, "GESTOR_TAREFAS_API_KEY")
-        tarefas = {}
-        truncado = False
-        for status in TAREFAS_STATUS:
-            req = urllib.request.Request(
-                f"{TAREFAS_BASE}/tasks?status={status}&limit=200",
-                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=18) as resposta:
-                bruto = json.load(resposta)
-            lista = bruto.get("data", {}).get("tasks") if isinstance(bruto, dict) else None
-            if not isinstance(bruto, dict) or bruto.get("ok") is not True or not isinstance(lista, list):
-                raise RuntimeError(f"resposta inválida ao ler estado {status}")
-            truncado = truncado or len(lista) == 200
-            for tarefa in lista:
-                if not isinstance(tarefa, dict) or not isinstance(tarefa.get("id"), (str, int)):
-                    raise RuntimeError(f"tarefa inválida no estado {status}")
-                tarefas[str(tarefa["id"])] = tarefa
-    except urllib.error.HTTPError as e:
-        vazio["erro"] = f"API de tarefas respondeu HTTP {e.code}; contagens indisponíveis"
-        return vazio
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError, RuntimeError) as e:
-        vazio["erro"] = f"não consegui ler a API de tarefas ({type(e).__name__}); contagens indisponíveis"
-        return vazio
 
-    instante_coleta = agora_utc()
-    hoje = instante_coleta.date()
-    por_status = {s: 0 for s in TAREFAS_STATUS}
-    por_prioridade = {p: 0 for p in ("p1", "p2", "p3", "p4")}
-    por_prazo = {"atrasadas": 0, "hoje": 0, "proximos_7_dias": 0, "sem_prazo": 0, "depois": 0}
-    por_movimento = {"ultimos_7_dias": 0, "entre_7_e_30_dias": 0, "sem_atualizacao_30_dias": 0}
-    projetos = {}
-    itens_ativos = []
-    try:
-        for tarefa in tarefas.values():
-            status = tarefa.get("status")
-            if status in por_status:
-                por_status[status] += 1
-            if status not in TAREFAS_STATUS_ATIVAS:
-                continue
-            prioridade = tarefa.get("priority")
-            if prioridade in por_prioridade:
-                por_prioridade[prioridade] += 1
-            slug = tarefa.get("projectSlug") or tarefa.get("project_slug") or tarefa.get("projeto")
-            rotulo = slug if slug in TAREFAS_PROJETOS_PUBLICOS else "outros projetos"
-            projetos[rotulo] = projetos.get(rotulo, 0) + 1
-            atualizado_str = tarefa.get("updatedAt") or tarefa.get("updated_at") or tarefa.get("atualizada_em")
-            if atualizado_str:
-                atualizado = datetime.fromisoformat(str(atualizado_str).replace("Z", "+00:00"))
-                if atualizado.tzinfo is None:
-                    atualizado = atualizado.replace(tzinfo=timezone.utc)
-                idade = instante_coleta - atualizado.astimezone(timezone.utc)
-            else:
-                idade = timedelta(days=999)
-            movimento = "ultimos_7_dias" if idade < timedelta(days=7) else "entre_7_e_30_dias" if idade < timedelta(days=30) else "sem_atualizacao_30_dias"
-            por_movimento[movimento] += 1
-            prazo_raw = tarefa.get("dueDate") or tarefa.get("due_date") or tarefa.get("prazo")
-            tem_prazo = bool(prazo_raw and str(prazo_raw).strip() not in ("", "None", "0001-01-01T00:00:00Z"))
-            if not tem_prazo:
-                por_prazo["sem_prazo"] += 1
-                prazo_val = None
-            else:
-                dia = datetime.fromisoformat(str(prazo_raw).replace("Z", "+00:00")).date()
-                delta = (dia - hoje).days
-                faixa = "atrasadas" if delta < 0 else "hoje" if delta == 0 else "proximos_7_dias" if delta <= 7 else "depois"
-                por_prazo[faixa] += 1
-                prazo_val = str(prazo_raw)
+    candidatos_agregado = [
+        caminho_agregado,
+        RAIZ / "comercial/squad/painel/agregado.json",
+        RAIZ / "luana/plugins/sales-autonomia/fiscal/agregado.json",
+        RAIZ / "luana/comercial/agregado.json",
+    ]
+    arq_agregado = next((Path(p) for p in candidatos_agregado if p and Path(p).is_file()), None)
 
-            # Critério "parece abandonada" (Rodada 5):
-            # 1. Sem prazo (dueDate vazio)
-            # 2. Sem movimento há mais de 21 dias (updatedAt)
-            # 3. Título curto (até 3 palavras, ex: "Ads", "Enviar", "Fazer Nova Campanha") OU apenas número de telefone
-            titulo_bruto = str(tarefa.get("title") or tarefa.get("titulo") or tarefa.get("name") or "").strip()
-            palavras = [p for p in titulo_bruto.split() if p]
-            eh_titulo_curto = bool(palavras and len(palavras) <= ABANDONADA_MAX_PALAVRAS_TITULO)
-            digs_tel = re.sub(r"\D", "", titulo_bruto)
-            eh_so_telefone = bool(digs_tel and len(digs_tel) >= 8 and len(re.sub(r"[\s\(\)\+\-\.]", "", titulo_bruto)) == len(digs_tel))
-            sem_movimento_21d = idade > timedelta(days=ABANDONADA_DIAS_SEM_MOVIMENTO)
-            parece_abandonada = bool((not tem_prazo) and sem_movimento_21d and (eh_titulo_curto or eh_so_telefone))
+    if arq_agregado:
+        try:
+            bruto = json.loads(arq_agregado.read_text(encoding="utf-8"))
+            if isinstance(bruto, dict):
+                por_chec = []
+                total_p = 0
+                total_b = 0
+                raw_chec = bruto.get("por_checagem") or bruto.get("checagens") or []
+                if isinstance(raw_chec, list):
+                    for item in raw_chec:
+                        if isinstance(item, dict) and "checagem" in item:
+                            c_nome = str(item["checagem"])
+                            p_cnt = int(item.get("passa", 0) or 0)
+                            b_cnt = int(item.get("bloqueia", 0) or 0)
+                            por_chec.append({"checagem": c_nome, "passa": p_cnt, "bloqueia": b_cnt})
+                            total_p += p_cnt
+                            total_b += b_cnt
+                elif isinstance(raw_chec, dict):
+                    for c_nome, counts in raw_chec.items():
+                        if isinstance(counts, dict):
+                            p_cnt = int(counts.get("passa", 0) or 0)
+                            b_cnt = int(counts.get("bloqueia", 0) or 0)
+                            por_chec.append({"checagem": str(c_nome), "passa": p_cnt, "bloqueia": b_cnt})
+                            total_p += p_cnt
+                            total_b += b_cnt
 
-            # Redação do título do texto livre (mascara lead preservando últimos 4 dígitos)
-            titulo_redigido = redigir_texto_livre(titulo_bruto, limite=140, manter_ultimos_4_tel=True) or "Sem título"
-            criado_raw = tarefa.get("createdAt") or tarefa.get("created_at") or tarefa.get("criada_em")
+                total_p = bruto.get("total_passa", total_p)
+                total_b = bruto.get("total_bloqueia", total_b)
+                mais_disp = bruto.get("checagem_mais_disparada")
+                if not mais_disp and por_chec:
+                    mais_disp = max(por_chec, key=lambda x: x["bloqueia"])["checagem"]
 
-            itens_ativos.append({
-                "id": str(tarefa.get("id")),
-                "titulo": titulo_redigido,
-                "projeto": rotulo,
-                "status": status,
-                "prioridade": prioridade,
-                "criada_em": str(criado_raw) if criado_raw else None,
-                "prazo": prazo_val,
-                "atualizada_em": str(atualizado_str) if atualizado_str else None,
-                "dias_sem_movimento": idade.days,
-                "parece_abandonada": parece_abandonada,
-            })
-    except (TypeError, ValueError):
-        vazio["erro"] = "API devolveu prazo ou data inválida; contagens indisponíveis"
-        return vazio
+                mtime = datetime.fromtimestamp(arq_agregado.stat().st_mtime, tz=timezone.utc).isoformat()
+                return {
+                    "status": "pronto",
+                    "atualizado_em": mtime,
+                    "erro": None,
+                    "por_checagem": sorted(por_chec, key=lambda x: x["checagem"]),
+                    "total_passa": total_p,
+                    "total_bloqueia": total_b,
+                    "checagem_mais_disparada": mais_disp,
+                    "meta_agendamentos": {
+                        "status": "sem_dado",
+                        "texto": "sem dado, Hugo ainda não mediu",
+                    },
+                }
+        except Exception:
+            pass
 
-    total_ativas = sum(por_status.get(s, 0) for s in TAREFAS_STATUS_ATIVAS)
-    total_backlog = por_status.get("backlog", 0)
-    total_candidatas_arquivar = sum(1 for it in itens_ativos if it["parece_abandonada"])
+    candidatos_pipe = [
+        caminho_pipeline,
+        RAIZ / "comercial/squad/logs/pipeline.jsonl",
+        RAIZ / "luana/plugins/sales-autonomia/fiscal/pipeline.jsonl",
+        RAIZ / "luana/comercial/pipeline.jsonl",
+    ]
+    arq_pipe = next((Path(p) for p in candidatos_pipe if p and Path(p).is_file()), None)
 
-    # Ordena itens por projeto e pelas tarefas mais paradas primeiro
-    itens_ativos.sort(key=lambda x: (x["projeto"], -x.get("dias_sem_movimento", 0), x["titulo"]))
+    if arq_pipe:
+        try:
+            linhas_fiscal = []
+            for lin in arq_pipe.read_text(encoding="utf-8", errors="replace").splitlines():
+                lin = lin.strip()
+                if not lin:
+                    continue
+                try:
+                    obj = json.loads(lin)
+                    if isinstance(obj, dict) and obj.get("etapa") == "fiscal":
+                        linhas_fiscal.append(obj)
+                except Exception:
+                    continue
 
-    return {
-        **vazio,
-        "coletado_em": agora_utc().isoformat(),
-        "total": total_ativas,
-        "total_abertas": total_ativas,
-        "total_backlog": total_backlog,
-        "total_candidatas_arquivar": total_candidatas_arquivar,
-        "por_status": por_status,
-        "por_prioridade": por_prioridade,
-        "por_prazo": por_prazo,
-        "por_movimento": por_movimento,
-        "por_projeto": [
-            {
-                "projeto": nome if nome in TAREFAS_PROJETOS_PUBLICOS else (
-                    rotulo_seguro(nome, limite=40)[0] if rotulo_seguro(nome, limite=40) else "outros projetos"
-                ),
-                "total": total,
-            }
-            for nome, total in sorted(projetos.items(), key=lambda x: (-x[1], x[0]))
-        ],
-        "itens": itens_ativos,
-        "truncado": truncado,
-    }
+            if linhas_fiscal:
+                total_p = 0
+                total_b = 0
+                checagens_contadas = {}
+                for obj in linhas_fiscal:
+                    st = str(obj.get("status", "")).upper()
+                    if st == "PASSA":
+                        total_p += 1
+                    elif st == "BLOQUEIA":
+                        total_b += 1
+                    raw_c = obj.get("checagens")
+                    if isinstance(raw_c, list):
+                        for c in raw_c:
+                            if isinstance(c, dict) and "checagem" in c:
+                                nome = str(c["checagem"])
+                                d = checagens_contadas.setdefault(nome, {"checagem": nome, "passa": 0, "bloqueia": 0})
+                                if c.get("status") == "PASSA":
+                                    d["passa"] += 1
+                                else:
+                                    d["bloqueia"] += 1
+                            elif isinstance(c, str):
+                                d = checagens_contadas.setdefault(c, {"checagem": c, "passa": 0, "bloqueia": 0})
+                                if st == "PASSA":
+                                    d["passa"] += 1
+                                else:
+                                    d["bloqueia"] += 1
+                    elif isinstance(raw_c, dict):
+                        for nome, val in raw_c.items():
+                            d = checagens_contadas.setdefault(nome, {"checagem": nome, "passa": 0, "bloqueia": 0})
+                            if str(val).upper() == "PASSA":
+                                d["passa"] += 1
+                            else:
+                                d["bloqueia"] += 1
+
+                por_chec = sorted(checagens_contadas.values(), key=lambda x: x["checagem"])
+                mais_disp = max(por_chec, key=lambda x: x["bloqueia"])["checagem"] if por_chec else None
+                mtime = datetime.fromtimestamp(arq_pipe.stat().st_mtime, tz=timezone.utc).isoformat()
+                return {
+                    "status": "pronto",
+                    "atualizado_em": mtime,
+                    "erro": None,
+                    "por_checagem": por_chec,
+                    "total_passa": total_p,
+                    "total_bloqueia": total_b,
+                    "checagem_mais_disparada": mais_disp,
+                    "meta_agendamentos": {
+                        "status": "sem_dado",
+                        "texto": "sem dado, Hugo ainda não mediu",
+                    },
+                }
+        except Exception:
+            pass
+
+    return vazio
 
 
 def ler_aprovacoes(caminho=APROVACOES_JSON):
@@ -1770,7 +1762,7 @@ def ler_frontmatter(caminho: Path):
     return dados, corpo
 
 
-def descobrir_agentes(pasta_codex: Path = AGENTES_CODEX):
+def descobrir_agentes(pasta_codex: Path = AGENTES_CODEX, pasta_global: Path = None):
     """Normaliza catálogos de agentes sem eleger um motor como fonte única.
 
     Os manifestos Markdown legados e os TOML do Codex são adaptadores da mesma
@@ -1830,8 +1822,14 @@ def descobrir_agentes(pasta_codex: Path = AGENTES_CODEX):
                 origem,
             )
 
-    coletar(AGENTES_GLOBAIS, "global", "catálogo global", 1)
-    coletar(AGENTES_GLOBAIS, "conteudo", "catálogo de conteúdo", 2)
+    alvo_global = pasta_global if pasta_global is not None else AGENTES_GLOBAIS
+    coletar(alvo_global, "global", "catálogo global", 1)
+    if alvo_global.is_dir():
+        for sub in sorted(alvo_global.iterdir()):
+            if sub.is_dir() and (sub / "agents").is_dir():
+                sq = MAPA_PASTA_SQUAD.get(sub.name.lower(), "desconhecido")
+                orig = SQUADS.get(sq, {}).get("nome", f"squad {sub.name}")
+                coletar(sub / "agents", sq, orig, 1)
     coletar(RAIZ / "luana/.claude/agents", "pipeline-luana", "manifesto Markdown", 1)
 
     if pasta_codex.is_dir():
@@ -3088,6 +3086,573 @@ def salvar_mapas_quem_convoca_quem(janelas: dict, agentes: list, squads: dict) -
                 pass
 
 
+def gerar_workflow_setor_comercial() -> dict:
+    """Gera o workflow horizontal Archify v2 para o Setor Comercial (aquisição)."""
+    return {
+        "schema_version": 2,
+        "diagram_type": "workflow",
+        "meta": {
+            "title": "Setor comercial: aquisição de cliente novo",
+            "animation": "trace",
+            "quality_profile": "showcase",
+            "views": [
+                {
+                    "id": "pipeline-completo",
+                    "label": "Pipeline completo",
+                    "focus": [
+                        "zara", "otto", "bento", "gastao_plano",
+                        "maya", "olga", "gastao_textos",
+                        "caio", "clay", "hugo"
+                    ],
+                    "note": "Fluxo horizontal completo de aquisição de cliente novo.",
+                },
+                {
+                    "id": "aprovacoes",
+                    "label": "Aprovações do Gastão",
+                    "focus": ["gastao_plano", "gastao_textos"],
+                    "note": "Gates humanos obrigatórios: aprovação de plano e aprovação de textos com hash.",
+                },
+            ],
+            "output": "web/public/mapas/setor-comercial.html",
+        },
+        "lanes": [
+            {"id": "comercial", "label": "Setor comercial"}
+        ],
+        "phases": [
+            {"id": "sinal-plano", "label": "Sinal e plano", "fromCol": 0, "toCol": 2},
+            {"id": "aprovacao-plano", "label": "Aprovação", "fromCol": 3, "toCol": 3, "variant": "security"},
+            {"id": "texto-fiscal", "label": "Texto e fiscal", "fromCol": 4, "toCol": 6, "variant": "security"},
+            {"id": "ativacao-aprendizado", "label": "Ativação, fechamento e aprendizado", "fromCol": 7, "toCol": 9, "variant": "emphasis"},
+        ],
+        "mainPath": [
+            "zara", "otto", "bento", "gastao_plano",
+            "maya", "olga", "gastao_textos",
+            "caio", "clay", "hugo"
+        ],
+        "semanticChecks": {
+            "allowedRoots": ["zara"],
+            "allowedTerminals": ["hugo"],
+            "requiredEdges": [
+                {"from": "bento", "to": "gastao_plano"},
+                {"from": "gastao_plano", "to": "maya"},
+                {"from": "olga", "to": "gastao_textos"},
+                {"from": "gastao_textos", "to": "caio"},
+            ],
+            "requiredPaths": [
+                {"from": "zara", "to": "hugo"}
+            ]
+        },
+        "nodes": [
+            {"id": "zara", "lane": "comercial", "col": 0, "type": "backend", "label": "Zara", "sublabel": "triagem e ICP", "width": 125, "yOffset": 0},
+            {"id": "otto", "lane": "comercial", "col": 1, "type": "backend", "label": "Otto", "sublabel": "radar e sinais", "width": 125, "yOffset": 0},
+            {"id": "bento", "lane": "comercial", "col": 2, "type": "backend", "label": "Bento", "sublabel": "estrategista da conta", "width": 135, "yOffset": 0},
+            {"id": "gastao_plano", "lane": "comercial", "col": 3, "type": "security", "label": "Gastão", "sublabel": "aprova o plano", "width": 145, "yOffset": 0, "variant": "security"},
+            {"id": "maya", "lane": "comercial", "col": 4, "type": "backend", "label": "Maya", "sublabel": "copy e abordagem", "width": 135, "yOffset": 0},
+            {"id": "olga", "lane": "comercial", "col": 5, "type": "security", "label": "Olga", "sublabel": "fiscal de copy (PASSA)", "width": 145, "yOffset": 0},
+            {"id": "gastao_textos", "lane": "comercial", "col": 6, "type": "security", "label": "Gastão", "sublabel": "aprova textos e hash", "width": 155, "yOffset": 0, "variant": "security"},
+            {"id": "caio", "lane": "comercial", "col": 7, "type": "backend", "label": "Caio", "sublabel": "operador de envio", "width": 135, "yOffset": 0},
+            {"id": "clay", "lane": "comercial", "col": 8, "type": "backend", "label": "Clay", "sublabel": "closer (reunião)", "width": 125, "yOffset": 0},
+            {"id": "hugo", "lane": "comercial", "col": 9, "type": "database", "label": "Hugo", "sublabel": "analista e métricas", "width": 135, "yOffset": 0},
+        ],
+        "edges": [
+            {"id": "zara-otto", "from": "zara", "to": "otto", "label": "leads ICP", "variant": "default", "role": "main"},
+            {"id": "otto-bento", "from": "otto", "to": "bento", "label": "sinais", "variant": "default", "role": "main"},
+            {"id": "bento-gastao", "from": "bento", "to": "gastao_plano", "label": "plano", "variant": "security", "role": "main"},
+            {"id": "gastao-maya", "from": "gastao_plano", "to": "maya", "label": "aprovado", "variant": "emphasis", "role": "main"},
+            {"id": "maya-olga", "from": "maya", "to": "olga", "label": "peça de copy", "variant": "security", "role": "main"},
+            {"id": "olga-gastao", "from": "olga", "to": "gastao_textos", "label": "PASSA", "variant": "security", "role": "main"},
+            {"id": "gastao-caio", "from": "gastao_textos", "to": "caio", "label": "liberado", "variant": "emphasis", "role": "main"},
+            {"id": "caio-clay", "from": "caio", "to": "clay", "label": "resposta / reunião", "variant": "default", "role": "main"},
+            {"id": "clay-hugo", "from": "clay", "to": "hugo", "label": "fechamento e dados", "variant": "dashed", "role": "main"},
+        ],
+        "cards": []
+    }
+
+
+def renderizar_html_workflow_setor_comercial(workflow: dict) -> str:
+    """Renderiza mapa HTML interativo horizontal responsivo para o Setor Comercial."""
+    meta = workflow.get("meta", {})
+    titulo = meta.get("title", "Setor comercial: aquisição de cliente novo")
+    nodes = workflow.get("nodes", [])
+    edges = workflow.get("edges", [])
+
+    col_w = 160
+    start_x = 35
+    card_w = 130
+    card_h = 62
+    node_y = 120
+
+    phases_info = [
+        {"id": "sinal-plano", "nome": "Sinal e plano", "fromCol": 0, "toCol": 2, "cor": "#58a6ff", "badge": "FASE 1"},
+        {"id": "aprovacao-plano", "nome": "Aprovação", "fromCol": 3, "toCol": 3, "cor": "#f59e0b", "badge": "GATE HUMANO"},
+        {"id": "texto-fiscal", "nome": "Texto e fiscal", "fromCol": 4, "toCol": 6, "cor": "#f59e0b", "badge": "FASE 2 & FISCAL"},
+        {"id": "ativacao-aprendizado", "nome": "Ativação, fechamento e dados", "fromCol": 7, "toCol": 9, "cor": "#7ee787", "badge": "FASE 3"},
+    ]
+
+    svg_w = start_x * 2 + len(nodes) * col_w
+    svg_h = 280
+
+    svg_phases = []
+    for ph in phases_info:
+        px = start_x + ph["fromCol"] * col_w - 10
+        pw = (ph["toCol"] - ph["fromCol"] + 1) * col_w - 10
+        cor = ph["cor"]
+        svg_phases.append(f"""
+        <g class="phase-group" id="phase-{ph['id']}">
+          <rect x="{px}" y="35" width="{pw}" height="195" rx="8" class="phase-rect" stroke="{cor}" stroke-dasharray="3 3"/>
+          <text x="{px + 12}" y="55" class="phase-label" fill="{cor}">{ph['nome']}</text>
+          <rect x="{px + pw - 90}" y="42" width="80" height="18" rx="4" fill="{cor}" fill-opacity="0.2"/>
+          <text x="{px + pw - 50}" y="54.5" class="phase-badge" fill="{cor}" text-anchor="middle">{ph['badge']}</text>
+        </g>
+        """)
+
+    node_pos = {}
+    svg_nodes = []
+    for i, n in enumerate(nodes):
+        nid = n["id"]
+        x = start_x + i * col_w
+        y = node_y
+        node_pos[nid] = (x, y)
+        label = n.get("label", nid)
+        sublabel = n.get("sublabel", "")
+        ntype = n.get("type", "backend")
+        is_security = ntype == "security" or n.get("variant") == "security"
+
+        if is_security:
+            cor_borda = "#f59e0b"
+            cor_badge = "#f59e0b"
+            badge_bg = "rgba(245, 158, 11, 0.15)"
+            badge_txt = "SECURITY" if "gastao" in nid else "FISCAL"
+            classe_extra = "node-security"
+        elif ntype == "database":
+            cor_borda = "#a855f7"
+            cor_badge = "#a855f7"
+            badge_bg = "rgba(168, 85, 247, 0.15)"
+            badge_txt = "DADOS"
+            classe_extra = ""
+        else:
+            cor_borda = "#58a6ff"
+            cor_badge = "#58a6ff"
+            badge_bg = "rgba(88, 166, 255, 0.15)"
+            badge_txt = "AGENTE"
+            classe_extra = ""
+
+        svg_nodes.append(f"""
+        <g class="node-group {classe_extra}" id="node-{nid}" transform="translate({x}, {y})" data-node-id="{nid}">
+          <rect width="{card_w}" height="{card_h}" rx="8" class="card-bg" stroke="{cor_borda}"/>
+          <text x="10" y="24" class="node-title">{label}</text>
+          <text x="10" y="44" class="node-sub">{sublabel}</text>
+          <rect x="{card_w - 58}" y="8" width="50" height="17" rx="3" fill="{badge_bg}"/>
+          <text x="{card_w - 33}" y="20" class="node-badge" fill="{cor_badge}" text-anchor="middle">{badge_txt}</text>
+        </g>
+        """)
+
+    svg_edges = []
+    for e in edges:
+        src = e.get("from")
+        dst = e.get("to")
+        lbl = e.get("label", "")
+        if src not in node_pos or dst not in node_pos:
+            continue
+        x1, y1 = node_pos[src]
+        x2, y2 = node_pos[dst]
+        p1 = (x1 + card_w, y1 + card_h / 2)
+        p2 = (x2, y2 + card_h / 2)
+
+        mid_x = (p1[0] + p2[0]) / 2
+        mid_y = p1[1]
+        variant_class = e.get("variant", "default")
+        cor_edge = "#f59e0b" if variant_class == "security" else ("#7ee787" if variant_class == "emphasis" else "#8b949e")
+
+        svg_edges.append(f"""
+        <g class="edge-group" data-src="{src}" data-dst="{dst}">
+          <line x1="{p1[0]}" y1="{p1[1]}" x2="{p2[0]}" y2="{p2[1]}" 
+                class="edge-path {variant_class}" stroke="{cor_edge}" stroke-width="2" marker-end="url(#arrow-{variant_class})"/>
+          <g transform="translate({mid_x}, {mid_y})">
+            <rect x="-28" y="-9" width="56" height="18" rx="4" class="edge-label-bg"/>
+            <text x="0" y="3.5" class="edge-label-text" text-anchor="middle">{lbl}</text>
+          </g>
+        </g>
+        """)
+
+    nodes_html = "".join(svg_nodes)
+    edges_html = "".join(svg_edges)
+    phases_html = "".join(svg_phases)
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{titulo}</title>
+  <style>
+    :root {{
+      --bg: #0e1117;
+      --card-bg: #161b22;
+      --card-border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --edge: #8b949e;
+      --edge-emphasis: #7ee787;
+      --badge-bg: #21262d;
+      --header-bg: rgba(22, 27, 34, 0.9);
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+      --amber: #f59e0b;
+      --verde: #7ee787;
+      --azul: #58a6ff;
+    }}
+    [data-theme="light"] {{
+      --bg: #f6f8fa;
+      --card-bg: #ffffff;
+      --card-border: #d0d7de;
+      --text: #1f2328;
+      --text-muted: #656d76;
+      --edge: #656d76;
+      --edge-emphasis: #1a7f37;
+      --badge-bg: #eaeef2;
+      --header-bg: rgba(255, 255, 255, 0.9);
+      --amber: #d97706;
+      --verde: #1a7f37;
+      --azul: #0969da;
+    }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }}
+    header {{
+      padding: 8px 14px;
+      background: var(--header-bg);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      z-index: 10;
+    }}
+    .title-group h1 {{
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .badge-sub {{
+      font-size: 9.5px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--badge-bg);
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+    }}
+    .toolbar {{
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    button {{
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 10.5px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }}
+    button:hover {{
+      border-color: var(--text-muted);
+      background: var(--badge-bg);
+    }}
+    button.active {{
+      border-color: var(--amber);
+      color: var(--amber);
+      background: rgba(245, 158, 11, 0.1);
+    }}
+    #viewport {{
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      touch-action: none;
+      position: relative;
+    }}
+    #viewport:active {{ cursor: grabbing; }}
+    svg {{
+      width: 100%;
+      height: 100%;
+      display: block;
+    }}
+    .phase-rect {{
+      fill: var(--card-bg);
+      fill-opacity: 0.12;
+      stroke-width: 1.2px;
+    }}
+    .phase-label {{
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }}
+    .phase-badge {{
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }}
+    .card-bg {{
+      fill: var(--card-bg);
+      stroke-width: 1.5px;
+      transition: stroke 0.2s, filter 0.2s;
+    }}
+    .node-title {{
+      font-size: 12px;
+      font-weight: 700;
+      fill: var(--text);
+    }}
+    .node-sub {{
+      font-size: 9.5px;
+      fill: var(--text-muted);
+    }}
+    .node-badge {{
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }}
+    .edge-path {{
+      fill: none;
+      stroke-linecap: round;
+      transition: stroke 0.2s;
+    }}
+    .edge-path.security {{
+      stroke-dasharray: 4 2;
+    }}
+    .edge-path.dashed {{
+      stroke-dasharray: 3 3;
+    }}
+    .edge-label-bg {{
+      fill: var(--card-bg);
+      stroke: var(--card-border);
+      stroke-width: 1px;
+    }}
+    .edge-label-text {{
+      font-size: 9px;
+      fill: var(--text-muted);
+      font-weight: 500;
+    }}
+    .node-group {{
+      cursor: pointer;
+      transition: transform 0.2s, opacity 0.2s;
+    }}
+    .node-group:hover .card-bg {{
+      filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
+      stroke-width: 2px;
+    }}
+    .node-security .card-bg {{
+      stroke-width: 2px;
+    }}
+    .dimmed {{ opacity: 0.22; }}
+    .highlighted .card-bg {{
+      stroke-width: 2.5px !important;
+      filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.5));
+    }}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title-group">
+      <h1>
+        <span>{titulo}</span>
+        <span class="badge-sub">pipeline horizontal</span>
+      </h1>
+    </div>
+    <div class="toolbar">
+      <button type="button" id="btn-view-all" class="active" onclick="setView('all')">Pipeline completo</button>
+      <button type="button" id="btn-view-gates" onclick="setView('gates')">Aprovações Gastão</button>
+      <button type="button" onclick="zoomIn()">+</button>
+      <button type="button" onclick="zoomOut()">−</button>
+      <button type="button" onclick="resetView()">Centralizar</button>
+      <button type="button" onclick="toggleTheme()" id="theme-btn">☀️ / 🌙</button>
+    </div>
+  </header>
+  <div id="viewport">
+    <svg id="svg-root" viewBox="0 0 {svg_w} {svg_h}" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arrow-default" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b949e"/>
+        </marker>
+        <marker id="arrow-security" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f59e0b"/>
+        </marker>
+        <marker id="arrow-emphasis" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7ee787"/>
+        </marker>
+        <marker id="arrow-dashed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b949e"/>
+        </marker>
+      </defs>
+      <g id="scene-layer">
+        {phases_html}
+        {edges_html}
+        {nodes_html}
+      </g>
+    </svg>
+  </div>
+  <script>
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let startX, startY;
+    const scene = document.getElementById('scene-layer');
+    const viewport = document.getElementById('viewport');
+
+    function updateTransform() {{
+      scene.setAttribute('transform', `translate(${{panX}}, ${{panY}}) scale(${{scale}})`);
+    }}
+
+    viewport.addEventListener('wheel', (e) => {{
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      const newScale = Math.min(Math.max(0.3, scale * zoomFactor), 4.0);
+      scale = newScale;
+      updateTransform();
+    }}, {{ passive: false }});
+
+    viewport.addEventListener('mousedown', (e) => {{
+      if (e.button !== 0) return;
+      isDragging = true;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+    }});
+
+    window.addEventListener('mousemove', (e) => {{
+      if (!isDragging) return;
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      updateTransform();
+    }});
+
+    window.addEventListener('mouseup', () => {{
+      isDragging = false;
+    }});
+
+    function zoomIn() {{
+      scale = Math.min(4.0, scale * 1.2);
+      updateTransform();
+    }}
+
+    function zoomOut() {{
+      scale = Math.max(0.3, scale / 1.2);
+      updateTransform();
+    }}
+
+    function resetView() {{
+      scale = 1;
+      panX = 0;
+      panY = 0;
+      updateTransform();
+    }}
+
+    function setView(view) {{
+      document.getElementById('btn-view-all').classList.toggle('active', view === 'all');
+      document.getElementById('btn-view-gates').classList.toggle('active', view === 'gates');
+      const nodes = document.querySelectorAll('.node-group');
+      const edges = document.querySelectorAll('.edge-group');
+      const phases = document.querySelectorAll('.phase-group');
+
+      if (view === 'gates') {{
+        nodes.forEach(n => {{
+          const nid = n.getAttribute('data-node-id');
+          if (nid === 'gastao_plano' || nid === 'gastao_textos') {{
+            n.classList.remove('dimmed');
+            n.classList.add('highlighted');
+          }} else {{
+            n.classList.add('dimmed');
+            n.classList.remove('highlighted');
+          }}
+        }});
+        edges.forEach(e => e.classList.add('dimmed'));
+        phases.forEach(p => p.classList.add('dimmed'));
+      }} else {{
+        nodes.forEach(n => {{
+          n.classList.remove('dimmed');
+          n.classList.remove('highlighted');
+        }});
+        edges.forEach(e => e.classList.remove('dimmed'));
+        phases.forEach(p => p.classList.remove('dimmed'));
+      }}
+    }}
+
+    function toggleTheme() {{
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      try {{ localStorage.setItem('archify-theme', next); }} catch (_) {{}}
+    }}
+
+    (function() {{
+      try {{
+        const saved = localStorage.getItem('archify-theme');
+        if (saved) document.documentElement.setAttribute('data-theme', saved);
+      }} catch (_) {{}}
+    }})();
+  </script>
+</body>
+</html>
+"""
+
+
+def salvar_mapa_setor_comercial() -> None:
+    """Gera e salva os artefatos de mapa do setor comercial (.workflow.json e .html)."""
+    wf = gerar_workflow_setor_comercial()
+    wf_json = json.dumps(wf, ensure_ascii=False, indent=2)
+
+    html_conteudo = None
+    if ARCHIFY_CLI.exists() and shutil.which("node"):
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tmp_wf:
+                tmp_wf.write(wf_json)
+                tmp_wf_path = Path(tmp_wf.name)
+            tmp_out = tmp_wf_path.with_suffix(".html")
+            res = subprocess.run(["node", str(ARCHIFY_CLI), "build", str(tmp_wf_path), "-o", str(tmp_out)], capture_output=True, text=True, timeout=15)
+            if res.returncode == 0 and tmp_out.is_file():
+                html_conteudo = tmp_out.read_text(encoding="utf-8")
+            try:
+                tmp_wf_path.unlink(missing_ok=True)
+                tmp_out.unlink(missing_ok=True)
+            except OSError:
+                pass
+        except Exception:
+            html_conteudo = None
+
+    if not html_conteudo:
+        html_conteudo = renderizar_html_workflow_setor_comercial(wf)
+
+    for pasta in (DATA_MAPAS, DIST_MAPAS, PUBLIC_MAPAS):
+        try:
+            pasta.mkdir(parents=True, exist_ok=True)
+            (pasta / "setor-comercial.html").write_text(html_conteudo, encoding="utf-8")
+            (pasta / "setor-comercial.workflow.json").write_text(wf_json, encoding="utf-8")
+        except OSError:
+            pass
+
+
+
 FUSOS = {"utc": 0, "gmt": 0, "z": 0, "brt": -3, "-03": -3, "-0300": -3, "art": -3}
 
 
@@ -4307,7 +4872,7 @@ def main():
     total_convocacoes = conv["total"]
     cron = ler_cron()
     pecas = ler_pecas()
-    tarefas = ler_tarefas()
+    fiscal_comercial = ler_fiscal_comercial()
     aprovacoes = ler_aprovacoes()
     cofre = ler_cofre()
     ferramentas = ler_ferramentas()
@@ -4362,6 +4927,7 @@ def main():
     todas_chamadas = conv.get("todas_chamadas", [])
     janelas = agregar_janelas_convocacoes(todas_chamadas, ids_casa)
     salvar_mapas_quem_convoca_quem(janelas, agentes, SQUADS)
+    salvar_mapa_setor_comercial()
 
     estado = {
         "gerado_em": agora_utc().isoformat(),
@@ -4427,7 +4993,7 @@ def main():
         },
         "cron": cron,
         "pecas": pecas,
-        "tarefas": tarefas,
+        "comercial": fiscal_comercial,
         "aprovacoes": aprovacoes,
         "cofre": cofre,
         "ferramentas": ferramentas,

@@ -13,8 +13,9 @@ import {
 import { useAgentesVivos } from '../dados/useAgentesVivos'
 import type { Origem } from '../dados/useEstado'
 import type { VistaId, Vista } from '../nav/rotas'
-import type { Agente, Estado, JanelaConvocacoes, Sop } from '../dados/tipos'
+import type { Agente, Estado, JanelaConvocacoes, Sop, DadosFiscalComercial } from '../dados/tipos'
 import { identificarJanela, type FaixaDeData } from '../ui/SeletorDeData'
+import { SecaoMapaDoFluxo, type MapaDiretor } from './Diretor'
 
 function sopsDoEstado(estado: Estado): Sop[] {
   const dados = estado.sops
@@ -24,7 +25,14 @@ function sopsDoEstado(estado: Estado): Sop[] {
 const CORES_AGENTE: Record<string, string> = {
   global: corDoSquad('global'),
   conteudo: corDoSquad('conteudo'),
+  comercial: corDoSquad('comercial'),
   'pipeline-luana': corDoSquad('pipeline-luana'),
+}
+
+const MAPA_COMERCIAL: MapaDiretor = {
+  titulo: 'Setor comercial: aquisição de cliente novo',
+  src: '/mapas/setor-comercial.html',
+  descricao: 'Pipeline horizontal de aquisição: do radar de sinais ao fechamento e métricas de conversão.',
 }
 
 function Conector() {
@@ -240,34 +248,50 @@ export function Diretores({
           return 0
         }
         const teto = Math.max(...porSquad(estado, squadId).map(getConvocacoes), 1)
-        if (agentes.length === 0) return null
+        if (agentes.length === 0 && squadId !== 'comercial') return null
         return (
           <div key={squadId} className="mb-6">
             <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="rotulo whitespace-nowrap" style={{ color: CORES_AGENTE[squadId] }}>
-                {estado.squads[squadId].nome}
+                {estado.squads[squadId]?.nome ?? squadId}
               </span>
-              <span className="text-[11.5px] text-tinta-3">{estado.squads[squadId].descricao}</span>
+              <span className="text-[11.5px] text-tinta-3">{estado.squads[squadId]?.descricao ?? ''}</span>
               <span className="h-px min-w-6 flex-1 bg-linha" />
               <span className="rotulo whitespace-nowrap">
                 {agentes.length} {filtro === 'encostados' || filtro === 'hoje' ? 'em foco' : 'agentes'}
               </span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {agentes.map((a) => (
-                <CardAgente
-                  key={a.id}
-                  agente={a}
-                  teto={teto}
-                  convocacoesJanela={getConvocacoes(a)}
-                  rotuloJanela={dadosJanela.rotulo}
-                  cor={CORES_AGENTE[squadId]}
-                  agora={agora.getTime()}
-                  aoAbrir={() => aoIr('diretores', a.id)}
-                  aoVivo={mapaVivos.get(a.id)}
-                />
-              ))}
-            </div>
+            {agentes.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {agentes.map((a) => (
+                  <CardAgente
+                    key={a.id}
+                    agente={a}
+                    teto={teto}
+                    convocacoesJanela={getConvocacoes(a)}
+                    rotuloJanela={dadosJanela.rotulo}
+                    cor={CORES_AGENTE[squadId]}
+                    agora={agora.getTime()}
+                    aoAbrir={() => aoIr('diretores', a.id)}
+                    aoVivo={mapaVivos.get(a.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg border border-dashed border-linha p-3.5 text-[11.5px] leading-relaxed text-tinta-3">
+                Nenhum agente comercial registrado no catálogo local ainda (aguardando criação da pasta pelo squad de infraestrutura).
+              </p>
+            )}
+
+            {squadId === 'comercial' && (
+              <>
+                <p className="mt-3 border-t border-linha pt-2.5 text-[11px] leading-relaxed text-tinta-3">
+                  <span className="font-semibold text-tinta-2">Nota de governança:</span> Clay (@closer) e a regente Luana entram por evento, ficam listados nos departamentos deles.
+                </p>
+                <SecaoMapaDoFluxo mapa={MAPA_COMERCIAL} cor={CORES_AGENTE.comercial} />
+                <CartaoFiscalComercial fiscal={estado.comercial} cor={CORES_AGENTE.comercial} />
+              </>
+            )}
           </div>
         )
       })}
@@ -459,6 +483,81 @@ function MapaQuemConvocaQuem({ dadosJanela }: { dadosJanela: JanelaConvocacoes }
       <p className="border-t border-linha px-4 py-3 text-[10.5px] leading-relaxed text-tinta-3">
         O mapa é um artefato versionado gerado a partir das convocações reais da janela ativa. Use o link para abrir a leitura completa em nova aba com tema e centralização.
       </p>
+    </section>
+  )
+}
+
+function CartaoFiscalComercial({ fiscal, cor }: { fiscal?: DadosFiscalComercial; cor: string }) {
+  const pronto = fiscal && fiscal.status === 'pronto'
+  const porChecagem = pronto ? fiscal.por_checagem : []
+  const maisDisparada = pronto ? fiscal.checagem_mais_disparada : null
+  const metaTexto = fiscal?.meta_agendamentos?.texto ?? 'sem dado, Hugo ainda não mediu'
+
+  return (
+    <section className="carta mt-4 p-4" data-fiscal-comercial>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-linha pb-3">
+        <div>
+          <Cabecalho cor={cor} meta={pronto ? `${fiscal.total_passa ?? 0} aprovadas` : 'auditoria de copy'}>
+            fiscal de copy do setor comercial
+          </Cabecalho>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-tinta-2">
+            Verificação rigorosa de abordagens de saída (regras C1..C13 e segurança S1..S3) sem exposição de textos ou dados de leads.
+          </p>
+        </div>
+        <Pilula tom={pronto ? 'verde' : 'neutro'}>
+          {pronto ? 'fiscal ativo' : 'sem dado'}
+        </Pilula>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded border border-linha bg-white/[0.02] p-2.5">
+          <span className="rotulo block text-tinta-3">PASSA</span>
+          <span className="font-mono text-xl font-bold text-verde tabular-nums">
+            {pronto && fiscal.total_passa !== null ? fiscal.total_passa : '—'}
+          </span>
+        </div>
+        <div className="rounded border border-linha bg-white/[0.02] p-2.5">
+          <span className="rotulo block text-tinta-3">BLOQUEIA</span>
+          <span className="font-mono text-xl font-bold text-ambar tabular-nums">
+            {pronto && fiscal.total_bloqueia !== null ? fiscal.total_bloqueia : '—'}
+          </span>
+        </div>
+        <div className="rounded border border-linha bg-white/[0.02] p-2.5">
+          <span className="rotulo block text-tinta-3">MAIS DISPARADA</span>
+          <span className="font-mono text-sm font-semibold text-tinta tabular-nums">
+            {maisDisparada ?? '—'}
+          </span>
+        </div>
+        <div className="rounded border border-linha bg-white/[0.02] p-2.5">
+          <span className="rotulo block text-tinta-3">META (1% / 3 AGEND.)</span>
+          <span className="font-mono text-[11px] leading-snug text-tinta-2">
+            {metaTexto}
+          </span>
+        </div>
+      </div>
+
+      {pronto && porChecagem.length > 0 && (
+        <div className="mt-3 border-t border-linha pt-3">
+          <span className="rotulo block text-tinta-3 mb-2">checagens registradas</span>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {porChecagem.map((c) => (
+              <div key={c.checagem} className="rounded border border-linha/70 bg-black/10 px-2 py-1.5 text-[11px]">
+                <div className="font-mono font-bold text-tinta">{c.checagem}</div>
+                <div className="mt-0.5 flex items-center justify-between text-[10px] tabular-nums text-tinta-3">
+                  <span className="text-verde">{c.passa} ok</span>
+                  <span className={c.bloqueia > 0 ? 'text-ambar font-semibold' : ''}>{c.bloqueia} bloq</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!pronto && (
+        <p className="mt-3 text-[11px] text-tinta-3 italic">
+          O fiscal comercial ainda não registrou execuções nesta base. Os números serão apresentados automaticamente quando houver peças verificadas.
+        </p>
+      )}
     </section>
   )
 }

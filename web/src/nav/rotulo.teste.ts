@@ -68,15 +68,8 @@ conferir(
 )
 conferir(
   'o motivo medido viaja junto, em vez de virar frase genérica',
-  dadoDaVista(POR_ID.tarefas, estado({
-    tarefas: {
-      erro: 'HTTP 502 no gestor de tarefas', sistema: 'gestor_tarefas', escopo: 'abertas',
-      status_incluidos: [], status_excluidos: ['done'], fonte: 'x', coletado_em: null,
-      total_abertas: null, por_status: {}, por_prioridade: {}, por_prazo: {},
-      por_movimento: {}, por_projeto: [], truncado: null,
-    },
-  })),
-  { tipo: 'nenhum', mostraria: POR_ID.tarefas.pergunta, falta: 'HTTP 502 no gestor de tarefas' },
+  dadoDaVista(POR_ID.tarefas, estado({ agentes: [] })),
+  { tipo: 'nenhum', mostraria: POR_ID.tarefas.pergunta, falta: 'o catálogo de agentes operacionais não veio no estado atual' },
 )
 conferir(
   'ferramentas com inventário vazio NÃO é promovida',
