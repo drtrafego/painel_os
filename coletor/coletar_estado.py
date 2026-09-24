@@ -2759,19 +2759,24 @@ def redigir(texto: str) -> str:
 # O que havia aqui antes era corte por POSICAO: o rotulo era cortado no
 # primeiro parentese, porque e depois dele que a casa anota o incidente. Em
 # tres jobs o nome do cliente estava ANTES do parentese, entao o corte jogou
-# fora o id tecnico e preservou a PESSOA ("lembrete consulta 24h Dr. Lucas").
-# Corte por posicao nao sabe o que e nome.
+# fora o id tecnico e preservou a PESSOA (ex.: "lembrete consulta 24h Dr.
+# Exemplo", nome ficticio ilustrando o formato real que vazava). Corte por
+# posicao nao sabe o que e nome.
 #
 # Agora quem protege e a NEGACAO, sobre o rotulo inteiro: os nomes vem de
 # memoria/clientes.md, cliente novo fica protegido assim que entra la, e o
 # corte continua existindo so pra encurtar, nunca pra proteger.
 # ---------------------------------------------------------------------------
 
-# Nome de pessoa fisica de cliente (Dr. Wagner, Willian, Dr. Lucas...) mora
-# FORA de memoria/ e conexoes/ de proposito (24/09/2026): e o unico jeito de
-# clientes.md ficar limpo pro verificador de dado pessoal (grupo `pessoal`,
-# que so varre essas duas pastas) sem o painel perder a capacidade de
-# mascarar esses nomes. Ver o cabecalho do proprio arquivo.
+# Nome de pessoa fisica de cliente mora FORA de memoria/ e conexoes/ de
+# proposito (24/09/2026): e o unico jeito de clientes.md ficar limpo pro
+# verificador de dado pessoal (grupo `pessoal`, que so varre essas duas
+# pastas) sem o painel perder a capacidade de mascarar esses nomes. Ver o
+# cabecalho do proprio arquivo.
+#
+# ‼️ 25/09/2026: este arquivo (coletar_estado.py) e o teste dele NUNCA citam
+# o nome real de ninguem, nem em comentario. O repo e PUBLICO no GitHub; o
+# nome real so mora em privacidade_nomes_cliente.txt, fora do repositorio.
 _NOMES_PESSOA_FISICA = RAIZ / "luana/privacidade_nomes_cliente.txt"
 
 
@@ -2853,7 +2858,7 @@ def _chave(texto: str) -> str:
 
 def _padrao_do_nome(nome: str) -> "re.Pattern[str]":
     """
-    'Dr. Lucas' pega 'Dr. Lucas', 'dr-lucas', 'drlucas' e 'DR_LUCAS'.
+    'Dr. Exemplo' pega 'Dr. Exemplo', 'dr-exemplo', 'drexemplo' e 'DR_EXEMPLO'.
     O separador entre as partes e curto de proposito: com '*' o padrao casaria
     duas palavras distantes uma da outra e viraria falso positivo.
     """
@@ -2862,11 +2867,15 @@ def _padrao_do_nome(nome: str) -> "re.Pattern[str]":
     return re.compile(rf"(?<![a-z0-9]){corpo}(?![a-z0-9])")
 
 
-def carregar_nomes_de_cliente(caminho: Path = CLIENTES_MD):
+def carregar_nomes_de_cliente(caminho: Path = CLIENTES_MD, caminho_pessoa_fisica: Path = _NOMES_PESSOA_FISICA):
     """
     Le os nomes de cliente das linhas ESTRUTURADAS de clientes.md: primeira
     celula de linha de tabela e item de lista. So o negrito, e sem o que esta
     entre parenteses (la mora ramo e cidade, nao nome).
+
+    `caminho_pessoa_fisica` (25/09/2026) existe pra teste poder provar a fusao
+    com uma lista SINTETICA, sem tocar no arquivo real: o default continua
+    sendo o arquivo real de producao, igual sempre foi.
 
     Devolve (padroes, diagnostico). Sem arquivo, padroes vem vazio e o
     diagnostico diz por que: quem chama e obrigado a tratar isso.
@@ -2888,10 +2897,11 @@ def carregar_nomes_de_cliente(caminho: Path = CLIENTES_MD):
         else:
             continue  # bloco de citacao, titulo e prosa nao listam cliente
         # ‼️ A PESSOA NEM SEMPRE ESTA NO NEGRITO DA PRIMEIRA CELULA, e um QA
-        # achou duas de verdade em 10/09/2026: `Dr. Wagner` mora DENTRO do
-        # parenteses de "Rocha Advogados (Dr. Wagner, trabalhista, Cuiabá)", que
-        # o corte joga fora, e `Willian` mora na TERCEIRA coluna, em "Contato:
-        # Willian". Os dois passavam inteiros por `rotulo_seguro`, e 13 arquivos
+        # achou duas de verdade em 10/09/2026 (exemplo ficticio equivalente:
+        # `Dr. Exemplo` mora DENTRO do parenteses de "Rocha Advogados (Dr.
+        # Exemplo, trabalhista, Cuiabá)", que o corte joga fora, e `Beltrano
+        # Teste` mora na TERCEIRA coluna, em "Contato: Beltrano Teste"). Os
+        # dois passavam inteiros por `rotulo_seguro`, e 13 arquivos
         # da casa os citam.
         #
         # A varredura e a LINHA toda, mas so por dois padroes que sao forma de
@@ -2934,7 +2944,7 @@ def carregar_nomes_de_cliente(caminho: Path = CLIENTES_MD):
     # Nome de pessoa fisica nao mora mais em clientes.md (24/09/2026): vem de
     # um arquivo a parte, fora de memoria/ e conexoes/. Mesmo pipeline dai pra
     # frente (permitidos, decomposicao por parte), so muda a origem do bruto.
-    brutos.extend(_carregar_nomes_pessoa_fisica())
+    brutos.extend(_carregar_nomes_pessoa_fisica(caminho_pessoa_fisica))
 
     nomes = {}
     for nome in brutos:
@@ -2962,8 +2972,8 @@ def achou_nome_de_cliente(texto: str) -> list:
     """
     Os trechos do texto que sao nome de cliente. Lista vazia = limpo.
 
-    Os trechos vem FUNDIDOS quando se sobrepoem: 'Dr. Lucas' casa o nome
-    inteiro e casa 'lucas' dentro dele, e trocar os dois separadamente
+    Os trechos vem FUNDIDOS quando se sobrepoem: 'Dr. Exemplo' casa o nome
+    inteiro e casa 'exemplo' dentro dele, e trocar os dois separadamente
     corrompia o texto ('[cliente]nte]').
     """
     chave = _chave(texto)

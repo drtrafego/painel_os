@@ -340,13 +340,25 @@ def testar_agentes_vivos():
         import sys
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from servir import redigir_dados_agentes
+        import coletar_estado as ce
+
+        # Nome FICTICIO, criado so pra este teste, numa lista temporaria: a
+        # redacao de nome de pessoa fisica nao pode depender da lista REAL
+        # pra ser provada (25/09/2026, repo publico).
+        tmp_cli_t12 = Path(tempfile.mkdtemp()) / "clientes.md"
+        tmp_cli_t12.write_text(
+            "| cliente | conta |\n|---|---|\n| **Escritorio Fulano** (Dr. Exemplo, teste) | act_1 |\n",
+            encoding="utf-8")
+        guarda_nomes_t12 = (ce.NOMES_CLIENTE, ce.NEGACAO)
+        ce.NOMES_CLIENTE, ce.NEGACAO = ce.carregar_nomes_de_cliente(tmp_cli_t12)
+
         payload_teste = {
             "ok": True,
             "agentes": [
                 {
                     "id": "ag_teste",
-                    "descricao": "Atendimento Dr. Lucas na pasta /opt/gastaomatos/luana e tel 47 99988-7766",
-                    "etapa": "Atualizando Rocha Advogados no arquivo /home/claude/repo",
+                    "descricao": "Atendimento Dr. Exemplo na pasta /opt/gastaomatos/luana e tel 47 99988-7766",
+                    "etapa": "Atualizando Escritorio Fulano no arquivo /home/claude/repo",
                 }
             ],
             "avisos": ["Erro de leitura em /opt/gastaomatos/luana/algo.py"],
@@ -356,10 +368,13 @@ def testar_agentes_vivos():
         etapa_res = redigido["agentes"][0]["etapa"]
         aviso_res = redigido["avisos"][0]
 
-        conferir("nome de cliente Dr. Lucas redigido", "Dr. Lucas" in desc_res, False)
+        conferir("nome ficticio de teste redigido", "Dr. Exemplo" in desc_res, False)
         conferir("caminho /opt/ sanitizado na descrição", "/opt/" in desc_res, False)
         conferir("telefone redigido", "47 99988-7766" in desc_res, False)
         conferir("caminho /opt/ sanitizado no aviso", "/opt/" in aviso_res, False)
+
+        ce.NOMES_CLIENTE, ce.NEGACAO = guarda_nomes_t12
+        shutil.rmtree(tmp_cli_t12.parent, ignore_errors=True)
 
         print("\n--- Teste 13: Rollout Codex com subagent como string não quebra agentes Claude")
         pasta_t13 = tmp / "projeto_t13"
@@ -510,7 +525,7 @@ def testar_agentes_vivos():
                 "id": "ag_mod",
                 "modelo": "claude-3-5-haiku-20241022",
                 "modelo_legivel": "Haiku 3.5 (20241022)",
-                "descricao": "Falar com Dr. Lucas pelo telefone 11999998888",
+                "descricao": "Falar com Dr. Exemplo pelo telefone 11999998888",
             }],
             "avisos": []
         }

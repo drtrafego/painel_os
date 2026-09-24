@@ -48,18 +48,27 @@ def sem_nome(nome, comando):
 print(f"lista carregada de {c.NEGACAO['arquivo']}: {c.NEGACAO['nomes']} nomes\n")
 assert c.NEGACAO["carregada"], "sem a lista o teste nao mede nada"
 
-print("--- os tres jobs reais que vazavam (medidos no crontab de 08/09/2026)")
+print("--- os tres jobs reais que vazavam (medidos no crontab de 08/09/2026),")
+print("    reproduzidos com nome FICTICIO numa lista TEMPORARIA (25/09/2026,")
+print("    repo publico: o nome real nunca aparece aqui, so o formato dele)")
+tmp_cli_vazamento = Path(tempfile.mkdtemp()) / "clientes.md"
+tmp_cli_vazamento.write_text(
+    "| cliente | conta |\n|---|---|\n| **Dr. Exemplo** | act_teste |\n",
+    encoding="utf-8")
+guarda_vazamento = (c.NOMES_CLIENTE, c.NEGACAO)
+c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(tmp_cli_vazamento)
+
 sem_nome("comentario com o nome ANTES do parentese",
-         "/opt/gastaomatos/hermes/lembretes/run-lembretes.sh  # lembrete consulta 24h Dr. Lucas (hermes2_drlucas)")
+         "/opt/gastaomatos/hermes/lembretes/run-lembretes.sh  # lembrete consulta 24h Dr. Exemplo (hermes2_drexemplo)")
 sem_nome("comentario com o nome no formato de id",
-         "/opt/gastaomatos/hermes/crm-sync/run.sh # CRM kanban reconcile dr-lucas [minuto deslocado 30/08]")
+         "/opt/gastaomatos/hermes/crm-sync/run.sh # CRM kanban reconcile dr-exemplo [minuto deslocado 30/08]")
 sem_nome("comentario com o nome no meio da frase",
-         "/opt/gastaomatos/hermes/agendamentos-sync/run.sh  # agendamentos do bot Dr. Lucas -> painel (drlucas.agendamentos)")
+         "/opt/gastaomatos/hermes/agendamentos-sync/run.sh  # agendamentos do bot Dr. Exemplo -> painel (drexemplo.agendamentos)")
 
 print("\n--- o ramo do NOME DE SCRIPT, que antes nao passava por trava nenhuma")
 sem_nome("nome de cliente dentro do nome do script",
-         "/usr/bin/python3 /opt/gastaomatos/hermes/backup_isabella_franklin.py")
-sem_nome("nome colado, sem separador", "/opt/x/exporta_drlucas.sh")
+         "/usr/bin/python3 /opt/gastaomatos/hermes/backup_dr_exemplo.py")
+sem_nome("nome colado, sem separador", "/opt/x/exporta_drexemplo.sh")
 # redigir e guloso de proposito e come o nome do script junto com o e-mail.
 # O que este caso prova e que ele PASSA a correr neste ramo: antes o basename
 # saia cru, com o endereco inteiro na tela.
@@ -71,8 +80,11 @@ conferir("e telefone longo no ramo do script tambem",
          "dispara_[num:af1f].sh")
 
 print("\n--- variacoes de escrita do MESMO nome")
-for variante in ["Dr. Lucas", "dr-lucas", "drlucas", "DR_LUCAS", "dr lucas", "Dr Lucas"]:
+for variante in ["Dr. Exemplo", "dr-exemplo", "drexemplo", "DR_EXEMPLO", "dr exemplo", "Dr Exemplo"]:
     sem_nome(f"variante {variante!r}", f"/opt/x/roda.sh # sincroniza {variante} com o painel")
+
+c.NOMES_CLIENTE, c.NEGACAO = guarda_vazamento
+shutil.rmtree(tmp_cli_vazamento.parent, ignore_errors=True)
 
 print("\n--- CONTROLE: texto correto NAO pode ser bloqueado")
 conferir("rotulo limpo passa inteiro",
@@ -219,8 +231,9 @@ conferir("texto sem numero nenhum sai identico", c.redigir("nada de numero aqui"
 conferir("texto vazio nao estoura", c.redigir(""), "")
 
 print("\n--- a PESSOA fora do negrito: tratamento e linha de contato")
-# Um QA achou duas de verdade em 10/09/2026: `Dr. Wagner` dentro do parenteses
-# (que o corte joga fora) e `Willian` na terceira coluna ("Contato: Willian").
+# Um QA achou duas de verdade em 10/09/2026, no mesmo formato dos exemplos
+# ficticios abaixo: um nome dentro do parenteses (que o corte joga fora) e
+# outro na terceira coluna ("Contato: <nome>").
 tmp_cli = Path(tempfile.mkdtemp()) / "clientes.md"
 tmp_cli.write_text(
     "| cliente | conta | nota |\n|---|---|---|\n"
@@ -239,14 +252,22 @@ for palavra in ("trabalhista", "Cuiabá", "recepcao", "reservas", "Dr", "Dra"):
 shutil.rmtree(tmp_cli.parent, ignore_errors=True)
 
 # ‼️ LIMITE DECLARADO, e ele e da familia que esta casa ja apanhou: GRAFIA.
-# `Willian` esta em clientes.md e entra; `Wilian` com um L so, que o CLAUDE.md
-# usa, NAO casa com o padrao e passa inteiro. A lista mede o PISO. O instrumento
-# que resolve a classe e por FORMA de nome mais lista de excecao, como o
+# Nome com L dobrado que ESTA na lista entra; a mesma grafia com um L so
+# (como ja aconteceu de verdade num nome real, fora deste teste) NAO casa
+# com o padrao e passa inteiro. A lista mede o PISO. O instrumento que
+# resolve a classe e por FORMA de nome mais lista de excecao, como o
 # `_RE_NOME_CAND` do verificar_frota.py, nao por enumeracao.
+# Lista TEMPORARIA, nome ficticio (25/09/2026, repo publico).
+tmp_graf = Path(tempfile.mkdtemp()) / "clientes.md"
+tmp_graf.write_text("| cliente | conta |\n|---|---|\n| **Wellington** (teste) | act_1 |\n", encoding="utf-8")
+guarda_graf = (c.NOMES_CLIENTE, c.NEGACAO)
+c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(tmp_graf)
 conferir("grafia diferente do mesmo nome passa (a lista mede o PISO)",
-         bool(c.achou_nome_de_cliente("avisa o Wilian por favor")), False)
+         bool(c.achou_nome_de_cliente("avisa o Welington por favor")), False)
 conferir("mas a grafia que esta no arquivo e negada",
-         bool(c.achou_nome_de_cliente("avisa o Willian por favor")), True)
+         bool(c.achou_nome_de_cliente("avisa o Wellington por favor")), True)
+c.NOMES_CLIENTE, c.NEGACAO = guarda_graf
+shutil.rmtree(tmp_graf.parent, ignore_errors=True)
 
 print("\n--- cliente NOVO fica protegido so por entrar em clientes.md")
 tmp = Path(tempfile.mkdtemp()) / "clientes.md"
@@ -257,19 +278,22 @@ sem_nome("nome que so existe no arquivo de teste",
          "/opt/x/run.sh # fecha o mes da Padaria Zilda Nogueira")
 conferir("e um nome que so existiria no arquivo de verdade NAO esta na lista (prova que trocou)",
          c.achou_nome_de_cliente("Fulana Exemplo") == [], True)
-# ‼️ 24/09/2026: nome de PESSOA FISICA de cliente (Dr. Wagner, Willian,
-# Dr. Lucas) saiu do texto livre de clientes.md e passou a viver em
-# privacidade_nomes_cliente.txt, fora de memoria/ e conexoes/ (o verificador
-# de dado pessoal so varre essas duas pastas, e clientes.md tinha que ficar
-# limpo). Esse arquivo NAO segue o parametro `caminho` desta funcao: ele e
-# fixo, de proposito, porque protege pessoa fisica em QUALQUER clientes.md,
-# inclusive um de teste que nunca ouviu falar dela. Por isso "Dr. Lucas"
-# continua mascarado mesmo com o clientes.md trocado pra este arquivo de
-# teste, diferente de "Fulana Exemplo" acima (nome fictício, claramente
-# inventado, que nunca esteve em lista nenhuma).
-conferir("mas nome de pessoa fisica (privacidade_nomes_cliente.txt) "
+# ‼️ 24/09/2026: nome de PESSOA FISICA de cliente saiu do texto livre de
+# clientes.md e passou a viver num arquivo a parte, fora de memoria/ e
+# conexoes/ (o verificador de dado pessoal so varre essas duas pastas, e
+# clientes.md tinha que ficar limpo). Esse arquivo protege pessoa fisica em
+# QUALQUER clientes.md, inclusive um de teste que nunca ouviu falar dela.
+# 25/09/2026: pra provar isto sem citar o arquivo real (repo publico), o
+# teste cria a PROPRIA lista temporaria e usa o parametro
+# `caminho_pessoa_fisica` (adicionado pra isso) em vez do default de producao.
+tmp_pessoa_fisica = Path(tempfile.mkdtemp()) / "privacidade_nomes_cliente_teste.txt"
+tmp_pessoa_fisica.write_text(
+    "Beltrano Teste: pessoa ficticia usada so neste teste\n", encoding="utf-8")
+c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(tmp, caminho_pessoa_fisica=tmp_pessoa_fisica)
+conferir("mas nome de pessoa fisica (arquivo externo, aqui SINTETICO) "
          "continua mascarado mesmo com o clientes.md trocado",
-         bool(c.achou_nome_de_cliente("Dr. Lucas")), True)
+         bool(c.achou_nome_de_cliente("Beltrano Teste")), True)
+shutil.rmtree(tmp_pessoa_fisica.parent, ignore_errors=True)
 
 print("\n--- SEM a lista, nada de texto livre sai (falha FECHADA)")
 c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(Path("/nao/existe/clientes.md"))
@@ -1006,9 +1030,9 @@ shutil.rmtree(tmp.parent, ignore_errors=True)
 print("\n--- e a trava tem que REPROVAR de verdade: caso de controle negativo")
 c.NOMES_CLIENTE, c.NEGACAO = c.carregar_nomes_de_cliente(Path("/nao/existe/clientes.md"))
 c.NEGACAO["carregada"] = True  # lista vazia fingindo estar carregada
-vazou = c.rotulo_do_job("/opt/x/run.sh # lembrete consulta 24h Dr. Lucas")
+vazou = c.rotulo_do_job("/opt/x/run.sh # lembrete consulta 24h Dr. Exemplo")
 conferir("com a lista VAZIA o nome passa (e por isso a lista nao pode falhar calada)",
-         vazou, "lembrete consulta 24h Dr. Lucas")
+         vazou, "lembrete consulta 24h Dr. Exemplo")
 c.NOMES_CLIENTE, c.NEGACAO = guarda
 
 
