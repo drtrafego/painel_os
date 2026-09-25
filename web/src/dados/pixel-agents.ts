@@ -108,6 +108,15 @@ export function formatarRotulo(nome: string, tagDono: string, limite = 21): stri
   return completo.slice(0, limite - 1) + '…'
 }
 
+export function normalizarDonoId(dono?: string | null): 'luana' | 'renato' | 'bia' | null {
+  if (!dono) return null
+  const d = dono.toLowerCase().trim()
+  if (d.includes('luana') || d.includes('coord') || d === 'diretora-geral' || d === 'coordenadora') return 'luana'
+  if (d.includes('renato') || d.includes('bot') || d === 'dono-bots' || d === 'hermes-diretor') return 'renato'
+  if (d.includes('bia') || d.includes('trafego') || d.includes('tráfego') || d === 'diretora-trafego') return 'bia'
+  return null
+}
+
 export function resolverAgenteNoCatalogo(
   agente: { id: string; dono?: string | null; identidade?: string | null; tipo?: string | null },
   catalogoVisual: PixelAgent[]
@@ -118,8 +127,10 @@ export function resolverAgenteNoCatalogo(
     agente.id === 'sessao-claude' ||
     agente.id.startsWith('sessao-')
 
-  if (ehSessaoDiretor && agente.dono) {
-    const diretor = catalogoVisual.find((item) => item.id === agente.dono)
+  const donoNorm = normalizarDonoId(agente.dono)
+
+  if (ehSessaoDiretor && donoNorm) {
+    const diretor = catalogoVisual.find((item) => item.id === donoNorm)
     if (diretor) return diretor
   }
 
@@ -194,9 +205,10 @@ export function mesclarRuntimesNoCatalogo(
     const chave = runtime.dono ? `${runtime.dono}:${runtime.id}` : runtime.id
     const ehCodex = runtime.tipo === 'codex' || runtime.motor === 'codex' || runtime.id.startsWith('session-') || runtime.id.startsWith('rollout-')
     const ehSessaoDiretor = runtime.tipo === 'sessao_claude' || runtime.identidade === 'sessao-claude' || runtime.id === 'sessao-claude' || runtime.id.startsWith('sessao-')
+    const donoNorm = normalizarDonoId(runtime.dono)
 
     const existente = resultado.find((agente) => {
-      if (ehSessaoDiretor && runtime.dono && agente.id === runtime.dono) {
+      if (ehSessaoDiretor && donoNorm && agente.id === donoNorm) {
         return true
       }
       const match =
@@ -244,11 +256,11 @@ export function mesclarRuntimesNoCatalogo(
     }
 
     const squadDono: PixelAgentSquad | null =
-      runtime.dono === 'luana'
+      donoNorm === 'luana'
         ? 'coordenação'
-        : runtime.dono === 'renato'
+        : donoNorm === 'renato'
           ? 'bots'
-          : runtime.dono === 'bia'
+          : donoNorm === 'bia'
             ? 'tráfego'
             : null
 
@@ -260,7 +272,7 @@ export function mesclarRuntimesNoCatalogo(
     const squad: PixelAgentSquad = ehCodex ? 'pipeline Codex' : squadDono ?? 'globais'
     const papel = runtime.papel || (ehCodex ? 'Sessão Codex' : 'Subagente Claude')
     const abreviacao = ehCodex ? 'CX' : runtime.tipo ? runtime.tipo.slice(0, 2).toUpperCase() : 'SA'
-    const donoCor = runtime.dono ? corDaSessao(runtime.dono) : null
+    const donoCor = donoNorm ? corDaSessao(donoNorm) : runtime.dono ? corDaSessao(runtime.dono) : null
     const cor = donoCor ?? (ehCodex ? '#ec4899' : '#06b6d4')
 
     resultado.push({
