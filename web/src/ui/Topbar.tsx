@@ -17,6 +17,8 @@ function ilegivel(s: AgenteSessao): boolean {
   return v.checagens === null || v.reprovadas === null || v.indeterminadas === null
 }
 
+import { VISTAS } from '../nav/rotas'
+
 export function Topbar({
   hora,
   estado,
@@ -96,7 +98,7 @@ export function Topbar({
       <button
         type="button"
         onClick={aoAbrirMenu}
-        aria-label="abrir o menu das doze telas"
+        aria-label={`abrir o menu das ${VISTAS.length} telas`}
         className="grid size-7 shrink-0 place-items-center rounded-md border border-linha text-tinta-2 transition-colors hover:text-tinta lg:hidden"
       >
         <Icone nome="menu" tamanho={15} />

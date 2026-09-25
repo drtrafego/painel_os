@@ -1899,89 +1899,126 @@ def ler_uso_planos_codex(buscar=None, pastas_sessoes=None):
     }
 
 
-def ler_uso_planos_claude(pasta_projetos=PROJETOS):
-    """Calcula estimativa de volume de tokens do Claude por diretor em 24h.
+def ler_uso_planos_claude(pasta_projetos=PROJETOS, caminho_oficial=None):
+    """Lê o uso oficial do plano Claude gravado por statusLine em data/uso_claude_oficial.json.
 
-    Regra dura: Não fabrica percentual oficial (sessao_5h/semana_7d saem como None/indeterminado).
+    Caso ausente ou com medido_em mais antigo que 6h, retorna status 'sem_dado' ou 'desatualizado'
+    com percentuais nulos (nunca 0%).
     """
     diretores = ["luana", "renato", "bia"]
-    vazio_claude = {
-        "sessao_5h_percentual": None,
-        "sessao_5h_reset": None,
-        "semana_7d_percentual": None,
-        "semana_7d_reset": None,
-        "fonte_percentual_oficial": False,
-        "tokens_24h_estimativa": None,
-        "por_diretor": [{"diretor": d, "tokens_24h": None} for d in diretores],
-    }
+    agora = agora_utc()
+
+    if caminho_oficial is None:
+        caminho_oficial = PAINEL_OS_DIR / "data" / "uso_claude_oficial.json"
+    else:
+        caminho_oficial = Path(caminho_oficial)
+
+    oficial_dados = None
+    if caminho_oficial.is_file():
+        try:
+            raw = json.loads(caminho_oficial.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                medido_str = raw.get("medido_em")
+                if medido_str:
+                    try:
+                        medido_dt = datetime.fromisoformat(str(medido_str).replace("Z", "+00:00"))
+                        if medido_dt.tzinfo is None:
+                            medido_dt = medido_dt.replace(tzinfo=timezone.utc)
+                        idade_h = (agora - medido_dt).total_seconds() / 3600.0
+                        c5 = raw.get("cinco_horas") if isinstance(raw.get("cinco_horas"), dict) else {}
+                        c7 = raw.get("sete_dias") if isinstance(raw.get("sete_dias"), dict) else {}
+                        if idade_h <= 6.0:
+                            oficial_dados = {
+                                "sessao_5h_percentual": c5.get("usado_pct"),
+                                "sessao_5h_reset": c5.get("reseta_em"),
+                                "semana_7d_percentual": c7.get("usado_pct"),
+                                "semana_7d_reset": c7.get("reseta_em"),
+                                "fonte_percentual_oficial": True,
+                                "medido_em": medido_str,
+                                "status": "pronto"
+                            }
+                        else:
+                            oficial_dados = {
+                                "sessao_5h_percentual": None,
+                                "sessao_5h_reset": c5.get("reseta_em"),
+                                "semana_7d_percentual": None,
+                                "semana_7d_reset": c7.get("reseta_em"),
+                                "fonte_percentual_oficial": False,
+                                "medido_em": medido_str,
+                                "status": "desatualizado"
+                            }
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
     if not isinstance(pasta_projetos, Path):
         pasta_projetos = Path(pasta_projetos)
 
-    if not pasta_projetos.is_dir():
-        return vazio_claude
-
-    agora = agora_utc()
     limite_24h = agora - timedelta(hours=24)
     tokens_map = {d: None for d in diretores}
 
-    try:
-        for arq in pasta_projetos.rglob("*.jsonl"):
-            try:
-                st = arq.stat()
-                if datetime.fromtimestamp(st.st_mtime, tz=timezone.utc) < limite_24h:
+    if pasta_projetos.is_dir():
+        try:
+            for arq in pasta_projetos.rglob("*.jsonl"):
+                try:
+                    st = arq.stat()
+                    if datetime.fromtimestamp(st.st_mtime, tz=timezone.utc) < limite_24h:
+                        continue
+                except OSError:
                     continue
-            except OSError:
-                continue
 
-            caminho_str = str(arq).lower()
-            d_alvo = None
-            if "luana" in caminho_str:
-                d_alvo = "luana"
-            elif "renato" in caminho_str:
-                d_alvo = "renato"
-            elif "bia" in caminho_str:
-                d_alvo = "bia"
+                caminho_str = str(arq).lower()
+                d_alvo = None
+                if "luana" in caminho_str:
+                    d_alvo = "luana"
+                elif "renato" in caminho_str:
+                    d_alvo = "renato"
+                elif "bia" in caminho_str:
+                    d_alvo = "bia"
 
-            if not d_alvo:
-                continue
+                if not d_alvo:
+                    continue
 
-            if tokens_map[d_alvo] is None:
-                tokens_map[d_alvo] = 0
+                if tokens_map[d_alvo] is None:
+                    tokens_map[d_alvo] = 0
 
-            try:
-                size = st.st_size
-                with arq.open("r", encoding="utf-8", errors="replace") as fh:
-                    if size > 65536:
-                        fh.seek(size - 65536)
-                        fh.readline()
-                    for line in fh:
-                        if not line.strip():
-                            continue
-                        try:
-                            obj = json.loads(line)
-                            if isinstance(obj, dict):
-                                usg = obj.get("usage") or obj.get("message", {}).get("usage")
-                                if isinstance(usg, dict):
-                                    in_t = int(usg.get("input_tokens", 0) or 0)
-                                    out_t = int(usg.get("output_tokens", 0) or 0)
-                                    cc_t = int(usg.get("cache_creation_input_tokens", 0) or 0)
-                                    cr_t = int(usg.get("cache_read_input_tokens", 0) or 0)
-                                    tokens_map[d_alvo] += (in_t + out_t + cc_t + cr_t)
-                        except Exception:
-                            continue
-            except OSError:
-                continue
-    except Exception:
-        pass
+                try:
+                    size = st.st_size
+                    with arq.open("r", encoding="utf-8", errors="replace") as fh:
+                        if size > 65536:
+                            fh.seek(size - 65536)
+                            fh.readline()
+                        for line in fh:
+                            if not line.strip():
+                                continue
+                            try:
+                                obj = json.loads(line)
+                                if isinstance(obj, dict):
+                                    usg = obj.get("usage") or obj.get("message", {}).get("usage")
+                                    if isinstance(usg, dict):
+                                        in_t = int(usg.get("input_tokens", 0) or 0)
+                                        out_t = int(usg.get("output_tokens", 0) or 0)
+                                        cc_t = int(usg.get("cache_creation_input_tokens", 0) or 0)
+                                        cr_t = int(usg.get("cache_read_input_tokens", 0) or 0)
+                                        tokens_map[d_alvo] += (in_t + out_t + cc_t + cr_t)
+                            except Exception:
+                                continue
+                except OSError:
+                    continue
+        except Exception:
+            pass
 
     soma_total = sum(v for v in tokens_map.values() if v is not None)
+
     return {
-        "sessao_5h_percentual": None,
-        "sessao_5h_reset": None,
-        "semana_7d_percentual": None,
-        "semana_7d_reset": None,
-        "fonte_percentual_oficial": False,
+        "status": oficial_dados.get("status", "sem_dado") if oficial_dados else "sem_dado",
+        "medido_em": oficial_dados.get("medido_em") if oficial_dados else None,
+        "sessao_5h_percentual": oficial_dados["sessao_5h_percentual"] if oficial_dados else None,
+        "sessao_5h_reset": oficial_dados["sessao_5h_reset"] if oficial_dados else None,
+        "semana_7d_percentual": oficial_dados["semana_7d_percentual"] if oficial_dados else None,
+        "semana_7d_reset": oficial_dados["semana_7d_reset"] if oficial_dados else None,
+        "fonte_percentual_oficial": oficial_dados["fonte_percentual_oficial"] if oficial_dados else False,
         "tokens_24h_estimativa": soma_total if any(v is not None for v in tokens_map.values()) else None,
         "por_diretor": [{"diretor": d, "tokens_24h": tokens_map[d]} for d in diretores],
     }

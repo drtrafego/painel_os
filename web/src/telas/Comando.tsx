@@ -417,27 +417,73 @@ function UsoDosPlanos({ uso }: { uso?: Estado['uso_planos'] }) {
         <div className="rounded-lg border border-linha bg-white/2 p-3">
           <div className="flex items-center justify-between">
             <span className="font-mono text-xs font-bold text-tinta">Claude</span>
-            <span className="rotulo text-[10px]">conta compartilhada</span>
+            <span className="rotulo text-[10px]">plano oficial (statusLine)</span>
           </div>
 
-          <div className="mt-2 space-y-1.5 text-[11.5px]">
-            <div className="flex justify-between border-b border-linha/50 pb-1">
-              <span className="text-tinta-3">janela 5h (sessão):</span>
-              <span className="font-mono text-tinta">
-                {claude?.sessao_5h_percentual !== null && claude?.sessao_5h_percentual !== undefined
-                  ? `${claude.sessao_5h_percentual}%`
-                  : 'indeterminado'}
-              </span>
+          <div className="mt-3 space-y-3">
+            {/* Barra 5 Horas */}
+            <div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-tinta-3 font-medium">5 horas (sessão):</span>
+                <span className="font-mono font-bold text-tinta">
+                  {claude?.sessao_5h_percentual !== null && claude?.sessao_5h_percentual !== undefined
+                    ? `${claude.sessao_5h_percentual}%`
+                    : claude?.status === 'desatualizado'
+                    ? 'desatualizado'
+                    : 'sem dado'}
+                  {claude?.sessao_5h_reset ? (
+                    <span className="ml-1 text-[9.5px] font-normal text-tinta-3">
+                      (reseta às {typeof claude.sessao_5h_reset === 'number' ? new Date(claude.sessao_5h_reset * 1000).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : new Date(claude.sessao_5h_reset).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })})
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-black/40 border border-linha/40">
+                <div
+                  className={`h-full transition-all duration-300 ${
+                    (claude?.sessao_5h_percentual ?? 0) >= 95
+                      ? 'bg-red-500'
+                      : (claude?.sessao_5h_percentual ?? 0) >= 80
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(0, claude?.sessao_5h_percentual ?? 0))}%` }}
+                />
+              </div>
             </div>
-            <div className="flex justify-between border-b border-linha/50 pb-1">
-              <span className="text-tinta-3">janela 7d (semana):</span>
-              <span className="font-mono text-tinta">
-                {claude?.semana_7d_percentual !== null && claude?.semana_7d_percentual !== undefined
-                  ? `${claude.semana_7d_percentual}%`
-                  : 'indeterminado'}
-              </span>
+
+            {/* Barra 7 Dias */}
+            <div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-tinta-3 font-medium">7 dias (semana):</span>
+                <span className="font-mono font-bold text-tinta">
+                  {claude?.semana_7d_percentual !== null && claude?.semana_7d_percentual !== undefined
+                    ? `${claude.semana_7d_percentual}%`
+                    : claude?.status === 'desatualizado'
+                    ? 'desatualizado'
+                    : 'sem dado'}
+                  {claude?.semana_7d_reset ? (
+                    <span className="ml-1 text-[9.5px] font-normal text-tinta-3">
+                      (reseta às {typeof claude.semana_7d_reset === 'number' ? new Date(claude.semana_7d_reset * 1000).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : new Date(claude.semana_7d_reset).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })})
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-black/40 border border-linha/40">
+                <div
+                  className={`h-full transition-all duration-300 ${
+                    (claude?.semana_7d_percentual ?? 0) >= 95
+                      ? 'bg-red-500'
+                      : (claude?.semana_7d_percentual ?? 0) >= 80
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(0, claude?.semana_7d_percentual ?? 0))}%` }}
+                />
+              </div>
             </div>
-            <div className="flex justify-between border-b border-linha/50 pb-1">
+
+            <div className="flex justify-between border-t border-linha/40 pt-2 text-[11px]">
               <span className="text-tinta-3">estimativa 24h:</span>
               <span className="font-mono text-lima font-bold">
                 {claude?.tokens_24h_estimativa !== null && claude?.tokens_24h_estimativa !== undefined
@@ -463,8 +509,8 @@ function UsoDosPlanos({ uso }: { uso?: Estado['uso_planos'] }) {
 
           <p className="mt-2.5 text-[9.5px] leading-snug text-tinta-3">
             {claude?.fonte_percentual_oficial
-              ? '● percentual oficial retornado via cabeçalhos ratelimit'
-              : 'ⓘ percentuais oficiais 5h/7d dependem de cabeçalho ratelimit; volume de tokens é estimativa local.'}
+              ? '● uso oficial lido do data/uso_claude_oficial.json via statusLine do Claude Code'
+              : 'ⓘ sem leitura de uso oficial recente (>6h ou ausente); volume de tokens por estimativa.'}
           </p>
         </div>
 

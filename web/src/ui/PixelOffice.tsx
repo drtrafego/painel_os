@@ -51,12 +51,12 @@ const DEPARTAMENTOS_CONFIG: Array<{
   largura: number
   altura: number
 }> = [
-  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: -280, gy: -180, largura: 230, altura: 150 },
-  { id: 'bots', nome: 'RENATO / BOTS', cor: '#c2410c', gx: 180, gy: -220, largura: 230, altura: 150 },
-  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#8b5cf6', gx: 280, gy: 20, largura: 230, altura: 150 },
-  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#d97706', gx: -320, gy: 40, largura: 250, altura: 165 },
-  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#16a34a', gx: 140, gy: 220, largura: 250, altura: 165 },
-  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -120, gy: 240, largura: 230, altura: 150 },
+  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: -310, gy: -200, largura: 270, altura: 175 },
+  { id: 'bots', nome: 'RENATO / BOTS', cor: '#c2410c', gx: 310, gy: -200, largura: 270, altura: 175 },
+  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#8b5cf6', gx: 330, gy: 30, largura: 270, altura: 175 },
+  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#16a34a', gx: 230, gy: 230, largura: 270, altura: 175 },
+  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -230, gy: 230, largura: 270, altura: 175 },
+  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#d97706', gx: -330, gy: 30, largura: 270, altura: 175 },
 ]
 
 function desenharMesaEAgente(
@@ -67,22 +67,17 @@ function desenharMesaEAgente(
   estadoAgente: 'TRABALHANDO' | 'OCIOSO' | 'PARADO',
   selecionado: boolean,
   tick: number,
-  reduzirMovimento: boolean,
-  dimmed: boolean = false
+  reduzirMovimento: boolean
 ) {
   ctx.save()
   ctx.translate(ax, ay)
-
-  if (dimmed) {
-    ctx.globalAlpha = 0.25
-  }
 
   const corSetor = ag.cor || '#38bdf8'
   const ehTrabalhando = estadoAgente === 'TRABALHANDO'
   const ehParado = estadoAgente === 'PARADO'
 
   // 0. AURA NEON NO CHÃO PARA AGENTES ATIVOS (TRABALHANDO)
-  if (ehTrabalhando && !dimmed) {
+  if (ehTrabalhando) {
     const auraPulso = !reduzirMovimento ? 14 + Math.sin(tick * 0.12) * 6 : 14
     ctx.save()
     ctx.shadowColor = corSetor
@@ -104,7 +99,7 @@ function desenharMesaEAgente(
   // 2. Tampo da Mesa Isométrica (Metal Slate HUD)
   ctx.fillStyle = '#1e293b'
   ctx.strokeStyle = selecionado ? '#f59e0b' : '#334155'
-  ctx.lineWidth = selecionado ? 1.5 : 1
+  ctx.lineWidth = selecionado ? 2 : 1
   ctx.beginPath()
   ctx.moveTo(0, -14)
   ctx.lineTo(17, -6)
@@ -166,12 +161,13 @@ function desenharMesaEAgente(
     ctx.fillStyle = '#1e293b'
     ctx.fillRect(-9, -20, 18, 8)
   } else {
+    // Monitor totalmente apagado para PARADO
     ctx.fillStyle = '#020617'
     ctx.fillRect(-9, -20, 18, 8)
   }
 
   // Partículas de faíscas neon subindo do monitor se estiver TRABALHANDO
-  if (ehTrabalhando && !reduzirMovimento && !dimmed) {
+  if (ehTrabalhando && !reduzirMovimento) {
     ctx.save()
     for (let i = 0; i < 3; i++) {
       const pOffset = (tick * 1.5 + i * 18) % 25
@@ -179,7 +175,7 @@ function desenharMesaEAgente(
       const py = -22 - pOffset
       const alpha = 1 - pOffset / 25
       ctx.fillStyle = corSetor
-      ctx.globalAlpha = alpha * (dimmed ? 0.25 : 1)
+      ctx.globalAlpha = alpha
       ctx.beginPath()
       ctx.arc(px, py, 1.5, 0, Math.PI * 2)
       ctx.fill()
@@ -213,7 +209,7 @@ function desenharMesaEAgente(
   ctx.rect(-6, chairY - 5, 12, 7)
   ctx.fill()
 
-  // 5. Pessoa de Costas (Cabeça, Ombros e Braços no teclado)
+  // 5. Pessoa de Costas (Cadeira vazia se PARADO!)
   if (!ehParado) {
     const animY = ehTrabalhando && !reduzirMovimento ? Math.sin(tick * 0.25) * 0.7 : 0
 
@@ -266,7 +262,7 @@ function desenharMesaEAgente(
   ctx.fillText(nomeExibicao, ehTrabalhando ? 2 : 0, tagY + 10)
 
   // 7. BADGE FLUTUANTE ⚡ ATIVO PARA AGENTES TRABALHANDO
-  if (ehTrabalhando && !dimmed) {
+  if (ehTrabalhando) {
     const badgeY = tagY - 13
     const badgePulso = !reduzirMovimento ? Math.sin(tick * 0.2) * 1.5 : 0
     ctx.save()
@@ -294,13 +290,12 @@ export function PixelOffice({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const [zoom, setZoom] = useState(0.75)
+  const [zoom, setZoom] = useState(0.85)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [arrastando, setArrastando] = useState(false)
   const [pontoArrasto, setPontoArrasto] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const [foco, setFoco] = useState<string | null>(agenteSelecionadoId ?? null)
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
-  const [filtroAgentes, setFiltroAgentes] = useState<'todos' | 'vivos' | 'ativos'>('todos')
   const [horaLocal, setHoraLocal] = useState<string>(() => {
     return new Date().toLocaleTimeString('pt-BR', {
       hour: '2-digit',
@@ -560,6 +555,68 @@ export function PixelOffice({
     return res
   }, [agentesPorSquad, ativos, estado])
 
+  // Dados do Agente/Diretor Selecionado no Inspetor
+  const agenteSelecionadoDados = useMemo(() => {
+    if (!foco) return null
+    const noCat = catalogoVisual.find((ag) => ag.id === foco)
+    const noVivo = agentes.find((ag) => ag.id === foco || ag.identidade === foco)
+
+    // Se for um diretor (luana, renato, bia)
+    if (foco === 'luana' || foco === 'renato' || foco === 'bia') {
+      const subagentesDoDiretor = agentes.filter((ag) => ag.dono === foco || (ag.dono === undefined && foco === 'luana'))
+      const sessaoRaiz = agentes.find((ag) => ag.dono === foco && ag.identidade === 'sessao-claude') || noVivo
+
+      const temAtivo = subagentesDoDiretor.some((s) => s.estado === 'trabalhando') || sessaoRaiz?.estado === 'trabalhando'
+      const modelo = sessaoRaiz?.modelo_legivel || sessaoRaiz?.modelo || subagentesDoDiretor.find((s) => s.modelo)?.modelo_legivel || 'Claude 3.7 Sonnet'
+      const esforco = sessaoRaiz?.esforco || 'medium'
+      const dono = foco.charAt(0).toUpperCase() + foco.slice(1)
+      const rodandoHa = sessaoRaiz?.rodando_ha || (sessaoRaiz?.inicio ? `desde ${sessaoRaiz.inicio}` : '—')
+      const ultimaAtiv = sessaoRaiz?.silencio_s === 0 ? 'agora' : sessaoRaiz?.silencio_s != null ? `${sessaoRaiz.silencio_s}s atrás` : '—'
+      const ferramentas = subagentesDoDiretor.reduce((acc, s) => acc + (s.ferramentas_usadas ?? 0), sessaoRaiz?.ferramentas_usadas ?? 0)
+      const tokens = sessaoRaiz?.tokens_formatado || '—'
+      const tarefa = sessaoRaiz?.tarefa || subagentesDoDiretor.find((s) => s.tarefa)?.tarefa || `Orquestração de tarefas do setor ${foco}`
+
+      return {
+        id: foco,
+        nome: dono,
+        papel: `Diretor(a) / Orquestrador(a)`,
+        squad: foco === 'renato' ? 'bots' : foco === 'bia' ? 'tráfego' : 'coordenação',
+        estado: temAtivo ? 'trabalhando' : 'silencioso',
+        modelo,
+        esforco,
+        dono,
+        rodandoHa,
+        ultimaAtiv,
+        ferramentas,
+        tokens,
+        tarefa,
+        subagentes: subagentesDoDiretor,
+      }
+    }
+
+    // Se for um agente comum
+    const estadoAg = noVivo?.estado || (ativos.has(foco) ? 'trabalhando' : 'silencioso')
+    const donoNorm = normalizarDonoId(noVivo?.dono)
+    const donoFormatted = donoNorm ? donoNorm.charAt(0).toUpperCase() + donoNorm.slice(1) : noCat?.área || '—'
+
+    return {
+      id: foco,
+      nome: noCat?.nome || noVivo?.papel || foco,
+      papel: noCat?.papel || noVivo?.papel || 'Especialista',
+      squad: noCat?.squad || 'globais',
+      estado: estadoAg,
+      modelo: noVivo?.modelo_legivel || noVivo?.modelo || 'Claude 3.7 Sonnet',
+      esforco: noVivo?.esforco || 'medium',
+      dono: donoFormatted,
+      rodandoHa: noVivo?.rodando_ha || (noVivo?.inicio ? `desde ${noVivo.inicio}` : '—'),
+      ultimaAtiv: noVivo?.silencio_s === 0 ? 'agora' : noVivo?.silencio_s != null ? `${noVivo.silencio_s}s atrás` : '—',
+      ferramentas: noVivo?.ferramentas_usadas ?? 0,
+      tokens: noVivo?.tokens_formatado || (noVivo?.tokens_total ? noVivo.tokens_total.toLocaleString('pt-BR') : '—'),
+      tarefa: noVivo?.tarefa || noVivo?.etapa || noCat?.papel || 'Pronto para execução',
+      subagentes: [],
+    }
+  }, [foco, catalogoVisual, agentes, ativos])
+
   // Desenho Canvas Isometric 2.5D Cyberpunk HUD (Opção 1)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -573,8 +630,8 @@ export function PixelOffice({
     const render = () => {
       const container = containerRef.current
       const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
-      const larguraCss = container ? container.clientWidth : 750
-      const alturaCss = container ? container.clientHeight : 520
+      const larguraCss = container ? container.clientWidth : 800
+      const alturaCss = container ? container.clientHeight : 540
 
       if (canvas.width !== Math.round(larguraCss * dpr) || canvas.height !== Math.round(alturaCss * dpr)) {
         canvas.width = Math.round(larguraCss * dpr)
@@ -585,14 +642,28 @@ export function PixelOffice({
       ctx.imageSmoothingEnabled = true
       ctx.clearRect(0, 0, larguraCss, alturaCss)
 
-      // Fundo Dark Mode HUD (#070a12)
+      // 1. FUNDO DARK MODE HUD COM ESTRELAS DISCRETAS
       ctx.fillStyle = '#070a12'
       ctx.fillRect(0, 0, larguraCss, alturaCss)
 
-      // Grid Isométrico de Fundo Cyberpunk
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.04)'
+      ctx.save()
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'
+      for (let i = 0; i < 45; i++) {
+        const sx = (i * 137.5 + tick * 0.04) % larguraCss
+        const sy = (i * 293.3) % alturaCss
+        const size = i % 3 === 0 ? 1.5 : 1
+        const alpha = 0.2 + Math.sin(tick * 0.05 + i) * 0.15
+        ctx.globalAlpha = Math.max(0.05, alpha)
+        ctx.beginPath()
+        ctx.arc(sx, sy, size, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.restore()
+
+      // Grid Isométrico sutil
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.03)'
       ctx.lineWidth = 1
-      const step = 40
+      const step = 45
       for (let x = -larguraCss; x < larguraCss * 2; x += step) {
         ctx.beginPath()
         ctx.moveTo(x, 0)
@@ -609,13 +680,13 @@ export function PixelOffice({
       ctx.translate(larguraCss / 2 + pan.x, alturaCss / 2 + pan.y)
       ctx.scale(zoom, zoom)
 
-      // 1. HUB CENTRAL ("O CÉREBRO" NEON CORE)
+      // 2. HUB CENTRAL ("O CÉREBRO" NEON CORE)
       const hubX = 0
       const hubY = 0
       const nosCount = estado?.cofre?.nos?.length
       const textoHubNotas = nosCount != null ? `${nosCount} NOTAS` : 'sem dado'
 
-      // Cabos / Raios Neon ligando o Hub Central às Ilhas
+      // Cabos Neon ligando o Hub às Ilhas
       ctx.lineWidth = 2
       DEPARTAMENTOS_CONFIG.forEach((dept) => {
         ctx.shadowColor = dept.cor
@@ -630,35 +701,34 @@ export function PixelOffice({
       ctx.setLineDash([])
       ctx.shadowBlur = 0
 
-      // Desenho do Core do Hub Central (Cubo 3D Neon)
+      // Core do Hub Central (Cubo/Elipse 3D Neon)
       ctx.save()
       ctx.translate(hubX, hubY)
+      const pulsoCore = !reduzirMovimento ? 12 + Math.sin(tick * 0.1) * 6 : 12
 
       ctx.shadowColor = '#0284c7'
-      ctx.shadowBlur = 18
+      ctx.shadowBlur = pulsoCore
       ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
       ctx.strokeStyle = '#38bdf8'
-      ctx.lineWidth = 2
+      ctx.lineWidth = 2.5
       ctx.beginPath()
-      ctx.ellipse(0, 0, 75, 28, 0, 0, Math.PI * 2)
+      ctx.ellipse(0, 0, 85, 32, 0, 0, Math.PI * 2)
       ctx.fill()
       ctx.stroke()
 
       ctx.shadowBlur = 0
-
-      // Rótulo do Hub Central
-      ctx.font = 'bold 11px sans-serif'
+      ctx.font = 'bold 12px sans-serif'
       ctx.fillStyle = '#38bdf8'
       ctx.textAlign = 'center'
-      ctx.fillText(`● O CÉREBRO  ${textoHubNotas}`, 0, -2)
+      ctx.fillText(`● O CÉREBRO  ${textoHubNotas}`, 0, -3)
 
-      ctx.font = '9px sans-serif'
+      ctx.font = 'bold 9px sans-serif'
       ctx.fillStyle = '#94a3b8'
-      ctx.fillText('CORE KNOWLEDGE HUD', 0, 10)
+      ctx.fillText('BASE DE CONHECIMENTO', 0, 11)
 
       ctx.restore()
 
-      // 1.5. SETAS/RAIOS DE FLUXO NEON ENTRE DIRETORES E REGENTES
+      // Setas/Raios de fluxo entre diretores e regentes
       ctx.save()
       ctx.lineWidth = 1.5
       ctx.setLineDash([3, 3])
@@ -667,27 +737,22 @@ export function PixelOffice({
       ctx.shadowBlur = 6
       ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)'
       ctx.beginPath()
-      ctx.moveTo(-280 + 50, -180 + 30)
-      ctx.lineTo(280 - 50, 20 - 20)
-      ctx.stroke()
-
-      ctx.beginPath()
-      ctx.moveTo(280 - 20, 20 - 25)
-      ctx.lineTo(280 + 20, 20 + 15)
+      ctx.moveTo(-310 + 50, -200 + 30)
+      ctx.lineTo(330 - 50, 30 - 20)
       ctx.stroke()
 
       ctx.shadowColor = '#c2410c'
       ctx.strokeStyle = 'rgba(194, 65, 12, 0.7)'
       ctx.beginPath()
-      ctx.moveTo(180 - 20, -220 - 25)
-      ctx.lineTo(180 + 20, -220 + 15)
+      ctx.moveTo(310 - 20, -200 - 25)
+      ctx.lineTo(310 + 20, -200 + 15)
       ctx.stroke()
 
       ctx.setLineDash([])
       ctx.shadowBlur = 0
       ctx.restore()
 
-      // 2. DESENHO DAS ILHAS / PLATAFORMAS POR DEPARTAMENTO
+      // 3. DESENHO DAS PLATAFORMAS E AGENTES POR DEPARTAMENTO
       DEPARTAMENTOS_CONFIG.forEach((dept) => {
         const ags = agentesPorSquad.get(dept.id) ?? []
         const metric = metricasSquad.get(dept.id) ?? { m1: 'sem dado', m2: 'sem dado', doing: 0, next: 0, done: 0, aguardando_d2: false }
@@ -695,15 +760,14 @@ export function PixelOffice({
         ctx.save()
         ctx.translate(dept.gx, dept.gy)
 
-        // Sombra da Plataforma
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-        ctx.beginPath()
-        ctx.ellipse(0, 25, dept.largura / 1.7, dept.altura / 2.1, 0, 0, Math.PI * 2)
-        ctx.fill()
-
-        // Corpo 3D da Plataforma (Modo Dark HUD)
+        // Sombra da Plataforma Hexagonal
         const pw = dept.largura / 2
         const ph = dept.altura / 2
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+        ctx.beginPath()
+        ctx.ellipse(0, 25, pw * 1.05, ph * 1.05, 0, 0, Math.PI * 2)
+        ctx.fill()
 
         // Paredes laterais da plataforma
         ctx.fillStyle = '#0f172a'
@@ -711,15 +775,15 @@ export function PixelOffice({
         ctx.moveTo(-pw, 0)
         ctx.lineTo(0, ph)
         ctx.lineTo(pw, 0)
-        ctx.lineTo(pw, 14)
-        ctx.lineTo(0, ph + 14)
-        ctx.lineTo(-pw, 14)
+        ctx.lineTo(pw, 16)
+        ctx.lineTo(0, ph + 16)
+        ctx.lineTo(-pw, 16)
         ctx.closePath()
         ctx.fill()
         ctx.strokeStyle = '#1e293b'
         ctx.stroke()
 
-        // Piso Superior Isométrico (#111827)
+        // Piso Superior Isométrico Dark (#111827)
         ctx.fillStyle = '#111827'
         ctx.beginPath()
         ctx.moveTo(0, -ph)
@@ -729,31 +793,31 @@ export function PixelOffice({
         ctx.closePath()
         ctx.fill()
 
-        // Borda Neon da Plataforma com Glow
+        // Borda Neon Hexagonal da Plataforma
         ctx.shadowColor = dept.cor
         ctx.shadowBlur = 12
         ctx.strokeStyle = dept.cor
-        ctx.lineWidth = 2
+        ctx.lineWidth = 2.5
         ctx.stroke()
         ctx.shadowBlur = 0
 
-        // Grid do Piso Dark
+        // Grid interno da plataforma
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)'
         ctx.lineWidth = 1
-        for (let i = -pw + 20; i < pw; i += 30) {
+        for (let i = -pw + 25; i < pw; i += 32) {
           ctx.beginPath()
           ctx.moveTo(i, -ph / 2)
           ctx.lineTo(i + 20, ph / 2)
           ctx.stroke()
         }
 
-        // DESENHO DOS AGENTES (BONECOS 2.5D DE COSTAS)
+        // DESENHO DOS AGENTES NAS MESAS
         const maxDisplay = Math.min(ags.length, 6)
         ags.slice(0, maxDisplay).forEach((ag, idx) => {
           const col = idx % 3
           const row = Math.floor(idx / 3)
-          const ax = -pw + 38 + col * 60
-          const ay = -ph + 38 + row * 48
+          const ax = -pw + 42 + col * 65
+          const ay = -ph + 42 + row * 52
 
           const selecionado = foco === ag.id
 
@@ -764,51 +828,45 @@ export function PixelOffice({
                 ? 'TRABALHANDO'
                 : 'OCIOSO'
 
-          const dimmed =
-            (filtroAgentes === 'vivos' && estadoAgente === 'PARADO') ||
-            (filtroAgentes === 'ativos' && estadoAgente !== 'TRABALHANDO')
-
-          desenharMesaEAgente(ctx, ax, ay, ag, estadoAgente, selecionado, tick, reduzirMovimento, dimmed)
+          desenharMesaEAgente(ctx, ax, ay, ag, estadoAgente, selecionado, tick, reduzirMovimento)
         })
 
-        // CARTÃO FLUTUANTE GLASSMORPHISM HUD DO DEPARTAMENTO
+        // CARTÃO FLUTUANTE GLASSMORPHISM HUD DO DEPARTAMENTO (COMO NA REFERÊNCIA)
         const cardX = -pw - 10
-        const cardY = -ph - 72
-        const cardW = 150
-        const cardH = 64
+        const cardY = -ph - 74
+        const cardW = 165
+        const cardH = 66
 
-        // Sombra do Cartão
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
         ctx.fillRect(cardX + 3, cardY + 3, cardW, cardH)
 
-        // Fundo Glassmorphism Fosco (#0f172a / 90%)
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)'
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)'
         ctx.fillRect(cardX, cardY, cardW, cardH)
 
-        // Borda Neon do Cartão
         ctx.strokeStyle = dept.cor
         ctx.lineWidth = 1.5
         ctx.strokeRect(cardX, cardY, cardW, cardH)
 
-        // Top Header: Neon Dot + Nome
+        // Top Header: Neon Dot + Nome + Contagem Ativos
         ctx.fillStyle = dept.cor
         ctx.beginPath()
-        ctx.arc(cardX + 10, cardY + 11, 3.5, 0, Math.PI * 2)
+        ctx.arc(cardX + 10, cardY + 12, 3.5, 0, Math.PI * 2)
         ctx.fill()
 
-        ctx.font = 'bold 9px sans-serif'
+        ctx.font = 'bold 9.5px sans-serif'
         ctx.fillStyle = '#f8fafc'
         ctx.textAlign = 'left'
-        ctx.fillText(dept.nome.toUpperCase(), cardX + 18, cardY + 14)
+        ctx.fillText(dept.nome.toUpperCase(), cardX + 18, cardY + 15)
 
-        // Agentes Contagem Grande
-        ctx.font = 'bold 16px sans-serif'
+        // Agentes total e métrica em destaque
+        const executandoCount = ags.filter((a) => ativos.has(a.id)).length
+        ctx.font = 'bold 15px sans-serif'
         ctx.fillStyle = '#f8fafc'
-        ctx.fillText(`${ags.length}`, cardX + 10, cardY + 34)
+        ctx.fillText(`${ags.length}`, cardX + 10, cardY + 35)
 
-        ctx.font = 'bold 8px sans-serif'
+        ctx.font = 'bold 8.5px sans-serif'
         ctx.fillStyle = '#94a3b8'
-        ctx.fillText('agentes', cardX + 26, cardY + 34)
+        ctx.fillText(`agentes (${executandoCount} ativos)`, cardX + 26, cardY + 35)
 
         // Linhas de Métrica
         ctx.font = '8px sans-serif'
@@ -818,17 +876,17 @@ export function PixelOffice({
 
         // Rodapé Card: FAZENDO / PRÓXIMA / CONCLUÍDA
         ctx.fillStyle = metric.aguardando_d2 ? 'rgba(194, 65, 12, 0.25)' : '#1e293b'
-        ctx.fillRect(cardX, cardY + 46, cardW, 18)
+        ctx.fillRect(cardX, cardY + 46, cardW, 20)
         ctx.strokeStyle = metric.aguardando_d2 ? '#f97316' : '#334155'
-        ctx.strokeRect(cardX, cardY + 46, cardW, 18)
+        ctx.strokeRect(cardX, cardY + 46, cardW, 20)
 
         const txtRodape = metric.aguardando_d2
           ? 'aguardando o dono (D2)'
           : `FAZENDO ${metric.doing} · PRÓXIMA ${metric.next} · FEITAS ${metric.done}`
 
-        ctx.font = 'bold 8px sans-serif'
+        ctx.font = 'bold 8.5px sans-serif'
         ctx.fillStyle = metric.aguardando_d2 ? '#fb923c' : '#f8fafc'
-        ctx.fillText(txtRodape, cardX + (metric.aguardando_d2 ? 16 : 8), cardY + 58)
+        ctx.fillText(txtRodape, cardX + (metric.aguardando_d2 ? 16 : 8), cardY + 60)
 
         ctx.restore()
       })
@@ -843,7 +901,7 @@ export function PixelOffice({
 
     render()
     return () => cancelAnimationFrame(frame)
-  }, [agentesPorSquad, ativos, diretoresEstado, estado, filtroAgentes, foco, metricasSquad, pan, reduzirMovimento, zoom])
+  }, [agentesPorSquad, ativos, diretoresEstado, estado, foco, metricasSquad, pan, reduzirMovimento, zoom])
 
   const selecionarNoCanvas = (evento: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -855,19 +913,44 @@ export function PixelOffice({
     const mundoX = (evento.clientX - rect.left - larguraCss / 2 - pan.x) / zoom
     const mundoY = (evento.clientY - rect.top - alturaCss / 2 - pan.y) / zoom
 
-    // Verificar se clicou perto de algum departamento
-    const clicado = DEPARTAMENTOS_CONFIG.find(
-      (dept) => Math.abs(dept.gx - mundoX) < dept.largura / 2 && Math.abs(dept.gy - mundoY) < dept.altura / 2
-    )
+    // Verificar se clicou em alguma mesa de agente
+    let agenteEncontrado: string | null = null
 
-    if (clicado) {
-      const ags = agentesPorSquad.get(clicado.id) ?? []
-      if (ags.length > 0) {
-        setFoco(ags[0].id)
-        aoSelecionarAgente?.(ags[0].id)
-      }
+    DEPARTAMENTOS_CONFIG.forEach((dept) => {
+      const ags = agentesPorSquad.get(dept.id) ?? []
+      const pw = dept.largura / 2
+      const ph = dept.altura / 2
+      const maxDisplay = Math.min(ags.length, 6)
+
+      ags.slice(0, maxDisplay).forEach((ag, idx) => {
+        const col = idx % 3
+        const row = Math.floor(idx / 3)
+        const ax = dept.gx - pw + 42 + col * 65
+        const ay = dept.gy - ph + 42 + row * 52
+
+        if (Math.abs(ax - mundoX) < 26 && Math.abs(ay - mundoY) < 26) {
+          agenteEncontrado = ag.id
+        }
+      })
+    })
+
+    if (agenteEncontrado) {
+      setFoco(agenteEncontrado)
+      aoSelecionarAgente?.(agenteEncontrado)
     } else {
-      setFoco(null)
+      // Se clicou no departamento
+      const clicadoDept = DEPARTAMENTOS_CONFIG.find(
+        (dept) => Math.abs(dept.gx - mundoX) < dept.largura / 2 && Math.abs(dept.gy - mundoY) < dept.altura / 2
+      )
+      if (clicadoDept) {
+        const ags = agentesPorSquad.get(clicadoDept.id) ?? []
+        if (ags.length > 0) {
+          setFoco(ags[0].id)
+          aoSelecionarAgente?.(ags[0].id)
+        }
+      } else {
+        setFoco(null)
+      }
     }
   }
 
@@ -891,7 +974,7 @@ export function PixelOffice({
 
   const resetView = () => {
     setPan({ x: 0, y: 0 })
-    setZoom(0.75)
+    setZoom(0.85)
   }
 
   // Filtragem de Tarefas para o Painel Lateral
@@ -925,7 +1008,7 @@ export function PixelOffice({
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-[#0f172a]/90 px-4 py-2.5 shadow-lg backdrop-blur-md">
         <div className="flex items-center gap-3">
           <span className="font-extrabold text-xs tracking-wider text-white uppercase">
-            AGENTS OFFICE <span className="text-cyan-400 font-normal">v3 HUD</span>
+            AGENTS OFFICE <span className="text-cyan-400 font-normal">v3.5 HUD</span>
           </span>
           <span className="hidden text-slate-500 text-xs sm:inline">·</span>
           <div className="flex items-center gap-1.5 text-xs text-slate-300">
@@ -962,7 +1045,7 @@ export function PixelOffice({
           tabIndex={0}
           role="region"
           aria-label="Escritório virtual dos agentes em 2.5D HUD"
-          className="relative min-h-[480px] w-full overflow-hidden rounded-xl border border-slate-800 bg-[#070a12] shadow-xl lg:col-span-8 lg:min-h-[580px]"
+          className="relative min-h-[520px] w-full overflow-hidden rounded-xl border border-slate-800 bg-[#070a12] shadow-xl lg:col-span-8 lg:min-h-[620px]"
         >
           <canvas
             ref={canvasRef}
@@ -978,47 +1061,132 @@ export function PixelOffice({
             className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
           />
 
-          {/* SELETOR DE FILTRO DE AGENTES (CANTO SUPERIOR ESQUERDO) */}
-          <div className="pointer-events-auto absolute top-3 left-3 flex items-center gap-1.5 rounded-lg border border-slate-800 bg-[#0f172a]/95 p-1.5 shadow-lg backdrop-blur-md">
-            <span className="px-1 font-extrabold text-[10px] tracking-wider text-slate-400 uppercase">Ver Agentes:</span>
-            <button
-              type="button"
-              onClick={() => setFiltroAgentes('todos')}
-              className={`rounded px-2.5 py-1 font-extrabold text-[10px] transition-colors ${
-                filtroAgentes === 'todos'
-                  ? 'bg-sky-500 text-slate-950 shadow-sm'
-                  : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              Todos ({catalogoVisual.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroAgentes('vivos')}
-              className={`rounded px-2.5 py-1 font-extrabold text-[10px] transition-colors ${
-                filtroAgentes === 'vivos'
-                  ? 'bg-amber-500 text-slate-950 shadow-sm'
-                  : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              Vivos ({catalogoVisual.filter((ag) => ativos.has(ag.id) || ['luana', 'renato', 'bia'].includes(ag.id)).length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroAgentes('ativos')}
-              className={`rounded px-2.5 py-1 font-extrabold text-[10px] transition-colors ${
-                filtroAgentes === 'ativos'
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm animate-pulse'
-                  : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              ⚡ Somente Ativos ({ativos.size})
-            </button>
-          </div>
+          {/* INSPETOR FLUTUANTE EM MODAL/DRAWER DIREITO QUANDO UM AGENTE É SELECIONADO */}
+          {agenteSelecionadoDados && (
+            <div className="absolute top-3 right-14 max-w-sm w-full z-20 rounded-xl border-2 border-black bg-[#0f172a]/95 p-4 text-white shadow-2xl backdrop-blur-md space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-700/80 pb-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`size-2.5 rounded-full ${
+                      agenteSelecionadoDados.estado === 'trabalhando' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                    }`}
+                  />
+                  <div>
+                    <h3 className="font-black text-xs uppercase text-[#facc15] tracking-wider">
+                      INSPECTOR: {agenteSelecionadoDados.nome}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-mono">
+                      {agenteSelecionadoDados.papel} · ({agenteSelecionadoDados.id})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFoco(null)}
+                  className="rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-300 hover:bg-slate-700"
+                >
+                  ✕ FECHAR
+                </button>
+              </div>
 
-          {/* LEGENDAS DE INSTRUÇÃO NO CANTO INFERIOR ESQUERDO */}
-          <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-slate-800 bg-[#0f172a]/90 px-3 py-1.5 text-[10px] text-slate-300 shadow-lg backdrop-blur-md">
-            Arraste para mover · Roda do mouse para Zoom · Clique nas plataformas
+              {/* Grid de Métricas Ricas como no Terminal CRT */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Modelo</div>
+                  <div className="font-bold text-sky-400 truncate mt-0.5" title={agenteSelecionadoDados.modelo}>
+                    {agenteSelecionadoDados.modelo}
+                  </div>
+                </div>
+
+                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Esforço</div>
+                  <div className="font-bold text-slate-200 mt-0.5">{agenteSelecionadoDados.esforco}</div>
+                </div>
+
+                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Dono / Squad</div>
+                  <div className="font-bold text-amber-400 mt-0.5">{agenteSelecionadoDados.dono}</div>
+                </div>
+
+                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Rodando há</div>
+                  <div className="font-bold text-slate-200 mt-0.5">{agenteSelecionadoDados.rodandoHa}</div>
+                </div>
+
+                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Última atividade</div>
+                  <div className="font-bold text-emerald-400 mt-0.5">{agenteSelecionadoDados.ultimaAtiv}</div>
+                </div>
+
+                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Ferramentas</div>
+                  <div className="font-bold text-slate-200 mt-0.5">{agenteSelecionadoDados.ferramentas} usadas</div>
+                </div>
+              </div>
+
+              {/* Tarefa e Etapa */}
+              <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
+                <div className="text-[9px] uppercase font-bold text-slate-400">Tarefa / Etapa Atual</div>
+                <p className="mt-1 text-xs text-slate-200 leading-relaxed break-words">
+                  {agenteSelecionadoDados.tarefa}
+                </p>
+              </div>
+
+              {/* Subagentes Ativos em Execução se for Diretor */}
+              {agenteSelecionadoDados.subagentes.length > 0 && (
+                <div className="rounded border border-slate-800 bg-slate-900/80 p-2 space-y-1.5">
+                  <div className="text-[9.5px] font-extrabold uppercase text-amber-400 tracking-wider">
+                    ⚡ Subagentes em Execução ({agenteSelecionadoDados.subagentes.length})
+                  </div>
+                  <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                    {agenteSelecionadoDados.subagentes.map((sub) => (
+                      <div key={sub.id} className="flex items-center justify-between text-[10px] border-b border-slate-800 pb-1">
+                        <span className="font-bold text-slate-200 truncate max-w-[150px]">{sub.papel || sub.identidade || sub.id}</span>
+                        <span className="font-mono text-emerald-400">{sub.etapa || sub.fase || 'trabalhando'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PAINEL DE ATIVIDADE DO ESCRITÓRIO (RODADAPÉ DO MAPA - ITEM 4) */}
+          <div className="pointer-events-auto absolute bottom-3 left-3 right-16 flex flex-col gap-1.5 rounded-lg border border-slate-800 bg-[#0f172a]/95 p-2.5 shadow-lg backdrop-blur-md max-w-xl">
+            <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-1">
+              <span className="font-extrabold text-[10px] tracking-wider text-amber-400 uppercase flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                ATIVIDADE EM TEMPO REAL
+              </span>
+              <span className="text-[10px] font-bold text-slate-400">
+                {ativos.size} agente(s) executando
+              </span>
+            </div>
+            {/* Últimas Ações Vivas */}
+            <div className="flex max-h-16 flex-col gap-1 overflow-y-auto pr-1 text-[10px] text-slate-300">
+              {agentes.filter((ag) => ag.estado === 'trabalhando').length === 0 ? (
+                <div className="py-0.5 text-slate-400 italic">
+                  Nenhum agente em execução ativa neste instante.
+                </div>
+              ) : (
+                agentes
+                  .filter((ag) => ag.estado === 'trabalhando')
+                  .slice(0, 3)
+                  .map((ag) => (
+                    <div key={ag.id} className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-sky-400 truncate max-w-[140px]">
+                        ● {ag.papel || ag.identidade || ag.id}
+                      </span>
+                      <span className="truncate text-slate-300 max-w-[200px]">
+                        {ag.etapa || ag.ferramenta || ag.tarefa || 'executando'}
+                      </span>
+                      <span className="font-mono text-emerald-400 shrink-0">
+                        {ag.silencio_s === 0 ? 'agora' : `${ag.silencio_s}s atrás`}
+                      </span>
+                    </div>
+                  ))
+              )}
+            </div>
           </div>
 
           {/* CONTROLES DE CANVAS (CANTO INFERIOR DIREITO: +, -, RESET) */}
@@ -1084,7 +1252,7 @@ export function PixelOffice({
             </div>
           </form>
 
-          {/* CARTÃO DE DESTAQUE DO HUB CENTRAL (O CÉRABRO) */}
+          {/* CARTÃO DE DESTAQUE DO HUB CENTRAL (O CÉREBRO) */}
           <div className="rounded-lg border border-sky-500/30 bg-sky-950/40 p-3 backdrop-blur-sm">
             <div className="flex items-center justify-between">
               <span className="font-bold text-xs text-sky-400">

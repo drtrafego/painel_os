@@ -325,15 +325,33 @@ export type ConsumoPorDiretor = {
   tokens_24h: number | null
 }
 
+export type AnalyticsGA4 = {
+  status: 'pronto' | 'sem_dado' | string
+  atualizado_em: string
+  motivo: string | null
+  propriedade_ga4?: string
+  usuarios_ativos_7d: number | null
+  sessoes_7d: number | null
+  visualizacoes_7d: number | null
+  usuarios_ativos_30d: number | null
+  sessoes_30d: number | null
+  visualizacoes_30d: number | null
+  serie_diaria_30d: { data: string; usuarios_ativos: number | null; sessoes: number | null; visualizacoes: number | null }[]
+  top_paginas: { caminho: string; visualizacoes: number | null }[]
+  top_origens: { origem: string; sessoes: number | null }[]
+}
+
 export type UsoPlanos = {
   status: 'pronto' | 'erro' | 'indeterminado'
   atualizado_em: string
   erro?: string | null
   claude: {
+    status?: string
+    medido_em?: string | null
     sessao_5h_percentual: number | null
-    sessao_5h_reset: string | null
+    sessao_5h_reset: string | number | null
     semana_7d_percentual: number | null
-    semana_7d_reset: string | null
+    semana_7d_reset: string | number | null
     fonte_percentual_oficial: boolean
     tokens_24h_estimativa: number | null
     por_diretor: ConsumoPorDiretor[]
@@ -571,4 +589,5 @@ export type Estado = {
       metricas: Record<string, number> | null
     } | null
   }
+  analytics?: AnalyticsGA4
 }

@@ -38,6 +38,65 @@ export function Analitica({ estado, vista }: PropsTela) {
         <Kpi rotulo="saídas parciais" valor={parciais} cor={parciais ? 'text-ambar' : 'text-tinta'} nota="status publicação parcial" />
       </div>
 
+      {/* PAINEL GA4 DO SITE (casaldotrafego.com) */}
+      <section className="carta mt-4 p-4" data-ga4-analytics>
+        <Cabecalho cor="var(--color-ciano)" meta={estado.analytics?.status === 'pronto' ? `propriedade ${estado.analytics.propriedade_ga4 ?? '255274390'}` : 'Google Analytics 4'}>
+          métricas reais do site (GA4)
+        </Cabecalho>
+
+        {estado.analytics?.status === 'pronto' ? (
+          <div className="mt-3 space-y-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Kpi rotulo="usuários ativos (7d)" valor={estado.analytics.usuarios_ativos_7d} nota="visitantes únicos em 7 dias" />
+              <Kpi rotulo="sessões (7d)" valor={estado.analytics.sessoes_7d} nota="total de visitas em 7 dias" />
+              <Kpi rotulo="visualizações (7d)" valor={estado.analytics.visualizacoes_7d} nota="páginas vistas em 7 dias" />
+              <Kpi rotulo="visualizações (30d)" valor={estado.analytics.visualizacoes_30d} nota="páginas vistas em 30 dias" />
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              {/* Top 5 Páginas */}
+              <div className="rounded-lg border border-linha bg-white/2 p-3">
+                <div className="rotulo mb-2 font-mono text-[11px] font-bold text-tinta">top 5 páginas mais vistas</div>
+                {estado.analytics.top_paginas && estado.analytics.top_paginas.length > 0 ? (
+                  <ul className="space-y-1.5 text-[11.5px]">
+                    {estado.analytics.top_paginas.slice(0, 5).map((p, idx) => (
+                      <li key={idx} className="flex items-center justify-between border-b border-linha/40 pb-1">
+                        <span className="truncate font-mono text-tinta-2 max-w-[220px]" title={p.caminho}>{p.caminho}</span>
+                        <span className="font-mono font-bold text-lima">{p.visualizacoes !== null ? p.visualizacoes.toLocaleString('pt-BR') : '—'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-xs text-tinta-3">Nenhuma página registrada.</div>
+                )}
+              </div>
+
+              {/* Top 5 Origens */}
+              <div className="rounded-lg border border-linha bg-white/2 p-3">
+                <div className="rotulo mb-2 font-mono text-[11px] font-bold text-tinta">top 5 origens de tráfego</div>
+                {estado.analytics.top_origens && estado.analytics.top_origens.length > 0 ? (
+                  <ul className="space-y-1.5 text-[11.5px]">
+                    {estado.analytics.top_origens.slice(0, 5).map((o, idx) => (
+                      <li key={idx} className="flex items-center justify-between border-b border-linha/40 pb-1">
+                        <span className="truncate font-mono text-tinta-2 max-w-[220px]" title={o.origem}>{o.origem}</span>
+                        <span className="font-mono font-bold text-ciano">{o.sessoes !== null ? o.sessoes.toLocaleString('pt-BR') : '—'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-xs text-tinta-3">Nenhuma origem registrada.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 rounded-lg border border-dashed border-linha-forte p-3 text-xs text-tinta-2">
+            <span className="font-bold text-ambar">sem dado GA4: </span>
+            {estado.analytics?.motivo || 'Credencial GA4 não configurada no servidor.'}
+          </div>
+        )}
+      </section>
+
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <Distribuicao titulo="formatos da marca própria" itens={formatos} cor="var(--color-ciano)" />
         <Distribuicao titulo="canais declarados da marca própria" itens={canais} cor="var(--color-lima)" />
