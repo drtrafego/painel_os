@@ -451,7 +451,10 @@ export function PixelOffice({
 
   // Métricas do Estado por Squad (sem dados inventados)
   const metricasSquad = useMemo(() => {
-    const res = new Map<PixelAgentSquad, { m1: string; m2: string; doing: number }>()
+    const res = new Map<
+      PixelAgentSquad,
+      { m1: string; m2: string; doing: number; next: number; done: number; aguardando_d2?: boolean }
+    >()
 
     DEPARTAMENTOS_CONFIG.forEach((dept) => {
       const ags = agentesPorSquad.get(dept.id) ?? []
@@ -459,6 +462,10 @@ export function PixelOffice({
 
       let m1 = 'sem dado'
       let m2 = 'sem dado'
+      let doing = doingCount
+      let next = 0
+      let done = 0
+      let aguardando_d2 = false
 
       if (dept.id === 'conteúdo') {
         const pecasTotal = estado?.pecas?.total != null ? `${estado.pecas.total}` : 'sem dado'
@@ -476,14 +483,21 @@ export function PixelOffice({
         m1 = `APROVAÇÕES ${totAprov}`
         m2 = `DISPAROS CRON ${totalCron}`
       } else if (dept.id === 'bots') {
-        m1 = `SESSÃO ATIVA`
-        m2 = `HERMES BOTS`
+        m1 = `HEITOR (REGENTE)`
+        m2 = `VITOR (FISCAL)`
+        doing = estado?.squad_bots?.fazendo ?? doingCount
+        next = estado?.squad_bots?.proxima ?? 0
+        done = estado?.squad_bots?.done ?? 0
       } else if (dept.id === 'tráfego') {
-        m1 = `META ADS`
-        m2 = `MÍDIA PAGA`
+        m1 = `TEREZA (REGENTE)`
+        m2 = `JADE (FISCAL)`
+        doing = estado?.squad_trafego?.fazendo ?? doingCount
+        next = estado?.squad_trafego?.proxima ?? 0
+        done = estado?.squad_trafego?.done ?? 0
+        aguardando_d2 = estado?.squad_trafego?.aguardando_dono_d2 === true
       }
 
-      res.set(dept.id, { m1, m2, doing: doingCount })
+      res.set(dept.id, { m1, m2, doing, next, done, aguardando_d2 })
     })
 
     return res
@@ -571,10 +585,39 @@ export function PixelOffice({
 
       ctx.restore()
 
+      // 1.5. SETAS/RAIOS DE FLUXO ENTRE DIRETORES, REGENTES E OPERAÇÃO (RODADA 17)
+      ctx.save()
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([3, 3])
+
+      // luana (-280, -180) -> tereza (tráfego: 280, 20)
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)'
+      ctx.beginPath()
+      ctx.moveTo(-280 + 50, -180 + 30)
+      ctx.lineTo(280 - 50, 20 - 20)
+      ctx.stroke()
+
+      // bia (tráfego: 280, 20) -> tereza / analista / gestor / jade / iris
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)'
+      ctx.beginPath()
+      ctx.moveTo(280 - 20, 20 - 25)
+      ctx.lineTo(280 + 20, 20 + 15)
+      ctx.stroke()
+
+      // renato (bots: 180, -220) -> heitor / vitor / dev / qa / explore
+      ctx.strokeStyle = 'rgba(194, 65, 12, 0.7)'
+      ctx.beginPath()
+      ctx.moveTo(180 - 20, -220 - 25)
+      ctx.lineTo(180 + 20, -220 + 15)
+      ctx.stroke()
+
+      ctx.setLineDash([])
+      ctx.restore()
+
       // 2. DESENHO DAS ILHAS / PLATAFORMAS POR DEPARTAMENTO
       DEPARTAMENTOS_CONFIG.forEach((dept) => {
         const ags = agentesPorSquad.get(dept.id) ?? []
-        const metric = metricasSquad.get(dept.id) ?? { m1: 'sem dado', m2: 'sem dado', doing: 0 }
+        const metric = metricasSquad.get(dept.id) ?? { m1: 'sem dado', m2: 'sem dado', doing: 0, next: 0, done: 0, aguardando_d2: false }
 
         ctx.save()
         ctx.translate(dept.gx, dept.gy)
@@ -692,14 +735,18 @@ export function PixelOffice({
         ctx.fillText(metric.m2, cardX + 70, cardY + 36)
 
         // Rodapé Card: FAZENDO / PRÓXIMA / CONCLUÍDA
-        ctx.fillStyle = '#f8fafc'
+        ctx.fillStyle = metric.aguardando_d2 ? '#fff7ed' : '#f8fafc'
         ctx.fillRect(cardX, cardY + 46, 140, 18)
-        ctx.strokeStyle = '#e2e8f0'
+        ctx.strokeStyle = metric.aguardando_d2 ? '#fdba74' : '#e2e8f0'
         ctx.strokeRect(cardX, cardY + 46, 140, 18)
 
+        const txtRodape = metric.aguardando_d2
+          ? 'aguardando o dono (D2)'
+          : `FAZENDO ${metric.doing} · PRÓXIMA ${metric.next} · FEITAS ${metric.done}`
+
         ctx.font = 'bold 8px sans-serif'
-        ctx.fillStyle = '#1e293b'
-        ctx.fillText(`FAZENDO ${metric.doing} · PRÓXIMA 0 · FEITAS 0`, cardX + 8, cardY + 58)
+        ctx.fillStyle = metric.aguardando_d2 ? '#c2410c' : '#1e293b'
+        ctx.fillText(txtRodape, cardX + (metric.aguardando_d2 ? 14 : 8), cardY + 58)
 
         ctx.restore()
       })

@@ -415,6 +415,29 @@ export type Estado = {
 
   comercial?: DadosFiscalComercial
 
+  squad_trafego?: {
+    status: string
+    atualizado_em?: string | null
+    pipeline?: boolean | null
+    ativacoes?: boolean | null
+    total_execucoes?: number | null
+    fazendo?: number | null
+    proxima?: number | null
+    done?: number | null
+    aguardando_dono_d2?: boolean
+  }
+
+  squad_bots?: {
+    status: string
+    atualizado_em?: string | null
+    pipeline?: boolean | null
+    trocas?: boolean | null
+    total_execucoes?: number | null
+    fazendo?: number | null
+    proxima?: number | null
+    done?: number | null
+  }
+
   aprovacoes?: {
     erro?: string
     itens: { id: string; estado: string; tipo: string; origem: string; criado_em: string; titulo?: string }[]

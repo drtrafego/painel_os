@@ -168,10 +168,12 @@ SQUADS = {
     "trafego": {
         "nome": "Squad de tráfego",
         "descricao": "Tráfego pago dos clientes da Bia: diagnóstico, campanha pausada, fiscal e ligar só com o dono.",
+        "regente": "tereza",
     },
     "bots": {
         "nome": "Squad de bots",
         "descricao": "Conserto e evolução dos bots do Renato: cópia, revisão, troca atômica e conversa real.",
+        "regente": "heitor",
     },
 }
 
@@ -190,7 +192,12 @@ MAPA_PASTA_SQUAD = {
     "squad-comercial": "comercial",
     "comercial": "comercial",
     "trafego-squad": "trafego",
+    "squad-trafego": "trafego",
+    "trafego": "trafego",
+    "tráfego": "trafego",
     "bots-squad": "bots",
+    "squad-bots": "bots",
+    "bots": "bots",
 }
 
 
@@ -2827,6 +2834,141 @@ def ler_redes_organicas(buscar=None, caminho_cache=CACHE_REDES):
         return {**vazio, "status": "indeterminado", "erro": type(e).__name__}
 
 
+TEREZA_RAIZ = Path(os.environ.get("TEREZA_DIR", RAIZ / "tereza"))
+HEITOR_RAIZ = Path(os.environ.get("HEITOR_DIR", RAIZ / "heitor"))
+
+
+def ler_squad_trafego(raiz: Path = None) -> dict:
+    """Lê o estado operacional do Squad de Tráfego da casa da Tereza."""
+    base = raiz or TEREZA_RAIZ
+    if not base.exists() or not base.is_dir():
+        return {
+            "status": "sem_dado",
+            "atualizado_em": None,
+            "pipeline": None,
+            "ativacoes": None,
+            "pendencias_d2": None,
+            "execucoes": [],
+            "total_execucoes": None,
+            "fazendo": None,
+            "proxima": None,
+            "done": None,
+            "aguardando_dono_d2": False,
+        }
+
+    fazendo = 0
+    proxima = 0
+    done = 0
+    execucoes = []
+
+    exec_dir = base / "execucoes"
+    if exec_dir.exists() and exec_dir.is_dir():
+        for item in exec_dir.iterdir():
+            if item.is_dir():
+                estado_file = item / "ESTADO.json"
+                if estado_file.is_file():
+                    try:
+                        d = json.loads(estado_file.read_text(encoding="utf-8"))
+                        st = str(d.get("status", "")).lower()
+                        if st in ("executando", "fazendo", "trabalhando", "em_andamento"):
+                            fazendo += 1
+                        elif st in ("aguardando", "fila", "proxima", "pendente"):
+                            proxima += 1
+                        elif st in ("concluido", "concluído", "feito", "sucesso", "done"):
+                            done += 1
+                        execucoes.append(d)
+                    except Exception:
+                        pass
+
+    aguardando_d2 = False
+    aprov_file = base / "aprovacoes.json"
+    if not aprov_file.is_file():
+        aprov_file = APROVACOES_JSON
+    if aprov_file.is_file():
+        try:
+            ap_data = json.loads(aprov_file.read_text(encoding="utf-8"))
+            lista = ap_data if isinstance(ap_data, list) else ap_data.get("pendencias", [])
+            for item in lista:
+                if isinstance(item, dict):
+                    gate = str(item.get("gate", "")).upper()
+                    nivel = str(item.get("nivel", "")).upper()
+                    tipo = str(item.get("tipo", "")).lower()
+                    status = str(item.get("status", "aguardando")).lower()
+                    if (gate == "D2" or nivel == "D2" or "d2" in tipo) and status == "aguardando":
+                        aguardando_d2 = True
+                        break
+        except Exception:
+            pass
+
+    mtime = datetime.fromtimestamp(base.stat().st_mtime, tz=timezone.utc).isoformat()
+    return {
+        "status": "pronto",
+        "atualizado_em": mtime,
+        "pipeline": (base / "logs" / "pipeline.jsonl").is_file(),
+        "ativacoes": (base / "logs" / "ativacoes.jsonl").is_file(),
+        "total_execucoes": len(execucoes),
+        "execucoes": execucoes,
+        "fazendo": fazendo,
+        "proxima": proxima,
+        "done": done,
+        "aguardando_dono_d2": aguardando_d2,
+    }
+
+
+def ler_squad_bots(raiz: Path = None) -> dict:
+    """Lê o estado operacional do Squad de Bots da casa do Heitor."""
+    base = raiz or HEITOR_RAIZ
+    if not base.exists() or not base.is_dir():
+        return {
+            "status": "sem_dado",
+            "atualizado_em": None,
+            "pipeline": None,
+            "trocas": None,
+            "execucoes": [],
+            "total_execucoes": None,
+            "fazendo": None,
+            "proxima": None,
+            "done": None,
+        }
+
+    fazendo = 0
+    proxima = 0
+    done = 0
+    execucoes = []
+
+    exec_dir = base / "execucoes"
+    if exec_dir.exists() and exec_dir.is_dir():
+        for item in exec_dir.iterdir():
+            if item.is_dir():
+                estado_file = item / "ESTADO.json"
+                if estado_file.is_file():
+                    try:
+                        d = json.loads(estado_file.read_text(encoding="utf-8"))
+                        st = str(d.get("status", "")).lower()
+                        if st in ("executando", "fazendo", "trabalhando", "em_andamento"):
+                            fazendo += 1
+                        elif st in ("aguardando", "fila", "proxima", "pendente"):
+                            proxima += 1
+                        elif st in ("concluido", "concluído", "feito", "sucesso", "done"):
+                            done += 1
+                        execucoes.append(d)
+                    except Exception:
+                        pass
+
+    mtime = datetime.fromtimestamp(base.stat().st_mtime, tz=timezone.utc).isoformat()
+    return {
+        "status": "pronto",
+        "atualizado_em": mtime,
+        "pipeline": (base / "logs" / "pipeline.jsonl").is_file(),
+        "trocas": (base / "logs" / "trocas.jsonl").is_file(),
+        "total_execucoes": len(execucoes),
+        "execucoes": execucoes,
+        "fazendo": fazendo,
+        "proxima": proxima,
+        "done": done,
+    }
+
+
 def ler_cobrancas(buscar=None):
     """Lê o relatório canônico e descarta PII antes de montar o estado."""
     fonte = "API financeira /reports/overdue, somente leitura"
@@ -5022,6 +5164,113 @@ def salvar_mapa_setor_comercial() -> None:
             pass
 
 
+def gerar_workflow_setor_trafego() -> dict:
+    """Gera o workflow horizontal Archify v2 para o Setor de Tráfego (Tereza/Bia)."""
+    return {
+        "schema_version": 2,
+        "diagram_type": "workflow",
+        "meta": {
+            "title": "Setor de tráfego: gestão de mídia e campanhas",
+            "animation": "trace",
+            "quality_profile": "showcase",
+            "views": [
+                {
+                    "id": "pipeline-completo",
+                    "label": "Pipeline completo",
+                    "focus": ["bia", "tereza", "jade", "gestor", "analista", "iris"],
+                    "note": "Fluxo de regência, otimização e veiculação de tráfego pago.",
+                }
+            ],
+            "output": "web/public/mapas/setor-trafego.html",
+        },
+        "lanes": [{"id": "trafego", "label": "Squad de tráfego"}],
+        "phases": [
+            {"id": "diretoria", "label": "Diretoria", "fromCol": 0, "toCol": 0, "variant": "emphasis"},
+            {"id": "regencia", "label": "Regência e fiscalização", "fromCol": 1, "toCol": 2, "variant": "security"},
+            {"id": "operacao", "label": "Operação e análise", "fromCol": 3, "toCol": 5},
+        ],
+        "mainPath": ["bia", "tereza", "jade", "gestor", "analista", "iris"],
+        "semanticChecks": {
+            "allowedRoots": ["bia", "luana"],
+            "allowedTerminals": ["iris", "analista"],
+            "requiredEdges": [
+                {"from": "bia", "to": "tereza"},
+                {"from": "luana", "to": "tereza"},
+                {"from": "tereza", "to": "jade"},
+                {"from": "tereza", "to": "gestor"},
+                {"from": "tereza", "to": "analista"},
+                {"from": "tereza", "to": "iris"},
+            ],
+        },
+    }
+
+
+def salvar_mapa_setor_trafego() -> None:
+    wf = gerar_workflow_setor_trafego()
+    wf_json = json.dumps(wf, ensure_ascii=False, indent=2)
+    html_conteudo = renderizar_html_workflow_setor_comercial(wf)
+    for pasta in (DATA_MAPAS, DIST_MAPAS, PUBLIC_MAPAS):
+        try:
+            pasta.mkdir(parents=True, exist_ok=True)
+            (pasta / "setor-trafego.html").write_text(html_conteudo, encoding="utf-8")
+            (pasta / "setor-trafego.workflow.json").write_text(wf_json, encoding="utf-8")
+        except OSError:
+            pass
+
+
+def gerar_workflow_setor_bots() -> dict:
+    """Gera o workflow horizontal Archify v2 para o Setor de Bots (Heitor/Renato)."""
+    return {
+        "schema_version": 2,
+        "diagram_type": "workflow",
+        "meta": {
+            "title": "Setor de bots: desenvolvimento e fiscalização de agentes",
+            "animation": "trace",
+            "quality_profile": "showcase",
+            "views": [
+                {
+                    "id": "pipeline-completo",
+                    "label": "Pipeline completo",
+                    "focus": ["renato", "heitor", "vitor", "dev", "qa", "explore"],
+                    "note": "Fluxo de desenvolvimento, regência e testes automatizados de bots.",
+                }
+            ],
+            "output": "web/public/mapas/setor-bots.html",
+        },
+        "lanes": [{"id": "bots", "label": "Squad de bots"}],
+        "phases": [
+            {"id": "diretoria", "label": "Diretoria", "fromCol": 0, "toCol": 0, "variant": "emphasis"},
+            {"id": "regencia", "label": "Regência e fiscalização", "fromCol": 1, "toCol": 2, "variant": "security"},
+            {"id": "engenharia", "label": "Engenharia e testes", "fromCol": 3, "toCol": 5},
+        ],
+        "mainPath": ["renato", "heitor", "vitor", "dev", "qa", "explore"],
+        "semanticChecks": {
+            "allowedRoots": ["renato"],
+            "allowedTerminals": ["explore"],
+            "requiredEdges": [
+                {"from": "renato", "to": "heitor"},
+                {"from": "heitor", "to": "vitor"},
+                {"from": "heitor", "to": "dev"},
+                {"from": "heitor", "to": "qa"},
+                {"from": "heitor", "to": "explore"},
+            ],
+        },
+    }
+
+
+def salvar_mapa_setor_bots() -> None:
+    wf = gerar_workflow_setor_bots()
+    wf_json = json.dumps(wf, ensure_ascii=False, indent=2)
+    html_conteudo = renderizar_html_workflow_setor_comercial(wf)
+    for pasta in (DATA_MAPAS, DIST_MAPAS, PUBLIC_MAPAS):
+        try:
+            pasta.mkdir(parents=True, exist_ok=True)
+            (pasta / "setor-bots.html").write_text(html_conteudo, encoding="utf-8")
+            (pasta / "setor-bots.workflow.json").write_text(wf_json, encoding="utf-8")
+        except OSError:
+            pass
+
+
 
 FUSOS = {"utc": 0, "gmt": 0, "z": 0, "brt": -3, "-03": -3, "-0300": -3, "art": -3}
 
@@ -6308,11 +6557,13 @@ def main():
     ids_casa = {a["id"] for a in agentes} | {s["id"] for s in sessao}
     de_fora = {k: v for k, v in convocacoes.items() if k not in ids_casa}
 
-    todas_chamadas = conv.get("todas_chamadas", [])
-    janelas = agregar_janelas_convocacoes(todas_chamadas, ids_casa)
-    squads = squads_com_agentes(agentes)
+    squad_trafego = ler_squad_trafego()
+    squad_bots = ler_squad_bots()
+
     salvar_mapas_quem_convoca_quem(janelas, agentes, squads)
     salvar_mapa_setor_comercial()
+    salvar_mapa_setor_trafego()
+    salvar_mapa_setor_bots()
 
     estado = {
         "gerado_em": agora_utc().isoformat(),
@@ -6394,6 +6645,8 @@ def main():
         "financeiro": financeiro,
         "redes": redes,
         "analytics": analytics,
+        "squad_trafego": squad_trafego,
+        "squad_bots": squad_bots,
         "squads": SQUADS,
         "sessao": sessao,
         "agentes": agentes,
