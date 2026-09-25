@@ -2128,7 +2128,7 @@ def ler_redes_organicas(buscar=None, caminho_cache=CACHE_REDES):
         "instagram": None,
         "linkedin": {
             "status": "sem_permissao",
-            "motivo": "escopo r_organization_social_feed não autorizado na chave Composio atual",
+            "motivo": "leitura de posts pessoais exige escopo r_member_social / Community Management API, não concedido nesta conexão",
             "metricas": None,
         },
     }
@@ -2169,17 +2169,19 @@ def ler_redes_organicas(buscar=None, caminho_cache=CACHE_REDES):
 
     try:
         headers = {"x-api-key": comp_key, "Content-Type": "application/json"}
+        seguidores = None
+        alcance = None
+        metricas_obtidas = []
+
         req_account = urllib.request.Request(
-            "https://backend.composio.dev/api/v1/actions/execute",
+            "https://backend.composio.dev/api/v3.1/tools/execute/proxy",
             headers=headers,
             data=json.dumps({
-                "connection_id": conn_id,
-                "endpoint": f"/{ig_user_id}",
-                "method": "GET",
-                "params": {"fields": "followers_count,media_count,name,username"}
+                "connected_account_id": conn_id,
+                "endpoint": f"/{ig_user_id}?fields=followers_count,media_count,name,username",
+                "method": "GET"
             }).encode("utf-8")
         )
-        seguidores = None
         with urllib.request.urlopen(req_account, timeout=8) as resp:
             res_json = json.loads(resp.read().decode("utf-8"))
             data = res_json.get("data") if isinstance(res_json, dict) else {}
@@ -2187,6 +2189,42 @@ def ler_redes_organicas(buscar=None, caminho_cache=CACHE_REDES):
                 resp_body = data.get("response_data") if isinstance(data.get("response_data"), dict) else data
                 if isinstance(resp_body, dict):
                     seguidores = resp_body.get("followers_count")
+                    if seguidores is not None:
+                        metricas_obtidas.append("followers_count")
+
+        try:
+            req_insights = urllib.request.Request(
+                "https://backend.composio.dev/api/v3.1/tools/execute/proxy",
+                headers=headers,
+                data=json.dumps({
+                    "connected_account_id": conn_id,
+                    "endpoint": f"/{ig_user_id}/insights?metric=reach,profile_views&period=day",
+                    "method": "GET"
+                }).encode("utf-8")
+            )
+            with urllib.request.urlopen(req_insights, timeout=8) as resp_in:
+                res_in_json = json.loads(resp_in.read().decode("utf-8"))
+                data_in = res_in_json.get("data") if isinstance(res_in_json, dict) else {}
+                if isinstance(data_in, dict):
+                    resp_in_body = data_in.get("response_data") if isinstance(data_in.get("response_data"), dict) else data_in
+                    raw_items = []
+                    if isinstance(resp_in_body, dict):
+                        raw_items = resp_in_body.get("data", [])
+                    elif isinstance(resp_in_body, list):
+                        raw_items = resp_in_body
+
+                    for item in raw_items:
+                        if isinstance(item, dict):
+                            m_name = item.get("name")
+                            values = item.get("values", [])
+                            val = values[0].get("value") if values and isinstance(values[0], dict) else None
+                            if m_name == "reach" and val is not None:
+                                alcance = val
+                                metricas_obtidas.append("reach")
+                            elif m_name == "profile_views" and val is not None:
+                                metricas_obtidas.append("profile_views")
+        except Exception:
+            pass
 
         resultado = {
             "status": "pronto",
@@ -2194,14 +2232,14 @@ def ler_redes_organicas(buscar=None, caminho_cache=CACHE_REDES):
             "erro": None,
             "instagram": {
                 "seguidores": seguidores,
-                "alcance_agregado": None,
+                "alcance_agregado": alcance,
                 "salvamentos_agregado": None,
-                "metricas_obtidas": ["followers_count"] if seguidores is not None else [],
+                "metricas_obtidas": metricas_obtidas,
                 "posts": [],
             },
             "linkedin": {
                 "status": "sem_permissao",
-                "motivo": "escopo r_organization_social_feed não autorizado na chave Composio atual",
+                "motivo": "leitura de posts pessoais exige escopo r_member_social / Community Management API, não concedido nesta conexão",
                 "metricas": None,
             },
         }

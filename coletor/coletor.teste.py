@@ -1494,5 +1494,29 @@ conferir("financeiro descarta recentInvoices (PII)", "recentInvoices" in res_fin
 conferir("financeiro descarta secret_api_key", "secret_api_key" in res_fin, False)
 conferir("financeiro passa 100% na trava de privacidade public-repo", c.auditar_estado_publico({"financeiro": res_fin}), [])
 
+print("\n--- redes orgânicas: composio v3.1 e motivo linkedin (rodada 14)")
+dados_sinteticos_redes = {
+    "status": "pronto",
+    "atualizado_em": "2026-09-25T12:00:00Z",
+    "erro": None,
+    "instagram": {
+        "seguidores": 3500,
+        "alcance_agregado": 1200,
+        "salvamentos_agregado": None,
+        "metricas_obtidas": ["followers_count", "reach"],
+        "posts": [],
+    },
+    "linkedin": {
+        "status": "sem_permissao",
+        "motivo": "leitura de posts pessoais exige escopo r_member_social / Community Management API, não concedido nesta conexão",
+        "metricas": None,
+    },
+}
+res_redes = c.ler_redes_organicas(buscar=lambda: dados_sinteticos_redes)
+conferir("redes status é pronto com mock", res_redes["status"], "pronto")
+conferir("redes instagram seguidores lido", res_redes["instagram"]["seguidores"], 3500)
+conferir("redes linkedin motivo atualizado", "r_member_social" in res_redes["linkedin"]["motivo"], True)
+conferir("redes passa 100% na trava de privacidade public-repo", c.auditar_estado_publico({"redes": res_redes}), [])
+
 print("\n" + ("TODOS PASSARAM" if falhas == 0 else f"{falhas} FALHA(S)"))
 sys.exit(0 if falhas == 0 else 1)
