@@ -165,6 +165,14 @@ SQUADS = {
         "nome": "Setor comercial",
         "descricao": "Traz cliente novo pra agência vendendo o sistema pronto.",
     },
+    "trafego": {
+        "nome": "Squad de tráfego",
+        "descricao": "Tráfego pago dos clientes da Bia: diagnóstico, campanha pausada, fiscal e ligar só com o dono.",
+    },
+    "bots": {
+        "nome": "Squad de bots",
+        "descricao": "Conserto e evolução dos bots do Renato: cópia, revisão, troca atômica e conversa real.",
+    },
 }
 
 
@@ -181,6 +189,8 @@ MAPA_PASTA_SQUAD = {
     "comercial-squad": "comercial",
     "squad-comercial": "comercial",
     "comercial": "comercial",
+    "trafego-squad": "trafego",
+    "bots-squad": "bots",
 }
 
 
