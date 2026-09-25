@@ -51,12 +51,12 @@ const DEPARTAMENTOS_CONFIG: Array<{
   largura: number
   altura: number
 }> = [
-  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: -360, gy: -220, largura: 270, altura: 175 },
-  { id: 'bots', nome: 'RENATO / BOTS', cor: '#c2410c', gx: 360, gy: -220, largura: 270, altura: 175 },
-  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#8b5cf6', gx: 390, gy: 30, largura: 270, altura: 175 },
-  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#16a34a', gx: 260, gy: 270, largura: 270, altura: 175 },
-  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -260, gy: 270, largura: 270, altura: 175 },
-  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#d97706', gx: -390, gy: 30, largura: 270, altura: 175 },
+  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: 0, gy: -220, largura: 260, altura: 165 },
+  { id: 'bots', nome: 'RENATO / BOTS', cor: '#f97316', gx: 270, gy: -110, largura: 260, altura: 165 },
+  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#a855f7', gx: 270, gy: 150, largura: 260, altura: 165 },
+  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#10b981', gx: 0, gy: 250, largura: 260, altura: 165 },
+  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -270, gy: 150, largura: 260, altura: 165 },
+  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#f59e0b', gx: -270, gy: -110, largura: 260, altura: 165 },
 ]
 
 function desenharMesaEAgente(
@@ -78,101 +78,159 @@ function desenharMesaEAgente(
 
   // 0. AURA NEON NO CHÃO PARA AGENTES ATIVOS (TRABALHANDO)
   if (ehTrabalhando) {
-    const auraPulso = !reduzirMovimento ? 14 + Math.sin(tick * 0.12) * 6 : 14
+    const auraPulso = !reduzirMovimento ? 16 + Math.sin(tick * 0.12) * 6 : 16
     ctx.save()
     ctx.shadowColor = corSetor
     ctx.shadowBlur = auraPulso
     ctx.strokeStyle = corSetor
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.ellipse(0, 8, 26, 13, 0, 0, Math.PI * 2)
+    ctx.ellipse(0, 10, 28, 14, 0, 0, Math.PI * 2)
     ctx.stroke()
     ctx.restore()
   }
 
-  // 1. Sombra da mesa no piso claro
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.08)'
+  // 1. Sombra da mesa no piso dark
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
   ctx.beginPath()
-  ctx.ellipse(0, 8, 22, 10, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 10, 24, 11, 0, 0, Math.PI * 2)
   ctx.fill()
 
-  // 2. Tampo da Mesa Isométrica (Light Slate Desk)
-  ctx.fillStyle = '#f1f5f9'
-  ctx.strokeStyle = selecionado ? '#f59e0b' : '#cbd5e1'
-  ctx.lineWidth = selecionado ? 2.5 : 1
+  // 2. Tampo da Mesa Isométrica Dark Tech (Console Titânio)
+  ctx.fillStyle = '#1e293b'
+  ctx.strokeStyle = selecionado ? '#f59e0b' : ehTrabalhando ? corSetor : '#334155'
+  ctx.lineWidth = selecionado ? 2.5 : 1.2
   ctx.beginPath()
   ctx.moveTo(0, -14)
-  ctx.lineTo(17, -6)
+  ctx.lineTo(19, -6)
   ctx.lineTo(0, 2)
-  ctx.lineTo(-17, -6)
+  ctx.lineTo(-19, -6)
   ctx.closePath()
   ctx.fill()
   ctx.stroke()
 
-  // Espessura da mesa
-  ctx.fillStyle = '#e2e8f0'
+  // Borda frontal neon da mesa
+  ctx.strokeStyle = ehTrabalhando ? corSetor : 'rgba(255, 255, 255, 0.15)'
+  ctx.lineWidth = 1.5
   ctx.beginPath()
-  ctx.moveTo(-17, -6)
+  ctx.moveTo(-19, -6)
   ctx.lineTo(0, 2)
-  ctx.lineTo(0, 5)
-  ctx.lineTo(-17, -3)
+  ctx.lineTo(19, -6)
+  ctx.stroke()
+
+  // Espessura / Chassis da mesa
+  ctx.fillStyle = '#0f172a'
+  ctx.beginPath()
+  ctx.moveTo(-19, -6)
+  ctx.lineTo(0, 2)
+  ctx.lineTo(0, 6)
+  ctx.lineTo(-19, -2)
   ctx.closePath()
   ctx.fill()
 
   ctx.beginPath()
   ctx.moveTo(0, 2)
-  ctx.lineTo(17, -6)
-  ctx.lineTo(17, -3)
-  ctx.lineTo(0, 5)
+  ctx.lineTo(19, -6)
+  ctx.lineTo(19, -2)
+  ctx.lineTo(0, 6)
   ctx.closePath()
   ctx.fill()
 
-  // Pés da mesa
-  ctx.strokeStyle = '#94a3b8'
+  // Pés metálicos da mesa
+  ctx.strokeStyle = '#475569'
   ctx.lineWidth = 1.2
   ctx.beginPath()
-  ctx.moveTo(-15, -4)
-  ctx.lineTo(-15, 7)
-  ctx.moveTo(15, -4)
-  ctx.lineTo(15, 7)
+  ctx.moveTo(-16, -3)
+  ctx.lineTo(-16, 8)
+  ctx.moveTo(16, -3)
+  ctx.lineTo(16, 8)
   ctx.stroke()
 
-  // 3. Monitor no Tampo (Visto de trás)
-  ctx.fillStyle = '#475569'
-  ctx.fillRect(-3, -9, 6, 2)
-  ctx.fillRect(-1, -12, 2, 3)
+  // 3. SETUP MULTI-MONITOR (Principal + Lateral Angulado) - Estilo Opção 1
+  // Suporte do monitor central
+  ctx.fillStyle = '#334155'
+  ctx.fillRect(-3, -10, 6, 2)
+  ctx.fillRect(-1, -13, 2, 4)
 
-  // Carcaça do Monitor
-  ctx.fillStyle = '#1e293b'
-  ctx.fillRect(-10, -21, 20, 10)
+  // Carcaça dos monitores
+  ctx.fillStyle = '#0a0f1d'
+  // Monitor central
+  ctx.fillRect(-11, -23, 22, 11)
+  // Monitor lateral angulado (direita)
+  ctx.save()
+  ctx.translate(10, -21)
+  ctx.rotate(0.2)
+  ctx.fillStyle = '#0a0f1d'
+  ctx.fillRect(0, 0, 10, 10)
+  ctx.restore()
 
-  // Tela do Monitor Neon Cyberpunk
+  // Telas dos monitores
   if (ehTrabalhando) {
     const pulso = !reduzirMovimento ? Math.sin(tick * 0.15) * 0.2 : 0
     ctx.shadowColor = corSetor
-    ctx.shadowBlur = 10
-    ctx.fillStyle = corSetor
-    ctx.fillRect(-9, -20, 18, 8)
+    ctx.shadowBlur = 12
 
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.7 + pulso})`
-    ctx.fillRect(-7, -19, 14, 2.5)
+    // Tela Principal com dados brilhantes
+    ctx.fillStyle = corSetor
+    ctx.fillRect(-10, -22, 20, 9)
+
+    // Scanlines e blocos de código no monitor
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.8 + pulso})`
+    ctx.fillRect(-8, -20, 12, 1.8)
+    ctx.fillRect(-8, -17, 16, 1.5)
+    ctx.fillRect(-8, -14, 9, 1.5)
+
+    // Tela lateral com mini barras de dados
+    ctx.save()
+    ctx.translate(10, -21)
+    ctx.rotate(0.2)
+    ctx.fillStyle = corSetor
+    ctx.fillRect(1, 1, 8, 8)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
+    ctx.fillRect(2, 3, 4, 1.2)
+    ctx.fillRect(2, 5, 6, 1.2)
+    ctx.restore()
+
     ctx.shadowBlur = 0
+
+    // Feixe de luz cônica projetada pelo monitor na mesa
+    const r = parseInt(corSetor.slice(1, 3), 16) || 56
+    const g = parseInt(corSetor.slice(3, 5), 16) || 189
+    const b = parseInt(corSetor.slice(5, 7), 16) || 248
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.18)`
+    ctx.beginPath()
+    ctx.moveTo(-10, -11)
+    ctx.lineTo(10, -11)
+    ctx.lineTo(15, -1)
+    ctx.lineTo(-15, -1)
+    ctx.closePath()
+    ctx.fill()
   } else if (!ehParado) {
-    ctx.fillStyle = '#334155'
-    ctx.fillRect(-9, -20, 18, 8)
-  } else {
-    // Monitor totalmente apagado para PARADO
+    // Modo Ocioso (standby console)
     ctx.fillStyle = '#0f172a'
-    ctx.fillRect(-9, -20, 18, 8)
+    ctx.fillRect(-10, -22, 20, 9)
+    ctx.fillStyle = '#38bdf8'
+    ctx.fillRect(-8, -18, 5, 1.2)
+
+    ctx.save()
+    ctx.translate(10, -21)
+    ctx.rotate(0.2)
+    ctx.fillStyle = '#0f172a'
+    ctx.fillRect(1, 1, 8, 8)
+    ctx.restore()
+  } else {
+    // Monitor totalmente desligado para PARADO
+    ctx.fillStyle = '#050811'
+    ctx.fillRect(-10, -22, 20, 9)
   }
 
-  // Partículas de faíscas neon subindo do monitor se estiver TRABALHANDO
+  // Partículas de faíscas neon subindo se estiver TRABALHANDO
   if (ehTrabalhando && !reduzirMovimento) {
     ctx.save()
     for (let i = 0; i < 3; i++) {
       const pOffset = (tick * 1.5 + i * 18) % 25
-      const px = Math.sin(tick * 0.1 + i * 2) * 6
-      const py = -22 - pOffset
+      const px = Math.sin(tick * 0.1 + i * 2) * 7
+      const py = -24 - pOffset
       const alpha = 1 - pOffset / 25
       ctx.fillStyle = corSetor
       ctx.globalAlpha = alpha
@@ -183,97 +241,100 @@ function desenharMesaEAgente(
     ctx.restore()
   }
 
-  // Teclado Neon
-  ctx.fillStyle = ehTrabalhando ? corSetor : '#64748b'
-  ctx.fillRect(-6, -4, 12, 3)
+  // Teclado com iluminação LED
+  ctx.fillStyle = ehTrabalhando ? corSetor : '#475569'
+  ctx.fillRect(-7, -4, 14, 3)
 
-  // 4. Cadeira de Escritório
-  const chairY = 7
-  ctx.strokeStyle = '#94a3b8'
+  // 4. Cadeira Gamer / Ergonômica Sci-Fi
+  const chairY = 8
+  ctx.strokeStyle = '#334155'
   ctx.lineWidth = 1.5
   ctx.beginPath()
-  ctx.moveTo(-5, chairY + 5)
-  ctx.lineTo(5, chairY + 5)
+  ctx.moveTo(-6, chairY + 6)
+  ctx.lineTo(6, chairY + 6)
   ctx.moveTo(0, chairY + 2)
-  ctx.lineTo(0, chairY + 5)
+  ctx.lineTo(0, chairY + 6)
   ctx.stroke()
 
-  ctx.fillStyle = '#cbd5e1'
+  ctx.fillStyle = '#1e293b'
   ctx.beginPath()
-  ctx.ellipse(0, chairY + 2, 7, 3.5, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, chairY + 2, 8, 4, 0, 0, Math.PI * 2)
   ctx.fill()
 
-  // Encosto da cadeira
-  ctx.fillStyle = '#94a3b8'
+  // Encosto alto da cadeira
+  ctx.fillStyle = '#0f172a'
+  ctx.strokeStyle = '#334155'
+  ctx.lineWidth = 1
   ctx.beginPath()
-  ctx.rect(-6, chairY - 5, 12, 7)
+  ctx.rect(-6, chairY - 6, 12, 8)
   ctx.fill()
+  ctx.stroke()
 
-  // 5. Pessoa de Costas (Cadeira vazia se PARADO!)
+  // 5. Operador Seated (Cadeira vazia se PARADO!)
   if (!ehParado) {
-    const animY = ehTrabalhando && !reduzirMovimento ? Math.sin(tick * 0.25) * 0.7 : 0
+    const animY = ehTrabalhando && !reduzirMovimento ? Math.sin(tick * 0.25) * 0.8 : 0
 
-    // Camisa / Torso
+    // Torso / Traje com cor do setor
     ctx.fillStyle = corSetor
     ctx.beginPath()
-    ctx.rect(-7, chairY - 6 + animY, 14, 9)
+    ctx.rect(-7, chairY - 7 + animY, 14, 9)
     ctx.fill()
 
     // Braços no teclado
     ctx.strokeStyle = corSetor
     ctx.lineWidth = 2.5
     ctx.beginPath()
-    ctx.moveTo(-5, chairY - 2 + animY)
+    ctx.moveTo(-5, chairY - 3 + animY)
     ctx.lineTo(-4, -2)
-    ctx.moveTo(5, chairY - 2 + animY)
+    ctx.moveTo(5, chairY - 3 + animY)
     ctx.lineTo(4, -2)
     ctx.stroke()
 
     // Cabeça
     ctx.fillStyle = '#475569'
     ctx.beginPath()
-    ctx.arc(0, chairY - 10 + animY, 4.5, 0, Math.PI * 2)
+    ctx.arc(0, chairY - 11 + animY, 4.5, 0, Math.PI * 2)
     ctx.fill()
   }
 
-  // 6. Etiqueta Clean HUD com Nome do Agente
-  const tagY = -34
-  const nomeExibicao = ag.nome.slice(0, 10)
+  // 6. Etiqueta Holográfica HUD com Nome do Agente
+  const tagY = -36
+  const nomeExibicao = ag.nome.slice(0, 11)
   ctx.font = 'bold 9px sans-serif'
   const larguraTexto = ctx.measureText(nomeExibicao).width
-  const tagW = Math.max(36, larguraTexto + 10)
-  const tagH = 14
+  const tagW = Math.max(38, larguraTexto + 12)
+  const tagH = 15
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.96)'
-  ctx.strokeStyle = selecionado ? '#f59e0b' : ehTrabalhando ? corSetor : '#cbd5e1'
+  // Fundo Dark Glassmorphism com borda neon
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)'
+  ctx.strokeStyle = selecionado ? '#f59e0b' : ehTrabalhando ? corSetor : '#334155'
   ctx.lineWidth = selecionado ? 2 : 1
   ctx.fillRect(-tagW / 2, tagY, tagW, tagH)
   ctx.strokeRect(-tagW / 2, tagY, tagW, tagH)
 
-  if (ehTrabalhando) {
-    ctx.fillStyle = corSetor
-    ctx.beginPath()
-    ctx.arc(-tagW / 2 + 5, tagY + tagH / 2, 2.5, 0, Math.PI * 2)
-    ctx.fill()
-  }
+  // Indicador de status neon
+  ctx.fillStyle = ehTrabalhando ? corSetor : ehParado ? '#ef4444' : '#64748b'
+  ctx.beginPath()
+  ctx.arc(-tagW / 2 + 6, tagY + tagH / 2, 2.5, 0, Math.PI * 2)
+  ctx.fill()
 
-  ctx.fillStyle = '#0f172a'
+  ctx.fillStyle = '#f8fafc'
   ctx.textAlign = 'center'
-  ctx.fillText(nomeExibicao, ehTrabalhando ? 2 : 0, tagY + 10)
+  ctx.fillText(nomeExibicao, 3, tagY + 11)
 
   // 7. BADGE FLUTUANTE ⚡ ATIVO PARA AGENTES TRABALHANDO
   if (ehTrabalhando) {
-    const badgeY = tagY - 13
+    const badgeY = tagY - 14
     const badgePulso = !reduzirMovimento ? Math.sin(tick * 0.2) * 1.5 : 0
     ctx.save()
     ctx.shadowColor = '#eab308'
-    ctx.shadowBlur = 6
+    ctx.shadowBlur = 8
     ctx.fillStyle = '#eab308'
-    ctx.fillRect(-22, badgeY + badgePulso, 44, 11)
+    ctx.fillRect(-22, badgeY + badgePulso, 44, 12)
     ctx.fillStyle = '#0f172a'
     ctx.font = 'extrabold 8px sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText('⚡ ATIVO', 0, badgeY + badgePulso + 8.5)
+    ctx.fillText('⚡ ATIVO', 0, badgeY + badgePulso + 9)
     ctx.restore()
   }
 
@@ -290,7 +351,12 @@ export function PixelOffice({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const [zoom, setZoom] = useState(1.05)
+  const [zoom, setZoom] = useState(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      return 0.72
+    }
+    return 1.0
+  })
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [arrastando, setArrastando] = useState(false)
   const [pontoArrasto, setPontoArrasto] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
@@ -654,12 +720,37 @@ export function PixelOffice({
       ctx.imageSmoothingEnabled = true
       ctx.clearRect(0, 0, larguraCss, alturaCss)
 
-      // 1. FUNDO WARM OFF-WHITE DE REFERÊNCIA (#f5f2e9)
-      ctx.fillStyle = '#f5f2e9'
+      // 1. FUNDO DARK SCI-FI CYBERPUNK (OPÇÃO 1)
+      const bgGrad = ctx.createRadialGradient(
+        larguraCss / 2,
+        alturaCss / 2,
+        60,
+        larguraCss / 2,
+        alturaCss / 2,
+        Math.max(larguraCss, alturaCss) * 0.95
+      )
+      bgGrad.addColorStop(0, '#0a1024')
+      bgGrad.addColorStop(1, '#050711')
+      ctx.fillStyle = bgGrad
       ctx.fillRect(0, 0, larguraCss, alturaCss)
 
-      // Grid Isométrico sutil
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)'
+      // Estrelas e partículas cósmicas cintilantes
+      ctx.save()
+      for (let i = 0; i < 55; i++) {
+        const sx = (i * 157.3 + tick * 0.03) % larguraCss
+        const sy = (i * 281.7) % alturaCss
+        const size = i % 4 === 0 ? 1.8 : 1
+        const alpha = 0.2 + Math.sin(tick * 0.04 + i) * 0.25
+        ctx.fillStyle = i % 3 === 0 ? '#38bdf8' : '#ffffff'
+        ctx.globalAlpha = Math.max(0.05, alpha)
+        ctx.beginPath()
+        ctx.arc(sx, sy, size, 0, Math.PI * 2)
+        ctx.fill()
+      }
+      ctx.restore()
+
+      // Grid Isométrico Cyberpunk sutil em Cyan
+      ctx.strokeStyle = 'rgba(6, 182, 212, 0.06)'
       ctx.lineWidth = 1
       const step = 45
       for (let x = -larguraCss; x < larguraCss * 2; x += step) {
@@ -678,79 +769,160 @@ export function PixelOffice({
       ctx.translate(larguraCss / 2 + pan.x, alturaCss / 2 + pan.y)
       ctx.scale(zoom, zoom)
 
-      // 2. HUB CENTRAL ("O CÉREBRO" NEON CORE)
+      // 2. CONDUTOS MULTI-VIAS DE ENERGIA & DADOS (OPÇÃO 1)
       const hubX = 0
       const hubY = 0
       const nosCount = estado?.cofre?.nos?.length
       const textoHubNotas = nosCount != null ? `${nosCount} NOTAS` : 'sem dado'
 
-      // Cabos Neon ligando o Hub às Ilhas
-      ctx.lineWidth = 2
-      DEPARTAMENTOS_CONFIG.forEach((dept) => {
-        ctx.shadowColor = dept.cor
-        ctx.shadowBlur = 6
-        ctx.strokeStyle = dept.cor
-        ctx.setLineDash([4, 4])
-        ctx.beginPath()
-        ctx.moveTo(hubX, hubY)
-        ctx.lineTo(dept.gx, dept.gy)
-        ctx.stroke()
-      })
-      ctx.setLineDash([])
-      ctx.shadowBlur = 0
+      DEPARTAMENTOS_CONFIG.forEach((dept, deptIdx) => {
+        // Três cabos paralelos curvados por squad
+        const offsets = [-4, 0, 4]
+        offsets.forEach((offset, idx) => {
+          ctx.save()
+          ctx.strokeStyle = dept.cor
+          ctx.lineWidth = idx === 1 ? 2 : 1
+          ctx.shadowColor = dept.cor
+          ctx.shadowBlur = 6
+          ctx.beginPath()
+          ctx.moveTo(hubX + offset, hubY)
+          ctx.bezierCurveTo(
+            hubX + (dept.gx - hubX) * 0.35 + offset * 2,
+            hubY + (dept.gy - hubY) * 0.1,
+            hubX + (dept.gx - hubX) * 0.65,
+            dept.gy - offset * 2,
+            dept.gx,
+            dept.gy
+          )
+          ctx.stroke()
+          ctx.restore()
+        })
 
-      // Core do Hub Central (Cubo/Elipse 3D Light Neon)
+        // Pulso de energia viajando no conduto central (animação viva)
+        if (!reduzirMovimento) {
+          const t = (tick * 0.012 + deptIdx * 0.18) % 1
+          const p0 = { x: hubX, y: hubY }
+          const p1 = { x: hubX + (dept.gx - hubX) * 0.35, y: hubY + (dept.gy - hubY) * 0.1 }
+          const p2 = { x: hubX + (dept.gx - hubX) * 0.65, y: dept.gy }
+          const p3 = { x: dept.gx, y: dept.gy }
+
+          const px =
+            Math.pow(1 - t, 3) * p0.x +
+            3 * Math.pow(1 - t, 2) * t * p1.x +
+            3 * (1 - t) * Math.pow(t, 2) * p2.x +
+            Math.pow(t, 3) * p3.x
+          const py =
+            Math.pow(1 - t, 3) * p0.y +
+            3 * Math.pow(1 - t, 2) * t * p1.y +
+            3 * (1 - t) * Math.pow(t, 2) * p2.y +
+            Math.pow(t, 3) * p3.y
+
+          ctx.save()
+          ctx.shadowColor = dept.cor
+          ctx.shadowBlur = 10
+          ctx.fillStyle = '#ffffff'
+          ctx.beginPath()
+          ctx.arc(px, py, 2.5, 0, Math.PI * 2)
+          ctx.fill()
+          ctx.restore()
+        }
+      })
+
+      // 3. HUB CENTRAL: CUBO HOLOGRÁFICO 3D ("O CÉREBRO" - OPÇÃO 1)
       ctx.save()
       ctx.translate(hubX, hubY)
-      const pulsoCore = !reduzirMovimento ? 8 + Math.sin(tick * 0.1) * 4 : 8
 
-      ctx.shadowColor = '#0284c7'
-      ctx.shadowBlur = pulsoCore
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-      ctx.strokeStyle = '#0284c7'
-      ctx.lineWidth = 2.5
+      // Pedestal Hexagonal Dark com iluminação neon cyan
+      ctx.fillStyle = '#080d1a'
+      ctx.strokeStyle = '#06b6d4'
+      ctx.lineWidth = 2
+      ctx.shadowColor = '#06b6d4'
+      ctx.shadowBlur = 14
       ctx.beginPath()
-      ctx.ellipse(0, 0, 85, 32, 0, 0, Math.PI * 2)
+      ctx.ellipse(0, 8, 48, 22, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.shadowBlur = 0
+
+      // Coluna / Feixe de luz holográfica vertical ascendente
+      const beamGrad = ctx.createLinearGradient(0, 8, 0, -55)
+      beamGrad.addColorStop(0, 'rgba(6, 182, 212, 0.4)')
+      beamGrad.addColorStop(1, 'rgba(6, 182, 212, 0)')
+      ctx.fillStyle = beamGrad
+      ctx.beginPath()
+      ctx.moveTo(-32, 8)
+      ctx.lineTo(32, 8)
+      ctx.lineTo(24, -55)
+      ctx.lineTo(-24, -55)
+      ctx.closePath()
+      ctx.fill()
+
+      // CUBO HOLOGRÁFICO 3D ISOMÉTRICO (Cérebro Central)
+      const cubeSize = 22
+      const pulsoCubo = !reduzirMovimento ? Math.sin(tick * 0.08) * 3 : 0
+      const cy = -26 + pulsoCubo
+
+      // Face Superior do Cubo (Losango)
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.35)'
+      ctx.strokeStyle = '#38bdf8'
+      ctx.lineWidth = 1.8
+      ctx.shadowColor = '#00f5ff'
+      ctx.shadowBlur = 12
+      ctx.beginPath()
+      ctx.moveTo(0, cy - cubeSize)
+      ctx.lineTo(cubeSize * 1.1, cy - cubeSize * 0.5)
+      ctx.lineTo(0, cy)
+      ctx.lineTo(-cubeSize * 1.1, cy - cubeSize * 0.5)
+      ctx.closePath()
       ctx.fill()
       ctx.stroke()
 
+      // Face Esquerda do Cubo
+      ctx.fillStyle = 'rgba(2, 132, 199, 0.4)'
+      ctx.strokeStyle = '#0284c7'
+      ctx.beginPath()
+      ctx.moveTo(-cubeSize * 1.1, cy - cubeSize * 0.5)
+      ctx.lineTo(0, cy)
+      ctx.lineTo(0, cy + cubeSize)
+      ctx.lineTo(-cubeSize * 1.1, cy + cubeSize * 0.5)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+
+      // Face Direita do Cubo
+      ctx.fillStyle = 'rgba(14, 165, 233, 0.3)'
+      ctx.strokeStyle = '#38bdf8'
+      ctx.beginPath()
+      ctx.moveTo(0, cy)
+      ctx.lineTo(cubeSize * 1.1, cy - cubeSize * 0.5)
+      ctx.lineTo(cubeSize * 1.1, cy + cubeSize * 0.5)
+      ctx.lineTo(0, cy + cubeSize)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+
+      // Núcleo brilhante no interior do cubo
+      ctx.fillStyle = '#ffffff'
+      ctx.shadowColor = '#00f5ff'
+      ctx.shadowBlur = 16
+      ctx.beginPath()
+      ctx.arc(0, cy, 4, 0, Math.PI * 2)
+      ctx.fill()
       ctx.shadowBlur = 0
-      ctx.font = 'bold 12px sans-serif'
-      ctx.fillStyle = '#0369a1'
+
+      // Etiqueta Holográfica "O CÉREBRO"
+      ctx.font = 'bold 11px sans-serif'
+      ctx.fillStyle = '#38bdf8'
       ctx.textAlign = 'center'
-      ctx.fillText(`● O CÉREBRO  ${textoHubNotas}`, 0, -3)
+      ctx.fillText(`● O CÉREBRO  ${textoHubNotas}`, 0, cy - cubeSize - 8)
 
-      ctx.font = 'bold 9px sans-serif'
-      ctx.fillStyle = '#475569'
-      ctx.fillText('BASE DE CONHECIMENTO', 0, 11)
+      ctx.font = 'bold 8.5px sans-serif'
+      ctx.fillStyle = '#94a3b8'
+      ctx.fillText('BASE DE CONHECIMENTO', 0, cy - cubeSize + 4)
 
       ctx.restore()
 
-      // Setas/Raios de fluxo entre diretores e regentes
-      ctx.save()
-      ctx.lineWidth = 1.5
-      ctx.setLineDash([3, 3])
-
-      ctx.shadowColor = '#8b5cf6'
-      ctx.shadowBlur = 6
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)'
-      ctx.beginPath()
-      ctx.moveTo(-360 + 50, -220 + 30)
-      ctx.lineTo(390 - 50, 30 - 20)
-      ctx.stroke()
-
-      ctx.shadowColor = '#c2410c'
-      ctx.strokeStyle = 'rgba(194, 65, 12, 0.7)'
-      ctx.beginPath()
-      ctx.moveTo(360 - 20, -220 - 25)
-      ctx.lineTo(360 + 20, -220 + 15)
-      ctx.stroke()
-
-      ctx.setLineDash([])
-      ctx.shadowBlur = 0
-      ctx.restore()
-
-      // 3. DESENHO DAS PLATAFORMAS E AGENTES POR DEPARTAMENTO
+      // 4. DESENHO DAS PLATAFORMAS 3D FLUTUANTES (ISLANDS - OPÇÃO 1)
       DEPARTAMENTOS_CONFIG.forEach((dept) => {
         const ags = agentesPorSquad.get(dept.id) ?? []
         const metric = metricasSquad.get(dept.id) ?? { m1: 'sem dado', m2: 'sem dado', doing: 0, next: 0, done: 0, aguardando_d2: false }
@@ -758,31 +930,49 @@ export function PixelOffice({
         ctx.save()
         ctx.translate(dept.gx, dept.gy)
 
-        // Sombra da Plataforma Hexagonal
         const pw = dept.largura / 2
         const ph = dept.altura / 2
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)'
+        // A. Brilho Neon Inferior no Vazio (Levitation Underglow)
+        ctx.save()
+        ctx.shadowColor = dept.cor
+        ctx.shadowBlur = 24
+        ctx.fillStyle = dept.cor
+        ctx.globalAlpha = 0.22
         ctx.beginPath()
-        ctx.ellipse(0, 25, pw * 1.05, ph * 1.05, 0, 0, Math.PI * 2)
+        ctx.ellipse(0, 32, pw * 0.95, ph * 0.95, 0, 0, Math.PI * 2)
         ctx.fill()
+        ctx.restore()
 
-        // Paredes laterais da plataforma
-        ctx.fillStyle = '#e2e8f0'
+        // B. Extrusão 3D Inferior da Plataforma (Chassis Metálico / Rocha Espacial)
+        const altura3D = 22
+        // Face lateral esquerda
+        ctx.fillStyle = '#080d19'
         ctx.beginPath()
         ctx.moveTo(-pw, 0)
         ctx.lineTo(0, ph)
-        ctx.lineTo(pw, 0)
-        ctx.lineTo(pw, 16)
-        ctx.lineTo(0, ph + 16)
-        ctx.lineTo(-pw, 16)
+        ctx.lineTo(0, ph + altura3D)
+        ctx.lineTo(-pw, altura3D)
         ctx.closePath()
         ctx.fill()
-        ctx.strokeStyle = '#cbd5e1'
+        ctx.strokeStyle = '#1e293b'
+        ctx.lineWidth = 1
         ctx.stroke()
 
-        // Piso Superior Isométrico White (#ffffff)
-        ctx.fillStyle = '#ffffff'
+        // Face lateral direita
+        ctx.fillStyle = '#0f172a'
+        ctx.beginPath()
+        ctx.moveTo(0, ph)
+        ctx.lineTo(pw, 0)
+        ctx.lineTo(pw, altura3D)
+        ctx.lineTo(0, ph + altura3D)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = '#1e293b'
+        ctx.stroke()
+
+        // C. Tampo Superior Isométrico (Titanium Dark Slab)
+        ctx.fillStyle = '#0f172a'
         ctx.beginPath()
         ctx.moveTo(0, -ph)
         ctx.lineTo(pw, 0)
@@ -791,31 +981,32 @@ export function PixelOffice({
         ctx.closePath()
         ctx.fill()
 
-        // Borda Neon Hexagonal da Plataforma
+        // D. Borda Neon Vibrante da Plataforma (Opção 1)
+        ctx.save()
         ctx.shadowColor = dept.cor
-        ctx.shadowBlur = 8
+        ctx.shadowBlur = 12
         ctx.strokeStyle = dept.cor
         ctx.lineWidth = 2.5
         ctx.stroke()
-        ctx.shadowBlur = 0
+        ctx.restore()
 
-        // Grid interno da plataforma
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)'
+        // E. Painéis de circuito internos da plataforma
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'
         ctx.lineWidth = 1
-        for (let i = -pw + 25; i < pw; i += 32) {
+        for (let i = -pw + 30; i < pw; i += 34) {
           ctx.beginPath()
           ctx.moveTo(i, -ph / 2)
-          ctx.lineTo(i + 20, ph / 2)
+          ctx.lineTo(i + 22, ph / 2)
           ctx.stroke()
         }
 
-        // DESENHO DOS AGENTES NAS MESAS
+        // F. Desenho dos Agentes nas Mesas
         const maxDisplay = Math.min(ags.length, 6)
         ags.slice(0, maxDisplay).forEach((ag, idx) => {
           const col = idx % 3
           const row = Math.floor(idx / 3)
           const ax = -pw + 42 + col * 65
-          const ay = -ph + 42 + row * 52
+          const ay = -ph + 40 + row * 52
 
           const selecionado = foco === ag.id
 
@@ -829,62 +1020,80 @@ export function PixelOffice({
           desenharMesaEAgente(ctx, ax, ay, ag, estadoAgente, selecionado, tick, reduzirMovimento)
         })
 
-        // CARTÃO FLUTUANTE GLASSMORPHISM CLEAN DO DEPARTAMENTO
-        const cardX = -pw - 10
+        // G. CARTÃO FLUTUANTE HUD GLASSMORPHISM (OPÇÃO 1)
+        const cardX = -pw - 6
         const cardY = -ph - 74
-        const cardW = 165
-        const cardH = 66
+        const cardW = 168
+        const cardH = 68
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.06)'
-        ctx.fillRect(cardX + 3, cardY + 3, cardW, cardH)
+        // Sombra do cartão
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+        ctx.fillRect(cardX + 4, cardY + 4, cardW, cardH)
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.96)'
+        // Fundo Dark Glassmorphism
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.90)'
         ctx.fillRect(cardX, cardY, cardW, cardH)
 
+        // Borda neon do cartão com glow
+        ctx.save()
+        ctx.shadowColor = dept.cor
+        ctx.shadowBlur = 6
         ctx.strokeStyle = dept.cor
         ctx.lineWidth = 1.5
         ctx.strokeRect(cardX, cardY, cardW, cardH)
+        ctx.restore()
 
-        // Top Header: Neon Dot + Nome + Contagem Ativos
+        // Header: Dot Neon + Squad Name + Active Pill (Estilo Opção 1: "22 Active | Lime")
+        const executandoCount = ags.filter((a) => ativos.has(a.id)).length
+
         ctx.fillStyle = dept.cor
         ctx.beginPath()
-        ctx.arc(cardX + 10, cardY + 12, 3.5, 0, Math.PI * 2)
+        ctx.arc(cardX + 12, cardY + 14, 3.5, 0, Math.PI * 2)
         ctx.fill()
 
-        ctx.font = 'bold 9.5px sans-serif'
-        ctx.fillStyle = '#0f172a'
+        ctx.font = 'bold 10px sans-serif'
+        ctx.fillStyle = '#f8fafc'
         ctx.textAlign = 'left'
-        ctx.fillText(dept.nome.toUpperCase(), cardX + 18, cardY + 15)
+        ctx.fillText(dept.nome.toUpperCase(), cardX + 22, cardY + 17)
 
-        // Agentes total e métrica em destaque
-        const executandoCount = ags.filter((a) => ativos.has(a.id)).length
-        ctx.font = 'bold 15px sans-serif'
-        ctx.fillStyle = '#0f172a'
-        ctx.fillText(`${ags.length}`, cardX + 10, cardY + 35)
+        // Pill Ativos no topo à direita
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'
+        ctx.fillRect(cardX + cardW - 58, cardY + 6, 52, 14)
+        ctx.font = 'bold 8px sans-serif'
+        ctx.fillStyle = executandoCount > 0 ? dept.cor : '#94a3b8'
+        ctx.textAlign = 'center'
+        ctx.fillText(`${executandoCount} Ativo${executandoCount !== 1 ? 's' : ''}`, cardX + cardW - 32, cardY + 16.5)
 
-        ctx.font = 'bold 8.5px sans-serif'
-        ctx.fillStyle = '#475569'
-        ctx.fillText(`agentes (${executandoCount} ativos)`, cardX + 26, cardY + 35)
+        // Contagem Total e Métricas
+        ctx.font = 'bold 14px sans-serif'
+        ctx.fillStyle = '#f8fafc'
+        ctx.textAlign = 'left'
+        ctx.fillText(`${ags.length}`, cardX + 12, cardY + 37)
 
-        // Linhas de Métrica
+        ctx.font = 'bold 8px sans-serif'
+        ctx.fillStyle = '#64748b'
+        ctx.fillText('agentes', cardX + 28, cardY + 37)
+
+        // Métricas
         ctx.font = '8px sans-serif'
-        ctx.fillStyle = '#334155'
-        ctx.fillText(metric.m1, cardX + 75, cardY + 26)
-        ctx.fillText(metric.m2, cardX + 75, cardY + 36)
+        ctx.fillStyle = '#94a3b8'
+        ctx.fillText(metric.m1, cardX + 68, cardY + 28)
+        ctx.fillText(metric.m2, cardX + 68, cardY + 38)
 
-        // Rodapé Card: FAZENDO / PRÓXIMA / CONCLUÍDA
-        ctx.fillStyle = metric.aguardando_d2 ? 'rgba(254, 215, 170, 0.6)' : '#f1f5f9'
-        ctx.fillRect(cardX, cardY + 46, cardW, 20)
-        ctx.strokeStyle = metric.aguardando_d2 ? '#f97316' : '#e2e8f0'
-        ctx.strokeRect(cardX, cardY + 46, cardW, 20)
+        // Rodapé do Card: FAZENDO / PRÓXIMA / FEITAS
+        ctx.fillStyle = metric.aguardando_d2 ? 'rgba(234, 88, 12, 0.25)' : 'rgba(30, 41, 59, 0.7)'
+        ctx.fillRect(cardX, cardY + 48, cardW, 20)
+
+        ctx.strokeStyle = metric.aguardando_d2 ? '#f97316' : 'rgba(51, 65, 85, 0.5)'
+        ctx.strokeRect(cardX, cardY + 48, cardW, 20)
 
         const txtRodape = metric.aguardando_d2
           ? 'aguardando o dono (D2)'
           : `FAZENDO ${metric.doing} · PRÓXIMA ${metric.next} · FEITAS ${metric.done}`
 
         ctx.font = 'bold 8.5px sans-serif'
-        ctx.fillStyle = metric.aguardando_d2 ? '#c2410c' : '#1e293b'
-        ctx.fillText(txtRodape, cardX + (metric.aguardando_d2 ? 16 : 8), cardY + 60)
+        ctx.fillStyle = metric.aguardando_d2 ? '#fb923c' : '#e2e8f0'
+        ctx.fillText(txtRodape, cardX + (metric.aguardando_d2 ? 14 : 8), cardY + 62)
 
         ctx.restore()
       })
@@ -950,10 +1159,10 @@ export function PixelOffice({
     for (const dept of DEPARTAMENTOS_CONFIG) {
       const pw = dept.largura / 2
       const ph = dept.altura / 2
-      const cardX = dept.gx - pw - 10
+      const cardX = dept.gx - pw - 6
       const cardY = dept.gy - ph - 74
-      const cardW = 165
-      const cardH = 66
+      const cardW = 168
+      const cardH = 68
 
       if (mundoX >= cardX && mundoX <= cardX + cardW && mundoY >= cardY && mundoY <= cardY + cardH) {
         deptEncontrado = dept.id
@@ -992,7 +1201,7 @@ export function PixelOffice({
 
   const resetView = () => {
     setPan({ x: 0, y: 0 })
-    setZoom(1.05)
+    setZoom(typeof window !== 'undefined' && window.innerWidth < 640 ? 0.72 : 1.0)
   }
 
   // Filtragem de Tarefas para o Painel Lateral
