@@ -51,6 +51,7 @@ BRT = ZoneInfo("America/Sao_Paulo")
 
 # Onde os transcripts moram. O nome da pasta e o cwd com as barras viradas.
 RAIZ_PROJETOS = Path.home() / ".claude" / "projects"
+PROC = Path("/proc")
 PROJETO_PADRAO = "-opt-gastaomatos-luana"
 
 # As três sessões da casa. Nome de exibição (dono) -> pasta do projeto em
@@ -78,6 +79,7 @@ CODEX_DA_CASA: dict[str, list[Path]] = {
     ],
 }
 _CODEX_PADRAO = object()
+_PROC_PADRAO = object()
 
 # Quanto do fim do transcript a gente le pra achar o ultimo tool_use.
 # 256 KB cobre folgado varios turnos; o arquivo pode ter 14 MB.
@@ -128,6 +130,61 @@ def _deduzir_dono(projeto: str) -> str | None:
         if dono in proj_low:
             return dono
     return None
+
+
+def _cmdline_e_claude_remoto(args: list[str], dono: str) -> bool:
+    if not args:
+        return False
+    if Path(args[0]).name != "claude":
+        return False
+    for i, arg in enumerate(args):
+        if arg == "--remote-control" and i + 1 < len(args) and args[i + 1] == dono:
+            return True
+        if arg == f"--remote-control={dono}":
+            return True
+    return False
+
+
+def _processos_claude_remotos(proc: Path = PROC) -> tuple[set[str] | None, str | None]:
+    """Retorna donos com /usr/local/bin/claude --remote-control vivo.
+
+    Se a listagem de /proc falha, a presença da sessão raiz fica
+    indeterminada. Pids que somem durante a leitura são normais e ignorados.
+    """
+    try:
+        entradas = list(Path(proc).iterdir())
+    except OSError as exc:
+        return None, f"falha ao listar processos ({type(exc).__name__})"
+
+    vivos: set[str] = set()
+    pids = [entrada for entrada in entradas if entrada.name.isdigit()]
+    lidos = 0
+    for entrada in pids:
+        try:
+            bruto = (entrada / "cmdline").read_bytes()
+        except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
+            continue
+        if not bruto:
+            continue
+        lidos += 1
+        args = [parte.decode("utf-8", "replace") for parte in bruto.split(b"\0") if parte]
+        for dono in PROJETOS_DA_CASA:
+            if _cmdline_e_claude_remoto(args, dono):
+                vivos.add(dono)
+    if pids and lidos == 0:
+        return None, "falha ao ler cmdline dos processos"
+    return vivos, None
+
+
+def _resolver_processos_claude(processos_claude: object) -> tuple[set[str] | None, str | None]:
+    if processos_claude is _PROC_PADRAO:
+        return _processos_claude_remotos()
+    if isinstance(processos_claude, tuple) and len(processos_claude) == 2:
+        vivos, erro = processos_claude
+        return (set(vivos) if vivos is not None else None), erro
+    if processos_claude is None:
+        return set(), None
+    return set(processos_claude), None
 
 # --------------------------------------------------------------------------
 # OS TRES ESTADOS
@@ -628,6 +685,16 @@ def _transcript_pai(dir_sessao: Path) -> Path:
     return dir_sessao.parent / f"{dir_sessao.name}.jsonl"
 
 
+def _transcript_raiz_mais_recente(dir_projeto: Path) -> Path | None:
+    try:
+        candidatos = [p for p in dir_projeto.glob("*.jsonl") if p.is_file()]
+    except OSError:
+        return None
+    if not candidatos:
+        return None
+    return max(candidatos, key=lambda p: p.stat().st_mtime)
+
+
 def _sessoes_do_projeto(dir_projeto: Path) -> list[Path]:
     """Sessões com alguma evidência: pasta subagents/ ou transcript pai."""
     sessoes: dict[str, Path] = {}
@@ -885,8 +952,10 @@ def _agentes_agent_pendentes_do_pai(dir_sessao: Path, dono: str | None, agora: f
     return agentes
 
 
-def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float) -> dict | None:
-    """Fallback de presença da própria sessão Claude Code."""
+def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float, processo_vivo: bool) -> dict | None:
+    """Presença da sessão Claude Code raiz confirmada por processo vivo."""
+    if not processo_vivo:
+        return None
     transcript = _transcript_pai(dir_sessao)
     try:
         st = transcript.stat()
@@ -894,9 +963,6 @@ def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float) -> dict
         return None
 
     silencio = max(0.0, agora - st.st_mtime)
-    sessao_de_hoje = _mesmo_dia_brt(st.st_mtime, agora)
-    if silencio > LIMIAR_VIVO_S and not sessao_de_hoje:
-        return None
 
     try:
         cauda = _analisar_cauda(transcript, CAUDA_PAI_BYTES)
@@ -904,10 +970,8 @@ def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float) -> dict
         return None
 
     estado = _classificar(cauda["fase"], silencio)
-    if estado == PARADO and sessao_de_hoje:
-        estado = SILENCIOSO
     if estado == PARADO:
-        return None
+        estado = SILENCIOSO
 
     item = {
         "id": f"sessao-{dir_sessao.name[-8:]}",
@@ -976,7 +1040,8 @@ def _finalizar_item_claude(item: dict, metricas: dict | None, agora: float) -> N
 
 def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                 sessao: str | None = None, dono: str | None = None,
-                raiz_codex: object = _CODEX_PADRAO) -> dict:
+                raiz_codex: object = _CODEX_PADRAO,
+                processos_claude: object = _PROC_PADRAO) -> dict:
     """Retrato dos agentes desta sessao, agora.
 
     SEMPRE devolve dict com `ok` e `motivo`. Nunca levanta pra quem chama e
@@ -1014,6 +1079,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
     claude_ok = False
     claude_motivo = None
     claude_erro = None
+    processos_vivos, erro_processos = _resolver_processos_claude(processos_claude)
 
     try:
         dir_projeto = Path(raiz) / projeto
@@ -1023,6 +1089,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
             base["caminho"] = _sanitizar_caminho(str(dir_projeto))
             avisos.append(claude_erro)
         else:
+            transcript_raiz_vivo = _transcript_raiz_mais_recente(dir_projeto)
             sessoes_candidatas = [dir_projeto / sessao] if sessao else _sessoes_ativas(dir_projeto, agora)
             if not sessoes_candidatas:
                 claude_motivo = "nenhuma_sessao_com_subagentes"
@@ -1138,8 +1205,16 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                     if not tem_vivo_sessao:
                         agentes.extend(_agentes_agent_pendentes_do_pai(dir_sessao, dono, agora))
                     tem_vivo_sessao = any(a.get("estado") in (TRABALHANDO, SILENCIOSO) for a in agentes[inicio_sessao:])
-                    if not tem_vivo_sessao:
-                        item_pai = _agente_sessao_pai(dir_sessao, dono, agora)
+                    transcript_pai = _transcript_pai(dir_sessao)
+                    eh_raiz_mais_recente = (
+                        transcript_raiz_vivo is not None
+                        and transcript_pai == transcript_raiz_vivo
+                    )
+                    if eh_raiz_mais_recente and processos_vivos is None:
+                        avisos.append(f"{dono or projeto}: sessão raiz indeterminada: {erro_processos}")
+                    processo_vivo = bool(dono and processos_vivos is not None and dono in processos_vivos)
+                    if eh_raiz_mais_recente and not tem_vivo_sessao:
+                        item_pai = _agente_sessao_pai(dir_sessao, dono, agora, processo_vivo)
                         if item_pai:
                             agentes.append(item_pai)
     except PermissionError as e:
@@ -1196,7 +1271,8 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
 
 def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
                          raiz: Path | None = None,
-                         codex: dict[str, Path] | None = None) -> dict:
+                         codex: dict[str, Path] | None = None,
+                         processos_claude: object = _PROC_PADRAO) -> dict:
     """Agrega ler_agentes() das três sessões da casa em um único retrato.
 
     Nunca deixa uma sessão que falhou apagar as que funcionaram: erro de
@@ -1217,10 +1293,17 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
     historico_total = 0
     indeterminados_total = 0
     algum_ok = False
+    processos = _resolver_processos_claude(processos_claude)
 
     for dono, projeto in projetos.items():
         try:
-            r = ler_agentes(projeto=projeto, raiz=raiz, dono=dono, raiz_codex=codex.get(dono) if codex is not None else _CODEX_PADRAO)
+            r = ler_agentes(
+                projeto=projeto,
+                raiz=raiz,
+                dono=dono,
+                raiz_codex=codex.get(dono) if codex is not None else _CODEX_PADRAO,
+                processos_claude=processos,
+            )
             if not r.get("ok"):
                 erro_desc = _sanitizar_caminho(str(r.get("erro") or r.get("motivo")))
                 avisos.append(f"{dono}: {r.get('motivo')} — {erro_desc}")

@@ -277,7 +277,11 @@ def testar_agentes_vivos():
             "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "entrega sintetica"}]},
         }) + "\n", encoding="utf-8")
         os.utime(transcript_fallback, (mtime_pai, mtime_pai))
-        r_bia_sessao = ler_agentes("-opt-gastaomatos-bia-sessao", raiz=tmp)
+        r_bia_sessao = ler_agentes(
+            "-opt-gastaomatos-bia-sessao",
+            raiz=tmp,
+            processos_claude=({"bia"}, None),
+        )
         conferir("sessão pai recente entregue também aparece", r_bia_sessao["agentes"][0]["id"], f"sessao-{sessao_fallback[-8:]}")
         conferir("fallback da sessão pai mantém dono bia", r_bia_sessao["agentes"][0]["dono"], "bia")
         conferir("fallback da sessão pai entregue fica ocioso", r_bia_sessao["agentes"][0]["estado"], SILENCIOSO)
@@ -299,12 +303,78 @@ def testar_agentes_vivos():
             }) + "\n", encoding="utf-8")
             mtime_hoje = agora_fixo - mod.LIMIAR_VIVO_S - 120
             os.utime(transcript_hoje, (mtime_hoje, mtime_hoje))
-            casa_bia_hoje = ler_agentes_da_casa(projetos={"bia": "-opt-gastaomatos-bia-hoje"}, raiz=tmp)
+            casa_bia_hoje = ler_agentes_da_casa(
+                projetos={"bia": "-opt-gastaomatos-bia-hoje"},
+                raiz=tmp,
+                processos_claude=({"bia"}, None),
+            )
             conferir("agregação lista Bia com sessão de hoje", [(a["dono"], a["estado"]) for a in casa_bia_hoje["agentes"]], [("bia", SILENCIOSO)])
             conferir("não inventa subagente para a sessão pai", casa_bia_hoje["agentes"][0]["tipo"], "sessao_claude")
             conferir("contagem agregada de trabalhando exclui Bia ociosa", casa_bia_hoje["contagem"]["trabalhando"], 0)
         finally:
             mod._agora = agora_original
+
+        print("\n--- Teste 4d: Sessão raiz só conta o transcript mais recente com processo vivo")
+        projeto_raiz = tmp / "-opt-gastaomatos-luana-raiz"
+        projeto_raiz.mkdir(parents=True, exist_ok=True)
+        raiz_agora = time.time()
+        for nome, idade in (("sessao-antiga", 180), ("sessao-velha", 120), ("sessao-nova", 60)):
+            f = projeto_raiz / f"{nome}.jsonl"
+            f.write_text(json.dumps({
+                "type": "assistant",
+                "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "fim sintetico"}]},
+            }) + "\n", encoding="utf-8")
+            os.utime(f, (raiz_agora - idade, raiz_agora - idade))
+
+        r_raiz = ler_agentes(
+            "-opt-gastaomatos-luana-raiz",
+            raiz=tmp,
+            processos_claude=({"luana"}, None),
+        )
+        sessoes_raiz = [a for a in r_raiz["agentes"] if a.get("tipo") == "sessao_claude"]
+        conferir("três jsonl raiz viram só uma sessão viva", len(sessoes_raiz), 1)
+        conferir("a sessão viva é a do jsonl mais recente", sessoes_raiz[0]["id"], "sessao-sao-nova")
+
+        r_raiz_sem_proc = ler_agentes(
+            "-opt-gastaomatos-luana-raiz",
+            raiz=tmp,
+            processos_claude=(set(), None),
+        )
+        conferir("jsonl recente sem processo remoto não vira card raiz", [a for a in r_raiz_sem_proc["agentes"] if a.get("tipo") == "sessao_claude"], [])
+
+        print("\n--- Teste 4e: leitura real de /proc não é enganada pelo script-wrapper")
+        tmp_proc = tmp / "proc-fake"
+        tmp_proc.mkdir(parents=True, exist_ok=True)
+
+        def _pid_fake(pid: int, argv: list[str]):
+            d = tmp_proc / str(pid)
+            d.mkdir()
+            (d / "cmdline").write_bytes(b"\x00".join(a.encode("utf-8") for a in argv) + b"\x00")
+
+        # Mesmo padrão real da casa: /usr/bin/script -qfec embrulha o comando
+        # inteiro numa ÚNICA string de argv (não casa por espaço), e o
+        # processo filho claude de verdade tem os args separados por NUL.
+        _pid_fake(9101, [
+            "/usr/bin/script", "-qfec",
+            "/usr/local/bin/claude --model claude-opus-5-5 --continue --remote-control luana --channels plugin:telegram@x --dangerously-skip-permissions --debug",
+            "/home/claude/luana-tty.log",
+        ])
+        _pid_fake(9102, [
+            "/usr/local/bin/claude", "--model", "claude-opus-5-5", "--continue",
+            "--remote-control", "luana", "--channels", "plugin:telegram@x",
+            "--dangerously-skip-permissions", "--debug",
+        ])
+        # Wrapper vivo sem o filho (filho morreu): não pode contar como vivo.
+        _pid_fake(9103, [
+            "/usr/bin/script", "-qfec",
+            "/usr/local/bin/claude --model claude-sonnet-5 --continue --remote-control renato --channels plugin:telegram@x",
+            "/home/claude/renato-tty.log",
+        ])
+        _pid_fake(9104, ["/usr/bin/bash", "-c", "sleep 100"])
+
+        vivos_fake, erro_fake = mod._processos_claude_remotos(proc=tmp_proc)
+        conferir("script-wrapper não confunde: só o processo filho claude real conta", vivos_fake, {"luana"})
+        conferir("leitura de /proc fake não erra", erro_fake, None)
 
         print("\n--- Teste 5: Agregação resiliente quando uma sessão falha")
         projetos_com_falha = {

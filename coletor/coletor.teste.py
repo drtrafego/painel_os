@@ -1382,19 +1382,64 @@ try:
     projeto_bia = projetos / c._projeto_claude_da_pasta(pasta_bia)
     projeto_bia.mkdir(parents=True)
     antigo = projeto_bia / "antigo.jsonl"
+    velho = projeto_bia / "velho.jsonl"
     novo = projeto_bia / "novo.jsonl"
     antigo.write_text("{}\n", encoding="utf-8")
+    velho.write_text("{}\n", encoding="utf-8")
     novo.write_text("{}\n", encoding="utf-8")
     t_antigo = agora_ref.timestamp() - 7200
+    t_velho = agora_ref.timestamp() - 3600
     t_novo = agora_ref.timestamp() - 900
     os.utime(antigo, (t_antigo, t_antigo))
+    os.utime(velho, (t_velho, t_velho))
     os.utime(novo, (t_novo, t_novo))
-    presenca = c.ler_presenca_sessao({"pasta": pasta_bia}, projetos=projetos, agora=agora_ref)
+    presenca = c.ler_presenca_sessao({"id": "bia", "pasta": pasta_bia}, projetos=projetos, agora=agora_ref, processos_claude=({"bia"}, None))
     esperado_ultima = datetime.datetime.fromtimestamp(t_novo, tz=datetime.timezone.utc).isoformat()
-    conferir("presença usa o jsonl mais novo", (presenca["estado"], presenca["ultima_atividade"]), ("ocioso", esperado_ultima))
+    conferir("presença usa só o jsonl raiz mais novo e processo vivo", (presenca["estado"], presenca["ultima_atividade"]), ("ativo", esperado_ultima))
+    sem_processo = c.ler_presenca_sessao({"id": "bia", "pasta": pasta_bia}, projetos=projetos, agora=agora_ref, processos_claude=(set(), None))
+    conferir("jsonl recente sem processo remoto não vira ativo", sem_processo["estado"], "ocioso")
+    proc_indeterminado = c.ler_presenca_sessao({"id": "bia", "pasta": pasta_bia}, projetos=projetos, agora=agora_ref, processos_claude=(None, "falha sintética"))
+    conferir("falha de /proc não vira ativo", (proc_indeterminado["estado"], proc_indeterminado["erro_atividade"]), ("indeterminado", "falha sintética"))
     conferir("presença não publica caminho", c.auditar_estado_publico(presenca), [])
 finally:
     shutil.rmtree(tmp_sessao, ignore_errors=True)
+
+print("\n--- leitura real de /proc: script-wrapper não engana, cmdline não é grepado")
+tmp_proc = Path(tempfile.mkdtemp())
+try:
+    def _pid_fake(pid: int, argv: list[str]):
+        d = tmp_proc / str(pid)
+        d.mkdir()
+        (d / "cmdline").write_bytes(b"\x00".join(a.encode("utf-8") for a in argv) + b"\x00")
+
+    # Igual ao processo real da casa: script -qfec embrulha o comando inteiro
+    # numa ÚNICA string (não dá pra casar "--remote-control" nela por espaço),
+    # e o processo filho claude de verdade tem os args separados por NUL.
+    _pid_fake(9001, [
+        "/usr/bin/script", "-qfec",
+        "/usr/local/bin/claude --model claude-sonnet-5 --continue --remote-control bia --channels plugin:telegram@x --dangerously-skip-permissions --debug",
+        "/home/claude/bia-tty.log",
+    ])
+    _pid_fake(9002, [
+        "/usr/local/bin/claude", "--model", "claude-sonnet-5", "--continue",
+        "--remote-control", "bia", "--channels", "plugin:telegram@x",
+        "--dangerously-skip-permissions", "--debug",
+    ])
+    # Renato só com o wrapper vivo (filho morreu): não pode contar como vivo,
+    # senão o wrapper sozinho (que nunca casa por espaço) mascara um processo morto.
+    _pid_fake(9003, [
+        "/usr/bin/script", "-qfec",
+        "/usr/local/bin/claude --model claude-sonnet-5 --continue --remote-control renato --channels plugin:telegram@x",
+        "/home/claude/renato-tty.log",
+    ])
+    # Ruído: outro processo qualquer no /proc fake, não pode virar falso positivo.
+    _pid_fake(9004, ["/usr/bin/bash", "-c", "sleep 100"])
+
+    vivos, erro = c.ler_processos_claude_remotos(proc=tmp_proc)
+    conferir("script-wrapper não confunde: só o processo filho claude real conta", vivos, {"bia"})
+    conferir("leitura de /proc fake não erra", erro, None)
+finally:
+    shutil.rmtree(tmp_proc, ignore_errors=True)
 
 print("\n--- uso do plano codex: parser de event_msg e isolamento de credits")
 tmp_codex_dir = Path(tempfile.mkdtemp())

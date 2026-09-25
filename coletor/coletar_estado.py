@@ -63,6 +63,7 @@ ARCHIFY_CLI = Path(_ARCHIFY_CLI_ENV) if _ARCHIFY_CLI_ENV else None
 CASA_CLAUDE = Path.home() / ".claude"
 PROJETOS = CASA_CLAUDE / "projects"
 AGENTES_GLOBAIS = CASA_CLAUDE / "agents"
+PROC = Path("/proc")
 PASTAS_SESSOES_CODEX = (
     Path.home() / ".codex-luana/sessions",
     Path.home() / ".codex-renato/sessions",
@@ -195,13 +196,71 @@ def _projeto_claude_da_pasta(pasta: Path) -> str:
     return "-" + "-".join(p for p in partes if p and p != Path(p).anchor)
 
 
-def ler_presenca_sessao(item: dict, projetos: Path = PROJETOS, agora: datetime | None = None):
-    """Resume a presença da sessão pelo transcript Claude Code mais recente."""
-    agora = (agora or agora_utc()).astimezone(timezone.utc)
+def _cmdline_e_claude_remoto(args: list[str], agente: str) -> bool:
+    if not args:
+        return False
+    if Path(args[0]).name != "claude":
+        return False
+    for i, arg in enumerate(args):
+        if arg == "--remote-control" and i + 1 < len(args) and args[i + 1] == agente:
+            return True
+        if arg == f"--remote-control={agente}":
+            return True
+    return False
+
+
+def ler_processos_claude_remotos(proc: Path = PROC) -> tuple[set[str] | None, str | None]:
+    """Lê /proc e devolve quais agentes têm Claude Code remoto vivo.
+
+    Falha para listar /proc torna a presença indeterminada. Falhas pontuais de
+    pid que morreu durante a leitura são esperadas e não anulam a sonda inteira.
+    """
+    try:
+        entradas = list(Path(proc).iterdir())
+    except OSError as exc:
+        return None, f"falha ao listar processos ({type(exc).__name__})"
+
+    vivos: set[str] = set()
+    agentes = {item["id"] for item in SESSAO}
+    pids = [entrada for entrada in entradas if entrada.name.isdigit()]
+    lidos = 0
+    for entrada in pids:
+        try:
+            bruto = (entrada / "cmdline").read_bytes()
+        except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
+            continue
+        if not bruto:
+            continue
+        lidos += 1
+        args = [parte.decode("utf-8", "replace") for parte in bruto.split(b"\0") if parte]
+        for agente in agentes:
+            if _cmdline_e_claude_remoto(args, agente):
+                vivos.add(agente)
+    if pids and lidos == 0:
+        return None, "falha ao ler cmdline dos processos"
+    return vivos, None
+
+
+def _resolver_processos_claude(processos_claude):
+    if processos_claude is None:
+        return ler_processos_claude_remotos()
+    if isinstance(processos_claude, tuple) and len(processos_claude) == 2:
+        vivos, erro = processos_claude
+        return (set(vivos) if vivos is not None else None), erro
+    return set(processos_claude), None
+
+
+def ler_presenca_sessao(
+    item: dict,
+    projetos: Path = PROJETOS,
+    agora: datetime | None = None,
+    processos_claude=None,
+):
+    """Resume a presença da sessão raiz Claude Code viva do agente."""
     vazio = {
         "estado": "sem_sessao",
         "ultima_atividade": None,
-        "fonte_atividade": "transcript Claude Code mais recente",
+        "fonte_atividade": "processo Claude --remote-control em /proc e transcript Claude Code mais recente",
         "erro_atividade": None,
     }
     projeto = _projeto_claude_da_pasta(item["pasta"])
@@ -223,12 +282,16 @@ def ler_presenca_sessao(item: dict, projetos: Path = PROJETOS, agora: datetime |
         return {**vazio, "erro_atividade": "nenhum transcript Claude Code encontrado"}
     mtime, _ = max(candidatos, key=lambda par: par[0])
     instante = datetime.fromtimestamp(mtime, tz=timezone.utc)
-    estado = "ativo" if agora - instante <= timedelta(minutes=10) else "ocioso"
+    processos_vivos, erro_processos = _resolver_processos_claude(processos_claude)
+    if processos_vivos is None:
+        estado = "indeterminado"
+    else:
+        estado = "ativo" if item["id"] in processos_vivos else "ocioso"
     return {
         **vazio,
         "estado": estado,
         "ultima_atividade": instante.isoformat(),
-        "erro_atividade": None,
+        "erro_atividade": erro_processos,
     }
 
 
@@ -5610,9 +5673,10 @@ def main():
     # para todo mundo e so precisa ser pedida uma vez (2,28s -> 1,37s medidos).
     sonda_motores = motores.Sonda()
     agora_sessao = agora_utc()
+    processos_claude = ler_processos_claude_remotos()
     for item in SESSAO:
         pasta = item["pasta"]
-        presenca = ler_presenca_sessao(item, agora=agora_sessao)
+        presenca = ler_presenca_sessao(item, agora=agora_sessao, processos_claude=processos_claude)
         sessao.append(
             {
                 "id": item["id"],
