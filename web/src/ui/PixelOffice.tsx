@@ -99,7 +99,7 @@ function desenharMesaEAgente(
   // 2. Tampo da Mesa Isométrica (Metal Slate HUD)
   ctx.fillStyle = '#1e293b'
   ctx.strokeStyle = selecionado ? '#f59e0b' : '#334155'
-  ctx.lineWidth = selecionado ? 2 : 1
+  ctx.lineWidth = selecionado ? 2.5 : 1
   ctx.beginPath()
   ctx.moveTo(0, -14)
   ctx.lineTo(17, -6)
@@ -290,7 +290,7 @@ export function PixelOffice({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const [zoom, setZoom] = useState(0.85)
+  const [zoom, setZoom] = useState(1.05)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [arrastando, setArrastando] = useState(false)
   const [pontoArrasto, setPontoArrasto] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
@@ -555,65 +555,103 @@ export function PixelOffice({
     return res
   }, [agentesPorSquad, ativos, estado])
 
-  // Dados do Agente/Diretor Selecionado no Inspetor
+  // RESOLUÇÃO DE DADOS PARA O INSPETOR (RODADA 20)
   const agenteSelecionadoDados = useMemo(() => {
     if (!foco) return null
-    const noCat = catalogoVisual.find((ag) => ag.id === foco)
-    const noVivo = agentes.find((ag) => ag.id === foco || ag.identidade === foco)
 
-    // Se for um diretor (luana, renato, bia)
-    if (foco === 'luana' || foco === 'renato' || foco === 'bia') {
-      const subagentesDoDiretor = agentes.filter((ag) => ag.dono === foco || (ag.dono === undefined && foco === 'luana'))
-      const sessaoRaiz = agentes.find((ag) => ag.dono === foco && ag.identidade === 'sessao-claude') || noVivo
+    const focoNorm = foco.toLowerCase().trim()
+    const noCat = catalogoVisual.find((ag) => ag.id === foco || ag.aliases?.includes(foco))
 
-      const temAtivo = subagentesDoDiretor.some((s) => s.estado === 'trabalhando') || sessaoRaiz?.estado === 'trabalhando'
-      const modelo = sessaoRaiz?.modelo_legivel || sessaoRaiz?.modelo || subagentesDoDiretor.find((s) => s.modelo)?.modelo_legivel || 'Claude 3.7 Sonnet'
-      const esforco = sessaoRaiz?.esforco || 'medium'
+    // Tenta encontrar o AgenteVivo exato no array de agentes ao vivo (/api/agentes-vivos)
+    const noVivo = agentes.find((ag) => {
+      if (!ag) return false
+      const idAg = (ag.id || '').toLowerCase()
+      const idenAg = (ag.identidade || '').toLowerCase()
+      const papelAg = (ag.papel || '').toLowerCase()
+
+      if (idAg === focoNorm || idenAg === focoNorm) return true
+      if (noCat) {
+        if (idAg === noCat.id || idenAg === noCat.id) return true
+        if (noCat.aliases?.some((alias) => idAg.includes(alias.toLowerCase()) || idenAg.includes(alias.toLowerCase()))) return true
+      }
+      return idAg.includes(focoNorm) || idenAg.includes(focoNorm) || papelAg.includes(focoNorm)
+    })
+
+    const ehDiretor = foco === 'luana' || foco === 'renato' || foco === 'bia'
+
+    if (ehDiretor) {
+      const subagentesDoDiretor = agentes.filter((ag) => {
+        const donoNorm = normalizarDonoId(ag.dono)
+        return donoNorm === foco || (ag.dono === undefined && foco === 'luana')
+      })
+
+      const sessaoRaiz = agentes.find((ag) => {
+        const donoNorm = normalizarDonoId(ag.dono)
+        return (donoNorm === foco || ag.id === foco) && (ag.identidade === 'sessao-claude' || ag.tipo === 'sessao_claude' || ag.id === foco)
+      }) || noVivo
+
+      const temSubAtivo = subagentesDoDiretor.some((s) => s.estado === 'trabalhando')
+      const sessaoAtiva = sessaoRaiz?.estado === 'trabalhando' || sessaoRaiz?.estado === 'silencioso' || temSubAtivo || subagentesDoDiretor.length > 0
+
+      const estadoFinal = temSubAtivo || sessaoRaiz?.estado === 'trabalhando' ? 'trabalhando' : sessaoAtiva ? 'silencioso' : 'parado'
+      const statusRotulo = estadoFinal === 'trabalhando' ? 'TRABALHANDO' : estadoFinal === 'silencioso' ? 'OCIOSO' : 'PARADO'
+
+      const modelo = sessaoRaiz?.modelo_legivel || sessaoRaiz?.modelo || subagentesDoDiretor.find((s) => s.modelo)?.modelo_legivel || 'Claude 3.7 Sonnet (orquestrador)'
+      const esforco = sessaoRaiz?.esforco || 'medium (padrão)'
       const dono = foco.charAt(0).toUpperCase() + foco.slice(1)
-      const rodandoHa = sessaoRaiz?.rodando_ha || (sessaoRaiz?.inicio ? `desde ${sessaoRaiz.inicio}` : '—')
-      const ultimaAtiv = sessaoRaiz?.silencio_s === 0 ? 'agora' : sessaoRaiz?.silencio_s != null ? `${sessaoRaiz.silencio_s}s atrás` : '—'
+      const rodandoHa = sessaoRaiz?.rodando_ha || (sessaoRaiz?.inicio ? `desde ${sessaoRaiz.inicio}` : 'sessão ativa')
+      const ultimaAtiv = sessaoRaiz?.silencio_s === 0 ? 'agora' : sessaoRaiz?.silencio_s != null ? `${sessaoRaiz.silencio_s}s atrás` : (sessaoRaiz?.ultima_atividade || 'atividade recente')
       const ferramentas = subagentesDoDiretor.reduce((acc, s) => acc + (s.ferramentas_usadas ?? 0), sessaoRaiz?.ferramentas_usadas ?? 0)
-      const tokens = sessaoRaiz?.tokens_formatado || '—'
+      const tokens = sessaoRaiz?.tokens_formatado || (sessaoRaiz?.tokens_total ? sessaoRaiz.tokens_total.toLocaleString('pt-BR') : 'sem dado de tokens para sessão principal')
       const tarefa = sessaoRaiz?.tarefa || subagentesDoDiretor.find((s) => s.tarefa)?.tarefa || `Orquestração de tarefas do setor ${foco}`
+      const quemMandou = sessaoRaiz?.quem_mandou || `Painel OS / ${dono}`
 
       return {
         id: foco,
         nome: dono,
         papel: `Diretor(a) / Orquestrador(a)`,
         squad: foco === 'renato' ? 'bots' : foco === 'bia' ? 'tráfego' : 'coordenação',
-        estado: temAtivo ? 'trabalhando' : 'silencioso',
+        estado: estadoFinal,
+        statusRotulo,
         modelo,
         esforco,
         dono,
         rodandoHa,
         ultimaAtiv,
-        ferramentas,
+        ferramentas: `${ferramentas} usadas`,
         tokens,
         tarefa,
+        quemMandou,
         subagentes: subagentesDoDiretor,
+        isDirector: true
       }
     }
 
-    // Se for um agente comum
+    // Se for um agente/subagente comum
     const estadoAg = noVivo?.estado || (ativos.has(foco) ? 'trabalhando' : 'silencioso')
+    const statusRotulo = estadoAg === 'trabalhando' ? 'TRABALHANDO' : estadoAg === 'silencioso' ? 'OCIOSO' : 'PARADO'
+
     const donoNorm = normalizarDonoId(noVivo?.dono)
     const donoFormatted = donoNorm ? donoNorm.charAt(0).toUpperCase() + donoNorm.slice(1) : noCat?.área || '—'
 
     return {
       id: foco,
-      nome: noCat?.nome || noVivo?.papel || foco,
+      nome: noCat?.nome || noVivo?.papel || noVivo?.identidade || foco,
       papel: noCat?.papel || noVivo?.papel || 'Especialista',
       squad: noCat?.squad || 'globais',
       estado: estadoAg,
+      statusRotulo,
       modelo: noVivo?.modelo_legivel || noVivo?.modelo || 'Claude 3.7 Sonnet',
-      esforco: noVivo?.esforco || 'medium',
+      esforco: noVivo?.esforco || 'medium (padrão)',
       dono: donoFormatted,
-      rodandoHa: noVivo?.rodando_ha || (noVivo?.inicio ? `desde ${noVivo.inicio}` : '—'),
-      ultimaAtiv: noVivo?.silencio_s === 0 ? 'agora' : noVivo?.silencio_s != null ? `${noVivo.silencio_s}s atrás` : '—',
-      ferramentas: noVivo?.ferramentas_usadas ?? 0,
-      tokens: noVivo?.tokens_formatado || (noVivo?.tokens_total ? noVivo.tokens_total.toLocaleString('pt-BR') : '—'),
-      tarefa: noVivo?.tarefa || noVivo?.etapa || noCat?.papel || 'Pronto para execução',
+      rodandoHa: noVivo?.rodando_ha || (noVivo?.inicio ? `desde ${noVivo.inicio}` : 'sessão recente'),
+      ultimaAtiv: noVivo?.silencio_s === 0 ? 'agora' : noVivo?.silencio_s != null ? `${noVivo.silencio_s}s atrás` : (noVivo?.ultima_atividade || 'atividade recente'),
+      ferramentas: `${noVivo?.ferramentas_usadas ?? 0} usadas`,
+      tokens: noVivo?.tokens_formatado || (noVivo?.tokens_total ? noVivo.tokens_total.toLocaleString('pt-BR') : 'sem dado de tokens para este subagente'),
+      tarefa: noVivo?.tarefa || noVivo?.etapa || noVivo?.descricao || (noVivo?.ferramenta ? `Executando ${noVivo.ferramenta}` : noCat?.papel || 'Pronto para execução'),
+      quemMandou: noVivo?.quem_mandou || (donoNorm ? `Convocado por ${donoFormatted}` : 'Painel OS'),
       subagentes: [],
+      isDirector: false
     }
   }, [foco, catalogoVisual, agentes, ativos])
 
@@ -831,7 +869,7 @@ export function PixelOffice({
           desenharMesaEAgente(ctx, ax, ay, ag, estadoAgente, selecionado, tick, reduzirMovimento)
         })
 
-        // CARTÃO FLUTUANTE GLASSMORPHISM HUD DO DEPARTAMENTO (COMO NA REFERÊNCIA)
+        // CARTÃO FLUTUANTE GLASSMORPHISM HUD DO DEPARTAMENTO
         const cardX = -pw - 10
         const cardY = -ph - 74
         const cardW = 165
@@ -903,6 +941,7 @@ export function PixelOffice({
     return () => cancelAnimationFrame(frame)
   }, [agentesPorSquad, ativos, diretoresEstado, estado, foco, metricasSquad, pan, reduzirMovimento, zoom])
 
+  // SELEÇÃO PRECISA DE MESA DE SUBAGENTE VS CARTÃO DE DEPARTAMENTO (RODADA 20)
   const selecionarNoCanvas = (evento: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -913,44 +952,63 @@ export function PixelOffice({
     const mundoX = (evento.clientX - rect.left - larguraCss / 2 - pan.x) / zoom
     const mundoY = (evento.clientY - rect.top - alturaCss / 2 - pan.y) / zoom
 
-    // Verificar se clicou em alguma mesa de agente
+    // 1. CHECAGEM DIRETA NAS MESAS DE AGENTES (Raio amplo de toque ~35px)
     let agenteEncontrado: string | null = null
 
-    DEPARTAMENTOS_CONFIG.forEach((dept) => {
+    for (const dept of DEPARTAMENTOS_CONFIG) {
       const ags = agentesPorSquad.get(dept.id) ?? []
       const pw = dept.largura / 2
       const ph = dept.altura / 2
       const maxDisplay = Math.min(ags.length, 6)
 
-      ags.slice(0, maxDisplay).forEach((ag, idx) => {
+      for (let idx = 0; idx < maxDisplay; idx++) {
+        const ag = ags[idx]
         const col = idx % 3
         const row = Math.floor(idx / 3)
         const ax = dept.gx - pw + 42 + col * 65
         const ay = dept.gy - ph + 42 + row * 52
 
-        if (Math.abs(ax - mundoX) < 26 && Math.abs(ay - mundoY) < 26) {
+        // Distância euclidiana para área de toque confortável na mesa
+        const dist = Math.hypot(ax - mundoX, ay - mundoY)
+        if (dist < 36) {
           agenteEncontrado = ag.id
+          break
         }
-      })
-    })
+      }
+
+      if (agenteEncontrado) break
+    }
 
     if (agenteEncontrado) {
       setFoco(agenteEncontrado)
       aoSelecionarAgente?.(agenteEncontrado)
-    } else {
-      // Se clicou no departamento
-      const clicadoDept = DEPARTAMENTOS_CONFIG.find(
-        (dept) => Math.abs(dept.gx - mundoX) < dept.largura / 2 && Math.abs(dept.gy - mundoY) < dept.altura / 2
-      )
-      if (clicadoDept) {
-        const ags = agentesPorSquad.get(clicadoDept.id) ?? []
-        if (ags.length > 0) {
-          setFoco(ags[0].id)
-          aoSelecionarAgente?.(ags[0].id)
-        }
-      } else {
-        setFoco(null)
+      return
+    }
+
+    // 2. CHECAGEM EXCLUSIVA NO CARTÃO FLUTUANTE DE CABEÇALHO DO SQUAD (Não no piso inteiro!)
+    let deptEncontrado: string | null = null
+    for (const dept of DEPARTAMENTOS_CONFIG) {
+      const pw = dept.largura / 2
+      const ph = dept.altura / 2
+      const cardX = dept.gx - pw - 10
+      const cardY = dept.gy - ph - 74
+      const cardW = 165
+      const cardH = 66
+
+      if (mundoX >= cardX && mundoX <= cardX + cardW && mundoY >= cardY && mundoY <= cardY + cardH) {
+        deptEncontrado = dept.id
+        break
       }
+    }
+
+    if (deptEncontrado) {
+      const ags = agentesPorSquad.get(deptEncontrado as PixelAgentSquad) ?? []
+      if (ags.length > 0) {
+        setFoco(ags[0].id)
+        aoSelecionarAgente?.(ags[0].id)
+      }
+    } else {
+      setFoco(null)
     }
   }
 
@@ -974,7 +1032,7 @@ export function PixelOffice({
 
   const resetView = () => {
     setPan({ x: 0, y: 0 })
-    setZoom(0.85)
+    setZoom(1.05)
   }
 
   // Filtragem de Tarefas para o Painel Lateral
@@ -1063,12 +1121,12 @@ export function PixelOffice({
 
           {/* INSPETOR FLUTUANTE EM MODAL/DRAWER DIREITO QUANDO UM AGENTE É SELECIONADO */}
           {agenteSelecionadoDados && (
-            <div className="absolute top-3 right-14 max-w-sm w-full z-20 rounded-xl border-2 border-black bg-[#0f172a]/95 p-4 text-white shadow-2xl backdrop-blur-md space-y-3">
+            <div className="absolute top-3 right-3 max-w-sm w-full z-20 rounded-xl border-2 border-slate-700 bg-[#0f172a]/95 p-4 text-white shadow-2xl backdrop-blur-md space-y-3">
               <div className="flex items-center justify-between border-b border-slate-700/80 pb-2">
                 <div className="flex items-center gap-2">
                   <span
                     className={`size-2.5 rounded-full ${
-                      agenteSelecionadoDados.estado === 'trabalhando' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                      agenteSelecionadoDados.estado === 'trabalhando' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
                     }`}
                   />
                   <div>
@@ -1089,7 +1147,7 @@ export function PixelOffice({
                 </button>
               </div>
 
-              {/* Grid de Métricas Ricas como no Terminal CRT */}
+              {/* Grid de Métricas Ricas do Agente Selecionado */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
                   <div className="text-[9px] uppercase font-bold text-slate-400">Modelo</div>
@@ -1120,7 +1178,20 @@ export function PixelOffice({
 
                 <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
                   <div className="text-[9px] uppercase font-bold text-slate-400">Ferramentas</div>
-                  <div className="font-bold text-slate-200 mt-0.5">{agenteSelecionadoDados.ferramentas} usadas</div>
+                  <div className="font-bold text-slate-200 mt-0.5">{agenteSelecionadoDados.ferramentas}</div>
+                </div>
+              </div>
+
+              {/* Tokens & Quem Mandou */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Tokens Usados</div>
+                  <div className="font-bold text-amber-300 mt-0.5">{agenteSelecionadoDados.tokens}</div>
+                </div>
+
+                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
+                  <div className="text-[9px] uppercase font-bold text-slate-400">Quem Mandou</div>
+                  <div className="font-bold text-slate-200 truncate mt-0.5">{agenteSelecionadoDados.quemMandou}</div>
                 </div>
               </div>
 
@@ -1132,20 +1203,37 @@ export function PixelOffice({
                 </p>
               </div>
 
-              {/* Subagentes Ativos em Execução se for Diretor */}
-              {agenteSelecionadoDados.subagentes.length > 0 && (
+              {/* Subagentes Ativos Clicáveis se for Diretor */}
+              {agenteSelecionadoDados.isDirector && (
                 <div className="rounded border border-slate-800 bg-slate-900/80 p-2 space-y-1.5">
                   <div className="text-[9.5px] font-extrabold uppercase text-amber-400 tracking-wider">
-                    ⚡ Subagentes em Execução ({agenteSelecionadoDados.subagentes.length})
+                    ⚡ Subagentes do Setor ({agenteSelecionadoDados.subagentes.length})
                   </div>
-                  <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
-                    {agenteSelecionadoDados.subagentes.map((sub) => (
-                      <div key={sub.id} className="flex items-center justify-between text-[10px] border-b border-slate-800 pb-1">
-                        <span className="font-bold text-slate-200 truncate max-w-[150px]">{sub.papel || sub.identidade || sub.id}</span>
-                        <span className="font-mono text-emerald-400">{sub.etapa || sub.fase || 'trabalhando'}</span>
-                      </div>
-                    ))}
-                  </div>
+                  {agenteSelecionadoDados.subagentes.length === 0 ? (
+                    <div className="text-[10px] text-slate-400 italic">Nenhum subagente ativo no momento.</div>
+                  ) : (
+                    <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                      {agenteSelecionadoDados.subagentes.map((sub) => {
+                        const targetId = sub.id || sub.identidade || sub.papel || 'subagente'
+                        return (
+                          <button
+                            type="button"
+                            key={sub.id}
+                            onClick={() => {
+                              setFoco(targetId)
+                              aoSelecionarAgente?.(targetId)
+                            }}
+                            className="w-full text-left flex items-center justify-between text-[10px] border-b border-slate-800 pb-1 hover:bg-slate-800/60 p-1 rounded transition-colors"
+                          >
+                            <span className="font-bold text-sky-400 truncate max-w-[140px]">
+                              ● {sub.papel || sub.identidade || sub.id}
+                            </span>
+                            <span className="font-mono text-emerald-400">{sub.etapa || sub.fase || 'trabalhando'} ↗</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
