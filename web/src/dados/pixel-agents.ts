@@ -4,6 +4,8 @@
  * de /api/agentes-vivos; um item sem sessão nunca é promovido a "executando".
  */
 
+import { corDaSessao } from '../ui/paleta'
+
 export type PixelAgentSquad = 'coordenação' | 'radar' | 'conteúdo' | 'comercial' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex'
 
 export type PixelAgent = {

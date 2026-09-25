@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AgenteVivo } from '../dados/tipos'
-import { IDENTIDADE } from './paleta'
-import { contarAgentesExecutando, rotuloPresencaPixelOffice } from '../dados/agentes-vivos'
 import {
   boundsDoCatalogo,
   chaveAgente,
