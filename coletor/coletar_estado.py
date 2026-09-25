@@ -2876,7 +2876,13 @@ def ler_squad_trafego(raiz: Path = None) -> dict:
                             proxima += 1
                         elif st in ("concluido", "concluído", "feito", "sucesso", "done"):
                             done += 1
-                        execucoes.append(d)
+                        execucoes.append({
+                            # Só campos seguros: o ESTADO.json interno traz
+                            # caminhos e nomes que não podem ir pro repo público.
+                            "id": item.name,
+                            "status": st or None,
+                            "etapa": str(d.get("etapa") or d.get("etapa_atual") or "")[:60] or None,
+                        })
                     except Exception:
                         pass
 
@@ -2951,7 +2957,13 @@ def ler_squad_bots(raiz: Path = None) -> dict:
                             proxima += 1
                         elif st in ("concluido", "concluído", "feito", "sucesso", "done"):
                             done += 1
-                        execucoes.append(d)
+                        execucoes.append({
+                            # Só campos seguros: o ESTADO.json interno traz
+                            # caminhos e nomes que não podem ir pro repo público.
+                            "id": item.name,
+                            "status": st or None,
+                            "etapa": str(d.get("etapa") or d.get("etapa_atual") or "")[:60] or None,
+                        })
                     except Exception:
                         pass
 
@@ -6560,6 +6572,9 @@ def main():
     squad_trafego = ler_squad_trafego()
     squad_bots = ler_squad_bots()
 
+    todas_chamadas = conv.get("todas_chamadas", [])
+    janelas = agregar_janelas_convocacoes(todas_chamadas, ids_casa)
+    squads = squads_com_agentes(agentes)
     salvar_mapas_quem_convoca_quem(janelas, agentes, squads)
     salvar_mapa_setor_comercial()
     salvar_mapa_setor_trafego()
