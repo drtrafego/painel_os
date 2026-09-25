@@ -51,12 +51,12 @@ const DEPARTAMENTOS_CONFIG: Array<{
   largura: number
   altura: number
 }> = [
-  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: -310, gy: -200, largura: 270, altura: 175 },
-  { id: 'bots', nome: 'RENATO / BOTS', cor: '#c2410c', gx: 310, gy: -200, largura: 270, altura: 175 },
-  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#8b5cf6', gx: 330, gy: 30, largura: 270, altura: 175 },
-  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#16a34a', gx: 230, gy: 230, largura: 270, altura: 175 },
-  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -230, gy: 230, largura: 270, altura: 175 },
-  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#d97706', gx: -330, gy: 30, largura: 270, altura: 175 },
+  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: -360, gy: -220, largura: 270, altura: 175 },
+  { id: 'bots', nome: 'RENATO / BOTS', cor: '#c2410c', gx: 360, gy: -220, largura: 270, altura: 175 },
+  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#8b5cf6', gx: 390, gy: 30, largura: 270, altura: 175 },
+  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#16a34a', gx: 260, gy: 270, largura: 270, altura: 175 },
+  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -260, gy: 270, largura: 270, altura: 175 },
+  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#d97706', gx: -390, gy: 30, largura: 270, altura: 175 },
 ]
 
 function desenharMesaEAgente(
@@ -90,15 +90,15 @@ function desenharMesaEAgente(
     ctx.restore()
   }
 
-  // 1. Sombra da mesa no piso escuro
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
+  // 1. Sombra da mesa no piso claro
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.08)'
   ctx.beginPath()
   ctx.ellipse(0, 8, 22, 10, 0, 0, Math.PI * 2)
   ctx.fill()
 
-  // 2. Tampo da Mesa Isométrica (Metal Slate HUD)
-  ctx.fillStyle = '#1e293b'
-  ctx.strokeStyle = selecionado ? '#f59e0b' : '#334155'
+  // 2. Tampo da Mesa Isométrica (Light Slate Desk)
+  ctx.fillStyle = '#f1f5f9'
+  ctx.strokeStyle = selecionado ? '#f59e0b' : '#cbd5e1'
   ctx.lineWidth = selecionado ? 2.5 : 1
   ctx.beginPath()
   ctx.moveTo(0, -14)
@@ -110,7 +110,7 @@ function desenharMesaEAgente(
   ctx.stroke()
 
   // Espessura da mesa
-  ctx.fillStyle = '#0f172a'
+  ctx.fillStyle = '#e2e8f0'
   ctx.beginPath()
   ctx.moveTo(-17, -6)
   ctx.lineTo(0, 2)
@@ -128,7 +128,7 @@ function desenharMesaEAgente(
   ctx.fill()
 
   // Pés da mesa
-  ctx.strokeStyle = '#475569'
+  ctx.strokeStyle = '#94a3b8'
   ctx.lineWidth = 1.2
   ctx.beginPath()
   ctx.moveTo(-15, -4)
@@ -138,12 +138,12 @@ function desenharMesaEAgente(
   ctx.stroke()
 
   // 3. Monitor no Tampo (Visto de trás)
-  ctx.fillStyle = '#334155'
+  ctx.fillStyle = '#475569'
   ctx.fillRect(-3, -9, 6, 2)
   ctx.fillRect(-1, -12, 2, 3)
 
   // Carcaça do Monitor
-  ctx.fillStyle = '#0f172a'
+  ctx.fillStyle = '#1e293b'
   ctx.fillRect(-10, -21, 20, 10)
 
   // Tela do Monitor Neon Cyberpunk
@@ -158,11 +158,11 @@ function desenharMesaEAgente(
     ctx.fillRect(-7, -19, 14, 2.5)
     ctx.shadowBlur = 0
   } else if (!ehParado) {
-    ctx.fillStyle = '#1e293b'
+    ctx.fillStyle = '#334155'
     ctx.fillRect(-9, -20, 18, 8)
   } else {
     // Monitor totalmente apagado para PARADO
-    ctx.fillStyle = '#020617'
+    ctx.fillStyle = '#0f172a'
     ctx.fillRect(-9, -20, 18, 8)
   }
 
@@ -184,12 +184,12 @@ function desenharMesaEAgente(
   }
 
   // Teclado Neon
-  ctx.fillStyle = ehTrabalhando ? corSetor : '#475569'
+  ctx.fillStyle = ehTrabalhando ? corSetor : '#64748b'
   ctx.fillRect(-6, -4, 12, 3)
 
   // 4. Cadeira de Escritório
   const chairY = 7
-  ctx.strokeStyle = '#475569'
+  ctx.strokeStyle = '#94a3b8'
   ctx.lineWidth = 1.5
   ctx.beginPath()
   ctx.moveTo(-5, chairY + 5)
@@ -198,13 +198,13 @@ function desenharMesaEAgente(
   ctx.lineTo(0, chairY + 5)
   ctx.stroke()
 
-  ctx.fillStyle = '#1e293b'
+  ctx.fillStyle = '#cbd5e1'
   ctx.beginPath()
   ctx.ellipse(0, chairY + 2, 7, 3.5, 0, 0, Math.PI * 2)
   ctx.fill()
 
   // Encosto da cadeira
-  ctx.fillStyle = '#0f172a'
+  ctx.fillStyle = '#94a3b8'
   ctx.beginPath()
   ctx.rect(-6, chairY - 5, 12, 7)
   ctx.fill()
@@ -230,13 +230,13 @@ function desenharMesaEAgente(
     ctx.stroke()
 
     // Cabeça
-    ctx.fillStyle = '#334155'
+    ctx.fillStyle = '#475569'
     ctx.beginPath()
     ctx.arc(0, chairY - 10 + animY, 4.5, 0, Math.PI * 2)
     ctx.fill()
   }
 
-  // 6. Etiqueta Glassmorphism HUD com Nome do Agente
+  // 6. Etiqueta Clean HUD com Nome do Agente
   const tagY = -34
   const nomeExibicao = ag.nome.slice(0, 10)
   ctx.font = 'bold 9px sans-serif'
@@ -244,8 +244,8 @@ function desenharMesaEAgente(
   const tagW = Math.max(36, larguraTexto + 10)
   const tagH = 14
 
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)'
-  ctx.strokeStyle = selecionado ? '#f59e0b' : ehTrabalhando ? corSetor : '#334155'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.96)'
+  ctx.strokeStyle = selecionado ? '#f59e0b' : ehTrabalhando ? corSetor : '#cbd5e1'
   ctx.lineWidth = selecionado ? 2 : 1
   ctx.fillRect(-tagW / 2, tagY, tagW, tagH)
   ctx.strokeRect(-tagW / 2, tagY, tagW, tagH)
@@ -257,7 +257,7 @@ function desenharMesaEAgente(
     ctx.fill()
   }
 
-  ctx.fillStyle = '#f8fafc'
+  ctx.fillStyle = '#0f172a'
   ctx.textAlign = 'center'
   ctx.fillText(nomeExibicao, ehTrabalhando ? 2 : 0, tagY + 10)
 
@@ -296,14 +296,6 @@ export function PixelOffice({
   const [pontoArrasto, setPontoArrasto] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const [foco, setFoco] = useState<string | null>(agenteSelecionadoId ?? null)
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
-  const [horaLocal, setHoraLocal] = useState<string>(() => {
-    return new Date().toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    })
-  })
 
   // Estado da Barra de Tarefas & Painel Lateral
   const [departamentoTarefa, setDepartamentoTarefa] = useState<string>('luana')
@@ -311,24 +303,6 @@ export function PixelOffice({
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('Todas')
   const [enviandoTarefa, setEnviandoTarefa] = useState<boolean>(false)
   const [tarefas, setTarefas] = useState<TarefaItem[]>([])
-
-  // Relógio com hora real em tempo real
-  useEffect(() => {
-    const atualizarHora = () => {
-      const agora = new Date()
-      setHoraLocal(
-        agora.toLocaleTimeString('pt-BR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false,
-        })
-      )
-    }
-    atualizarHora()
-    const intv = setInterval(atualizarHora, 1000)
-    return () => clearInterval(intv)
-  }, [])
 
   // Buscar Tarefas do Servidor (/api/tarefas)
   useEffect(() => {
@@ -680,26 +654,12 @@ export function PixelOffice({
       ctx.imageSmoothingEnabled = true
       ctx.clearRect(0, 0, larguraCss, alturaCss)
 
-      // 1. FUNDO DARK MODE HUD COM ESTRELAS DISCRETAS
-      ctx.fillStyle = '#070a12'
+      // 1. FUNDO WARM OFF-WHITE DE REFERÊNCIA (#f5f2e9)
+      ctx.fillStyle = '#f5f2e9'
       ctx.fillRect(0, 0, larguraCss, alturaCss)
 
-      ctx.save()
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)'
-      for (let i = 0; i < 45; i++) {
-        const sx = (i * 137.5 + tick * 0.04) % larguraCss
-        const sy = (i * 293.3) % alturaCss
-        const size = i % 3 === 0 ? 1.5 : 1
-        const alpha = 0.2 + Math.sin(tick * 0.05 + i) * 0.15
-        ctx.globalAlpha = Math.max(0.05, alpha)
-        ctx.beginPath()
-        ctx.arc(sx, sy, size, 0, Math.PI * 2)
-        ctx.fill()
-      }
-      ctx.restore()
-
       // Grid Isométrico sutil
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.03)'
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)'
       ctx.lineWidth = 1
       const step = 45
       for (let x = -larguraCss; x < larguraCss * 2; x += step) {
@@ -728,7 +688,7 @@ export function PixelOffice({
       ctx.lineWidth = 2
       DEPARTAMENTOS_CONFIG.forEach((dept) => {
         ctx.shadowColor = dept.cor
-        ctx.shadowBlur = 8
+        ctx.shadowBlur = 6
         ctx.strokeStyle = dept.cor
         ctx.setLineDash([4, 4])
         ctx.beginPath()
@@ -739,15 +699,15 @@ export function PixelOffice({
       ctx.setLineDash([])
       ctx.shadowBlur = 0
 
-      // Core do Hub Central (Cubo/Elipse 3D Neon)
+      // Core do Hub Central (Cubo/Elipse 3D Light Neon)
       ctx.save()
       ctx.translate(hubX, hubY)
-      const pulsoCore = !reduzirMovimento ? 12 + Math.sin(tick * 0.1) * 6 : 12
+      const pulsoCore = !reduzirMovimento ? 8 + Math.sin(tick * 0.1) * 4 : 8
 
       ctx.shadowColor = '#0284c7'
       ctx.shadowBlur = pulsoCore
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
-      ctx.strokeStyle = '#38bdf8'
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+      ctx.strokeStyle = '#0284c7'
       ctx.lineWidth = 2.5
       ctx.beginPath()
       ctx.ellipse(0, 0, 85, 32, 0, 0, Math.PI * 2)
@@ -756,12 +716,12 @@ export function PixelOffice({
 
       ctx.shadowBlur = 0
       ctx.font = 'bold 12px sans-serif'
-      ctx.fillStyle = '#38bdf8'
+      ctx.fillStyle = '#0369a1'
       ctx.textAlign = 'center'
       ctx.fillText(`● O CÉREBRO  ${textoHubNotas}`, 0, -3)
 
       ctx.font = 'bold 9px sans-serif'
-      ctx.fillStyle = '#94a3b8'
+      ctx.fillStyle = '#475569'
       ctx.fillText('BASE DE CONHECIMENTO', 0, 11)
 
       ctx.restore()
@@ -775,15 +735,15 @@ export function PixelOffice({
       ctx.shadowBlur = 6
       ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)'
       ctx.beginPath()
-      ctx.moveTo(-310 + 50, -200 + 30)
-      ctx.lineTo(330 - 50, 30 - 20)
+      ctx.moveTo(-360 + 50, -220 + 30)
+      ctx.lineTo(390 - 50, 30 - 20)
       ctx.stroke()
 
       ctx.shadowColor = '#c2410c'
       ctx.strokeStyle = 'rgba(194, 65, 12, 0.7)'
       ctx.beginPath()
-      ctx.moveTo(310 - 20, -200 - 25)
-      ctx.lineTo(310 + 20, -200 + 15)
+      ctx.moveTo(360 - 20, -220 - 25)
+      ctx.lineTo(360 + 20, -220 + 15)
       ctx.stroke()
 
       ctx.setLineDash([])
@@ -802,13 +762,13 @@ export function PixelOffice({
         const pw = dept.largura / 2
         const ph = dept.altura / 2
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)'
         ctx.beginPath()
         ctx.ellipse(0, 25, pw * 1.05, ph * 1.05, 0, 0, Math.PI * 2)
         ctx.fill()
 
         // Paredes laterais da plataforma
-        ctx.fillStyle = '#0f172a'
+        ctx.fillStyle = '#e2e8f0'
         ctx.beginPath()
         ctx.moveTo(-pw, 0)
         ctx.lineTo(0, ph)
@@ -818,11 +778,11 @@ export function PixelOffice({
         ctx.lineTo(-pw, 16)
         ctx.closePath()
         ctx.fill()
-        ctx.strokeStyle = '#1e293b'
+        ctx.strokeStyle = '#cbd5e1'
         ctx.stroke()
 
-        // Piso Superior Isométrico Dark (#111827)
-        ctx.fillStyle = '#111827'
+        // Piso Superior Isométrico White (#ffffff)
+        ctx.fillStyle = '#ffffff'
         ctx.beginPath()
         ctx.moveTo(0, -ph)
         ctx.lineTo(pw, 0)
@@ -833,14 +793,14 @@ export function PixelOffice({
 
         // Borda Neon Hexagonal da Plataforma
         ctx.shadowColor = dept.cor
-        ctx.shadowBlur = 12
+        ctx.shadowBlur = 8
         ctx.strokeStyle = dept.cor
         ctx.lineWidth = 2.5
         ctx.stroke()
         ctx.shadowBlur = 0
 
         // Grid interno da plataforma
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)'
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)'
         ctx.lineWidth = 1
         for (let i = -pw + 25; i < pw; i += 32) {
           ctx.beginPath()
@@ -869,16 +829,16 @@ export function PixelOffice({
           desenharMesaEAgente(ctx, ax, ay, ag, estadoAgente, selecionado, tick, reduzirMovimento)
         })
 
-        // CARTÃO FLUTUANTE GLASSMORPHISM HUD DO DEPARTAMENTO
+        // CARTÃO FLUTUANTE GLASSMORPHISM CLEAN DO DEPARTAMENTO
         const cardX = -pw - 10
         const cardY = -ph - 74
         const cardW = 165
         const cardH = 66
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.06)'
         ctx.fillRect(cardX + 3, cardY + 3, cardW, cardH)
 
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)'
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.96)'
         ctx.fillRect(cardX, cardY, cardW, cardH)
 
         ctx.strokeStyle = dept.cor
@@ -892,30 +852,30 @@ export function PixelOffice({
         ctx.fill()
 
         ctx.font = 'bold 9.5px sans-serif'
-        ctx.fillStyle = '#f8fafc'
+        ctx.fillStyle = '#0f172a'
         ctx.textAlign = 'left'
         ctx.fillText(dept.nome.toUpperCase(), cardX + 18, cardY + 15)
 
         // Agentes total e métrica em destaque
         const executandoCount = ags.filter((a) => ativos.has(a.id)).length
         ctx.font = 'bold 15px sans-serif'
-        ctx.fillStyle = '#f8fafc'
+        ctx.fillStyle = '#0f172a'
         ctx.fillText(`${ags.length}`, cardX + 10, cardY + 35)
 
         ctx.font = 'bold 8.5px sans-serif'
-        ctx.fillStyle = '#94a3b8'
+        ctx.fillStyle = '#475569'
         ctx.fillText(`agentes (${executandoCount} ativos)`, cardX + 26, cardY + 35)
 
         // Linhas de Métrica
         ctx.font = '8px sans-serif'
-        ctx.fillStyle = '#cbd5e1'
+        ctx.fillStyle = '#334155'
         ctx.fillText(metric.m1, cardX + 75, cardY + 26)
         ctx.fillText(metric.m2, cardX + 75, cardY + 36)
 
         // Rodapé Card: FAZENDO / PRÓXIMA / CONCLUÍDA
-        ctx.fillStyle = metric.aguardando_d2 ? 'rgba(194, 65, 12, 0.25)' : '#1e293b'
+        ctx.fillStyle = metric.aguardando_d2 ? 'rgba(254, 215, 170, 0.6)' : '#f1f5f9'
         ctx.fillRect(cardX, cardY + 46, cardW, 20)
-        ctx.strokeStyle = metric.aguardando_d2 ? '#f97316' : '#334155'
+        ctx.strokeStyle = metric.aguardando_d2 ? '#f97316' : '#e2e8f0'
         ctx.strokeRect(cardX, cardY + 46, cardW, 20)
 
         const txtRodape = metric.aguardando_d2
@@ -923,7 +883,7 @@ export function PixelOffice({
           : `FAZENDO ${metric.doing} · PRÓXIMA ${metric.next} · FEITAS ${metric.done}`
 
         ctx.font = 'bold 8.5px sans-serif'
-        ctx.fillStyle = metric.aguardando_d2 ? '#fb923c' : '#f8fafc'
+        ctx.fillStyle = metric.aguardando_d2 ? '#c2410c' : '#1e293b'
         ctx.fillText(txtRodape, cardX + (metric.aguardando_d2 ? 16 : 8), cardY + 60)
 
         ctx.restore()
@@ -1062,39 +1022,6 @@ export function PixelOffice({
 
   return (
     <div className="flex flex-col gap-4 font-sans text-slate-100">
-      {/* BARRA SUPERIOR (TOP BAR DARK HUD) */}
-      <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-[#0f172a]/90 px-4 py-2.5 shadow-lg backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <span className="font-extrabold text-xs tracking-wider text-white uppercase">
-            AGENTS OFFICE <span className="text-cyan-400 font-normal">v3.5 HUD</span>
-          </span>
-          <span className="hidden text-slate-500 text-xs sm:inline">·</span>
-          <div className="flex items-center gap-1.5 text-xs text-slate-300">
-            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-medium">Conectado a</span>
-            <div className="flex items-center gap-1">
-              <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold text-sky-400 border border-sky-500/30">Meta</span>
-              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">OpenAI</span>
-              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/30">Claude</span>
-              <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold text-purple-400 border border-purple-500/30">Composio</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-slate-300">
-            <span className="size-2 rounded-full bg-emerald-400" />
-            <span className="font-medium">Roda em</span>
-            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-400 border border-amber-500/30">
-              PAINEL OS
-            </span>
-          </div>
-          <span className="font-mono text-xs font-bold text-white">
-            {horaLocal}
-          </span>
-        </div>
-      </header>
-
       {/* ÁREA PRINCIPAL: CANVAS ISOMÉTRICO (ESQUERDA) + PAINEL LATERAL DIREITO */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* CANVAS INTERATIVO 2.5D DARK HUD (ESQUERDA - 8 colunas) */}
