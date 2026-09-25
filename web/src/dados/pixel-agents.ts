@@ -4,7 +4,7 @@
  * de /api/agentes-vivos; um item sem sessão nunca é promovido a "executando".
  */
 
-import { corDaSessao } from '../ui/paleta'
+import { corDaSessao } from '../ui/paleta.ts'
 
 export type PixelAgentSquad = 'coordenação' | 'bots' | 'tráfego' | 'radar' | 'conteúdo' | 'comercial' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex'
 
@@ -49,6 +49,9 @@ export const PIXEL_AGENT_SQUADS: Array<{ id: PixelAgentSquad; nome: string; cor:
 ]
 
 export const PIXEL_AGENTS: PixelAgent[] = [
+  { id: 'luana', nome: 'Luana', papel: 'Super funcionária', squad: 'coordenação', área: 'Diretoria', abreviação: 'LU', cor: '#84cc16', aliases: ['diretora-geral', 'coordenadora'] },
+  { id: 'renato', nome: 'Renato', papel: 'Dono dos bots', squad: 'bots', área: 'Diretoria', abreviação: 'RE', cor: '#c2410c', aliases: ['dono-bots', 'hermes-diretor'] },
+  { id: 'bia', nome: 'Bia', papel: 'Diretora de Tráfego e IA', squad: 'tráfego', área: 'Diretoria', abreviação: 'BI', cor: '#8b5cf6', aliases: ['diretora-trafego'] },
   { id: 'iris', nome: 'Íris', papel: 'Orquestradora de conteúdo', squad: 'conteúdo', área: 'Regência', abreviação: 'ÍR', cor: '#c084fc', aliases: ['orquestradora', 'iris-regente'] },
   { id: 'elza', nome: 'Elza', papel: 'Diretora comercial', squad: 'comercial', área: 'Regência', abreviação: 'EL', cor: '#c084fc', aliases: ['diretora-comercial', 'comercial-squad', 'elza-regente'] },
   { id: 'zara', nome: 'Zara', papel: 'Triagem e ICP', squad: 'comercial', área: 'Qualificação', abreviação: 'ZA', cor: '#f59e0b', aliases: ['zara-triagem'] },
@@ -106,9 +109,20 @@ export function formatarRotulo(nome: string, tagDono: string, limite = 21): stri
 }
 
 export function resolverAgenteNoCatalogo(
-  agente: { id: string; dono?: string | null; identidade?: string | null },
+  agente: { id: string; dono?: string | null; identidade?: string | null; tipo?: string | null },
   catalogoVisual: PixelAgent[]
 ): PixelAgent | undefined {
+  const ehSessaoDiretor =
+    agente.tipo === 'sessao_claude' ||
+    agente.identidade === 'sessao-claude' ||
+    agente.id === 'sessao-claude' ||
+    agente.id.startsWith('sessao-')
+
+  if (ehSessaoDiretor && agente.dono) {
+    const diretor = catalogoVisual.find((item) => item.id === agente.dono)
+    if (diretor) return diretor
+  }
+
   const chave = chaveAgente(agente.dono, agente.id)
   return (
     catalogoVisual.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
@@ -118,6 +132,7 @@ export function resolverAgenteNoCatalogo(
         item.aliases?.includes(agente.id) ||
         (agente.identidade &&
           agente.identidade !== 'sessao-codex' &&
+          agente.identidade !== 'sessao-claude' &&
           (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
             item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? ''))))
     )
@@ -174,12 +189,16 @@ export function mesclarRuntimesNoCatalogo(
   const donosAssociados = new Map<string, string | undefined>()
 
   runtimes.forEach((runtime, index) => {
-    const identidade = runtime.identidade && runtime.identidade !== 'sessao-codex' ? runtime.identidade : null
+    const identidade = runtime.identidade && runtime.identidade !== 'sessao-codex' && runtime.identidade !== 'sessao-claude' ? runtime.identidade : null
     const sufixo = runtime.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || String(index + 1)
     const chave = runtime.dono ? `${runtime.dono}:${runtime.id}` : runtime.id
     const ehCodex = runtime.tipo === 'codex' || runtime.motor === 'codex' || runtime.id.startsWith('session-') || runtime.id.startsWith('rollout-')
+    const ehSessaoDiretor = runtime.tipo === 'sessao_claude' || runtime.identidade === 'sessao-claude' || runtime.id === 'sessao-claude' || runtime.id.startsWith('sessao-')
 
     const existente = resultado.find((agente) => {
+      if (ehSessaoDiretor && runtime.dono && agente.id === runtime.dono) {
+        return true
+      }
       const match =
         (identidade
           ? normalizarId(agente.id) === normalizarId(identidade) ||
@@ -224,15 +243,25 @@ export function mesclarRuntimesNoCatalogo(
       return
     }
 
+    const squadDono: PixelAgentSquad | null =
+      runtime.dono === 'luana'
+        ? 'coordenação'
+        : runtime.dono === 'renato'
+          ? 'bots'
+          : runtime.dono === 'bia'
+            ? 'tráfego'
+            : null
+
     const nome = ehCodex
       ? `Sessão Codex · ${sufixo}`
       : runtime.tipo
         ? `${runtime.tipo} · ${sufixo}`
         : `Subagente · ${sufixo}`
-    const squad: PixelAgentSquad = ehCodex ? 'pipeline Codex' : 'globais'
+    const squad: PixelAgentSquad = ehCodex ? 'pipeline Codex' : squadDono ?? 'globais'
     const papel = runtime.papel || (ehCodex ? 'Sessão Codex' : 'Subagente Claude')
     const abreviacao = ehCodex ? 'CX' : runtime.tipo ? runtime.tipo.slice(0, 2).toUpperCase() : 'SA'
-    const cor = ehCodex ? '#f472b6' : '#60a5fa'
+    const donoCor = runtime.dono ? corDaSessao(runtime.dono) : null
+    const cor = donoCor ?? (ehCodex ? '#ec4899' : '#06b6d4')
 
     resultado.push({
       id: chave,
