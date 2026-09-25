@@ -1160,7 +1160,32 @@ try:
     conferir("nenhum agente sai no squad arquivado", any(a.get("squad") == squad_arquivado for a in desc_achados), False)
     squads_publicados = c.squads_com_agentes(desc_achados)
     conferir("squad sem agentes não é emitido", "conteudo" in squads_publicados, False)
-    conferir("squad com agentes continua emitido", sorted(squads_publicados), ["comercial", "global"])
+    # ‼️ CORRIGIDO 25/09/2026 (commit 0ab0066): esta lista costumava ser
+    # ["comercial", "global"], sem "desconhecido", porque a chave "desconhecido"
+    # ainda nao existia em SQUADS e squads_com_agentes so itera o CATALOGO
+    # (nao a lista de agentes). O agente "novo-agente" (pasta nao mapeada) saia
+    # com squad="desconhecido" mas esse squad nunca aparecia em estado.squads —
+    # e web/src/dados/validar.ts:58 rejeita o estado INTEIRO quando o squad de
+    # um agente nao esta entre as chaves de estado.squads ("esquadrao
+    # desconhecido"). Ou seja: o teste antigo aprovava exatamente o formato que
+    # derrubava o painel. Agora "desconhecido" tem entrada propria em SQUADS
+    # ("Não catalogado"), entao ela E EMITIDA quando tem agente — e tem que
+    # ser, e o teste abaixo prova o motivo.
+    conferir("squad com agentes continua emitido",
+             sorted(squads_publicados), ["comercial", "desconhecido", "global"])
+
+    # NOVO 25/09/2026: pasta de squad nao mapeada nao pode mais derrubar o
+    # painel. O par que a trava do validador exige (visto em validar.ts):
+    # (1) todo agente com squad="desconhecido" existe de verdade aqui, e
+    # (2) esse squad aparece em estado.squads (senao vira "esquadrao
+    # desconhecido" e o validador recusa o estado todo).
+    conferir("pasta de squad nao mapeada gera agente com squad desconhecido",
+             mapa_achados.get("novo-agente", {}).get("squad"), "desconhecido")
+    conferir("e esse squad aparece em estado.squads, senao o validador recusa",
+             "desconhecido" in squads_publicados, True)
+    conferir("com o rotulo 'Não catalogado' (o validador so exige a chave, "
+             "mas o rotulo e o que garante que ele nao fica emitido mudo)",
+             squads_publicados.get("desconhecido", {}).get("nome"), "Não catalogado")
 finally:
     shutil.rmtree(pasta_temp_ag)
 

@@ -183,6 +183,19 @@ SQUADS = {
 
 
 def squads_com_agentes(agentes: list[dict], squads: dict = SQUADS) -> dict:
+    """O `estado["squads"]` publicado TEM que sair daqui, nunca do SQUADS cru.
+
+    web/src/dados/validar.ts exige as DUAS pontas: todo agente com squad X
+    exige X em estado.squads ("esquadrao desconhecido" se faltar), E todo
+    squad em estado.squads exige pelo menos um agente com aquele squad
+    ("squad sem agentes" se faltar). SQUADS e o catalogo estatico (inclui
+    "desconhecido", que so tem agente quando existe pasta de squad nao
+    mapeada); publicar o catalogo inteiro sem filtrar reprova o estado
+    TODO sempre que algum squad do catalogo estiver com zero agente no
+    momento (medido em 25/09/2026: "desconhecido" sem pasta orfa nenhuma
+    derrubava a validacao 100% do tempo). Esta funcao e o unico jeito de
+    publicar um estado.squads que os dois lados aceitam sempre.
+    """
     ids_com_agentes = {ag.get("squad") for ag in agentes if ag.get("squad")}
     return {id_: dados for id_, dados in squads.items() if id_ in ids_com_agentes}
 
@@ -6666,7 +6679,7 @@ def main():
         "analytics": analytics,
         "squad_trafego": squad_trafego,
         "squad_bots": squad_bots,
-        "squads": SQUADS,
+        "squads": squads,
         "sessao": sessao,
         "agentes": agentes,
         "convocacoes_fora_da_casa": de_fora,
