@@ -51,12 +51,12 @@ const DEPARTAMENTOS_CONFIG: Array<{
   largura: number
   altura: number
 }> = [
-  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: -280, gy: -180, largura: 220, altura: 140 },
-  { id: 'bots', nome: 'RENATO / BOTS', cor: '#c2410c', gx: 180, gy: -220, largura: 220, altura: 140 },
-  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#8b5cf6', gx: 280, gy: 20, largura: 220, altura: 140 },
-  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#d97706', gx: -320, gy: 40, largura: 240, altura: 160 },
-  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#16a34a', gx: 140, gy: 220, largura: 240, altura: 160 },
-  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -120, gy: 240, largura: 220, altura: 140 },
+  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: -280, gy: -180, largura: 230, altura: 150 },
+  { id: 'bots', nome: 'RENATO / BOTS', cor: '#c2410c', gx: 180, gy: -220, largura: 230, altura: 150 },
+  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#8b5cf6', gx: 280, gy: 20, largura: 230, altura: 150 },
+  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#d97706', gx: -320, gy: 40, largura: 250, altura: 165 },
+  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#16a34a', gx: 140, gy: 220, largura: 250, altura: 165 },
+  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -120, gy: 240, largura: 230, altura: 150 },
 ]
 
 function desenharMesaEAgente(
@@ -67,93 +67,133 @@ function desenharMesaEAgente(
   estadoAgente: 'TRABALHANDO' | 'OCIOSO' | 'PARADO',
   selecionado: boolean,
   tick: number,
-  reduzirMovimento: boolean
+  reduzirMovimento: boolean,
+  dimmed: boolean = false
 ) {
   ctx.save()
   ctx.translate(ax, ay)
 
-  const corSetor = ag.cor || '#84cc16'
+  if (dimmed) {
+    ctx.globalAlpha = 0.25
+  }
+
+  const corSetor = ag.cor || '#38bdf8'
   const ehTrabalhando = estadoAgente === 'TRABALHANDO'
   const ehParado = estadoAgente === 'PARADO'
 
-  // 1. Sombra da mesa no piso
-  ctx.fillStyle = 'rgba(40, 30, 20, 0.12)'
+  // 0. AURA NEON NO CHÃO PARA AGENTES ATIVOS (TRABALHANDO)
+  if (ehTrabalhando && !dimmed) {
+    const auraPulso = !reduzirMovimento ? 14 + Math.sin(tick * 0.12) * 6 : 14
+    ctx.save()
+    ctx.shadowColor = corSetor
+    ctx.shadowBlur = auraPulso
+    ctx.strokeStyle = corSetor
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.ellipse(0, 8, 26, 13, 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // 1. Sombra da mesa no piso escuro
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
   ctx.beginPath()
-  ctx.ellipse(0, 8, 20, 9, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 8, 22, 10, 0, 0, Math.PI * 2)
   ctx.fill()
 
-  // 2. Tampo da Mesa Isométrica
-  ctx.fillStyle = '#e8dec9'
-  ctx.strokeStyle = '#c5b89f'
-  ctx.lineWidth = 1
+  // 2. Tampo da Mesa Isométrica (Metal Slate HUD)
+  ctx.fillStyle = '#1e293b'
+  ctx.strokeStyle = selecionado ? '#f59e0b' : '#334155'
+  ctx.lineWidth = selecionado ? 1.5 : 1
   ctx.beginPath()
   ctx.moveTo(0, -14)
-  ctx.lineTo(16, -6)
+  ctx.lineTo(17, -6)
   ctx.lineTo(0, 2)
-  ctx.lineTo(-16, -6)
+  ctx.lineTo(-17, -6)
   ctx.closePath()
   ctx.fill()
   ctx.stroke()
 
   // Espessura da mesa
-  ctx.fillStyle = '#d4c5a9'
+  ctx.fillStyle = '#0f172a'
   ctx.beginPath()
-  ctx.moveTo(-16, -6)
+  ctx.moveTo(-17, -6)
   ctx.lineTo(0, 2)
   ctx.lineTo(0, 5)
-  ctx.lineTo(-16, -3)
+  ctx.lineTo(-17, -3)
   ctx.closePath()
   ctx.fill()
 
   ctx.beginPath()
   ctx.moveTo(0, 2)
-  ctx.lineTo(16, -6)
-  ctx.lineTo(16, -3)
+  ctx.lineTo(17, -6)
+  ctx.lineTo(17, -3)
   ctx.lineTo(0, 5)
   ctx.closePath()
   ctx.fill()
 
   // Pés da mesa
-  ctx.strokeStyle = '#8c7e66'
+  ctx.strokeStyle = '#475569'
   ctx.lineWidth = 1.2
   ctx.beginPath()
-  ctx.moveTo(-14, -4)
-  ctx.lineTo(-14, 7)
-  ctx.moveTo(14, -4)
-  ctx.lineTo(14, 7)
+  ctx.moveTo(-15, -4)
+  ctx.lineTo(-15, 7)
+  ctx.moveTo(15, -4)
+  ctx.lineTo(15, 7)
   ctx.stroke()
 
-  // 3. Monitor no Tampo (virado para a frente da mesa, costas para o espectador)
-  ctx.fillStyle = '#475569'
+  // 3. Monitor no Tampo (Visto de trás)
+  ctx.fillStyle = '#334155'
   ctx.fillRect(-3, -9, 6, 2)
   ctx.fillRect(-1, -12, 2, 3)
 
   // Carcaça do Monitor
-  ctx.fillStyle = '#1e293b'
-  ctx.fillRect(-9, -20, 18, 9)
+  ctx.fillStyle = '#0f172a'
+  ctx.fillRect(-10, -21, 20, 10)
 
-  // Tela do Monitor
+  // Tela do Monitor Neon Cyberpunk
   if (ehTrabalhando) {
-    const pulso = !reduzirMovimento ? Math.sin(tick * 0.15) * 0.15 : 0
+    const pulso = !reduzirMovimento ? Math.sin(tick * 0.15) * 0.2 : 0
+    ctx.shadowColor = corSetor
+    ctx.shadowBlur = 10
     ctx.fillStyle = corSetor
-    ctx.fillRect(-8, -19, 16, 7)
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.45 + pulso})`
-    ctx.fillRect(-6, -18, 12, 2)
+    ctx.fillRect(-9, -20, 18, 8)
+
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.7 + pulso})`
+    ctx.fillRect(-7, -19, 14, 2.5)
+    ctx.shadowBlur = 0
   } else if (!ehParado) {
-    ctx.fillStyle = '#334155'
-    ctx.fillRect(-8, -19, 16, 7)
+    ctx.fillStyle = '#1e293b'
+    ctx.fillRect(-9, -20, 18, 8)
   } else {
-    ctx.fillStyle = '#0f172a'
-    ctx.fillRect(-8, -19, 16, 7)
+    ctx.fillStyle = '#020617'
+    ctx.fillRect(-9, -20, 18, 8)
   }
 
-  // Teclado
-  ctx.fillStyle = '#cbd5e1'
-  ctx.fillRect(-5, -4, 10, 3)
+  // Partículas de faíscas neon subindo do monitor se estiver TRABALHANDO
+  if (ehTrabalhando && !reduzirMovimento && !dimmed) {
+    ctx.save()
+    for (let i = 0; i < 3; i++) {
+      const pOffset = (tick * 1.5 + i * 18) % 25
+      const px = Math.sin(tick * 0.1 + i * 2) * 6
+      const py = -22 - pOffset
+      const alpha = 1 - pOffset / 25
+      ctx.fillStyle = corSetor
+      ctx.globalAlpha = alpha * (dimmed ? 0.25 : 1)
+      ctx.beginPath()
+      ctx.arc(px, py, 1.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+  }
+
+  // Teclado Neon
+  ctx.fillStyle = ehTrabalhando ? corSetor : '#475569'
+  ctx.fillRect(-6, -4, 12, 3)
 
   // 4. Cadeira de Escritório
   const chairY = 7
-  ctx.strokeStyle = '#334155'
+  ctx.strokeStyle = '#475569'
   ctx.lineWidth = 1.5
   ctx.beginPath()
   ctx.moveTo(-5, chairY + 5)
@@ -162,13 +202,13 @@ function desenharMesaEAgente(
   ctx.lineTo(0, chairY + 5)
   ctx.stroke()
 
-  ctx.fillStyle = '#334155'
+  ctx.fillStyle = '#1e293b'
   ctx.beginPath()
   ctx.ellipse(0, chairY + 2, 7, 3.5, 0, 0, Math.PI * 2)
   ctx.fill()
 
   // Encosto da cadeira
-  ctx.fillStyle = '#1e293b'
+  ctx.fillStyle = '#0f172a'
   ctx.beginPath()
   ctx.rect(-6, chairY - 5, 12, 7)
   ctx.fill()
@@ -183,7 +223,7 @@ function desenharMesaEAgente(
     ctx.rect(-7, chairY - 6 + animY, 14, 9)
     ctx.fill()
 
-    // Braços estendidos até o teclado
+    // Braços no teclado
     ctx.strokeStyle = corSetor
     ctx.lineWidth = 2.5
     ctx.beginPath()
@@ -193,23 +233,23 @@ function desenharMesaEAgente(
     ctx.lineTo(4, -2)
     ctx.stroke()
 
-    // Cabeça / Cabelo visto de trás
+    // Cabeça
     ctx.fillStyle = '#334155'
     ctx.beginPath()
     ctx.arc(0, chairY - 10 + animY, 4.5, 0, Math.PI * 2)
     ctx.fill()
   }
 
-  // 6. Etiqueta com Nome do Agente
-  const tagY = -32
+  // 6. Etiqueta Glassmorphism HUD com Nome do Agente
+  const tagY = -34
   const nomeExibicao = ag.nome.slice(0, 10)
   ctx.font = 'bold 9px sans-serif'
   const larguraTexto = ctx.measureText(nomeExibicao).width
-  const tagW = Math.max(34, larguraTexto + 10)
-  const tagH = 13
+  const tagW = Math.max(36, larguraTexto + 10)
+  const tagH = 14
 
-  ctx.fillStyle = '#ffffff'
-  ctx.strokeStyle = selecionado ? '#c2410c' : ehTrabalhando ? corSetor : '#94a3b8'
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)'
+  ctx.strokeStyle = selecionado ? '#f59e0b' : ehTrabalhando ? corSetor : '#334155'
   ctx.lineWidth = selecionado ? 2 : 1
   ctx.fillRect(-tagW / 2, tagY, tagW, tagH)
   ctx.strokeRect(-tagW / 2, tagY, tagW, tagH)
@@ -217,13 +257,29 @@ function desenharMesaEAgente(
   if (ehTrabalhando) {
     ctx.fillStyle = corSetor
     ctx.beginPath()
-    ctx.arc(-tagW / 2 + 5, tagY + tagH / 2, 2, 0, Math.PI * 2)
+    ctx.arc(-tagW / 2 + 5, tagY + tagH / 2, 2.5, 0, Math.PI * 2)
     ctx.fill()
   }
 
-  ctx.fillStyle = '#0f172a'
+  ctx.fillStyle = '#f8fafc'
   ctx.textAlign = 'center'
-  ctx.fillText(nomeExibicao, ehTrabalhando ? 2 : 0, tagY + 9)
+  ctx.fillText(nomeExibicao, ehTrabalhando ? 2 : 0, tagY + 10)
+
+  // 7. BADGE FLUTUANTE ⚡ ATIVO PARA AGENTES TRABALHANDO
+  if (ehTrabalhando && !dimmed) {
+    const badgeY = tagY - 13
+    const badgePulso = !reduzirMovimento ? Math.sin(tick * 0.2) * 1.5 : 0
+    ctx.save()
+    ctx.shadowColor = '#eab308'
+    ctx.shadowBlur = 6
+    ctx.fillStyle = '#eab308'
+    ctx.fillRect(-22, badgeY + badgePulso, 44, 11)
+    ctx.fillStyle = '#0f172a'
+    ctx.font = 'extrabold 8px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('⚡ ATIVO', 0, badgeY + badgePulso + 8.5)
+    ctx.restore()
+  }
 
   ctx.restore()
 }
@@ -244,6 +300,7 @@ export function PixelOffice({
   const [pontoArrasto, setPontoArrasto] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const [foco, setFoco] = useState<string | null>(agenteSelecionadoId ?? null)
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
+  const [filtroAgentes, setFiltroAgentes] = useState<'todos' | 'vivos' | 'ativos'>('todos')
   const [horaLocal, setHoraLocal] = useState<string>(() => {
     return new Date().toLocaleTimeString('pt-BR', {
       hour: '2-digit',
@@ -449,7 +506,7 @@ export function PixelOffice({
     return mapa
   }, [catalogoVisual])
 
-  // Métricas do Estado por Squad (sem dados inventados)
+  // Métricas do Estado por Squad
   const metricasSquad = useMemo(() => {
     const res = new Map<
       PixelAgentSquad,
@@ -503,7 +560,7 @@ export function PixelOffice({
     return res
   }, [agentesPorSquad, ativos, estado])
 
-  // Desenho Canvas Isometric 2.5D
+  // Desenho Canvas Isometric 2.5D Cyberpunk HUD (Opção 1)
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -528,83 +585,98 @@ export function PixelOffice({
       ctx.imageSmoothingEnabled = true
       ctx.clearRect(0, 0, larguraCss, alturaCss)
 
-      // Fundo Neutro Claro Creme (#f7f1e6)
-      ctx.fillStyle = '#f7f1e6'
+      // Fundo Dark Mode HUD (#070a12)
+      ctx.fillStyle = '#070a12'
       ctx.fillRect(0, 0, larguraCss, alturaCss)
+
+      // Grid Isométrico de Fundo Cyberpunk
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.04)'
+      ctx.lineWidth = 1
+      const step = 40
+      for (let x = -larguraCss; x < larguraCss * 2; x += step) {
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x + alturaCss, alturaCss)
+        ctx.stroke()
+
+        ctx.beginPath()
+        ctx.moveTo(x, alturaCss)
+        ctx.lineTo(x + alturaCss, 0)
+        ctx.stroke()
+      }
 
       ctx.save()
       ctx.translate(larguraCss / 2 + pan.x, alturaCss / 2 + pan.y)
       ctx.scale(zoom, zoom)
 
-      // 1. HUB CENTRAL ("O CÉREBRO")
+      // 1. HUB CENTRAL ("O CÉREBRO" NEON CORE)
       const hubX = 0
       const hubY = 0
       const nosCount = estado?.cofre?.nos?.length
       const textoHubNotas = nosCount != null ? `${nosCount} NOTAS` : 'sem dado'
 
-      // Raio pontilhado ligando o Hub Central às Ilhas
-      ctx.lineWidth = 1.5
-      ctx.setLineDash([4, 5])
+      // Cabos / Raios Neon ligando o Hub Central às Ilhas
+      ctx.lineWidth = 2
       DEPARTAMENTOS_CONFIG.forEach((dept) => {
+        ctx.shadowColor = dept.cor
+        ctx.shadowBlur = 8
         ctx.strokeStyle = dept.cor
+        ctx.setLineDash([4, 4])
         ctx.beginPath()
         ctx.moveTo(hubX, hubY)
         ctx.lineTo(dept.gx, dept.gy)
         ctx.stroke()
       })
       ctx.setLineDash([])
+      ctx.shadowBlur = 0
 
-      // Desenho do Nó Hub Central
+      // Desenho do Core do Hub Central (Cubo 3D Neon)
       ctx.save()
       ctx.translate(hubX, hubY)
 
-      // Sombra do Hub
-      ctx.fillStyle = 'rgba(44, 40, 37, 0.12)'
-      ctx.beginPath()
-      ctx.ellipse(0, 15, 75, 30, 0, 0, Math.PI * 2)
-      ctx.fill()
-
-      // Plataforma Isométrica do Hub Central
-      ctx.fillStyle = '#ffffff'
-      ctx.strokeStyle = '#d97706'
+      ctx.shadowColor = '#0284c7'
+      ctx.shadowBlur = 18
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'
+      ctx.strokeStyle = '#38bdf8'
       ctx.lineWidth = 2
       ctx.beginPath()
-      ctx.ellipse(0, 0, 70, 26, 0, 0, Math.PI * 2)
+      ctx.ellipse(0, 0, 75, 28, 0, 0, Math.PI * 2)
       ctx.fill()
       ctx.stroke()
 
-      // Rótulo do Hub
+      ctx.shadowBlur = 0
+
+      // Rótulo do Hub Central
       ctx.font = 'bold 11px sans-serif'
-      ctx.fillStyle = '#92400e'
+      ctx.fillStyle = '#38bdf8'
       ctx.textAlign = 'center'
       ctx.fillText(`● O CÉREBRO  ${textoHubNotas}`, 0, -2)
 
       ctx.font = '9px sans-serif'
-      ctx.fillStyle = '#78350f'
-      ctx.fillText('BASE DE CONHECIMENTO', 0, 10)
+      ctx.fillStyle = '#94a3b8'
+      ctx.fillText('CORE KNOWLEDGE HUD', 0, 10)
 
       ctx.restore()
 
-      // 1.5. SETAS/RAIOS DE FLUXO ENTRE DIRETORES, REGENTES E OPERAÇÃO (RODADA 17)
+      // 1.5. SETAS/RAIOS DE FLUXO NEON ENTRE DIRETORES E REGENTES
       ctx.save()
       ctx.lineWidth = 1.5
       ctx.setLineDash([3, 3])
 
-      // luana (-280, -180) -> tereza (tráfego: 280, 20)
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)'
+      ctx.shadowColor = '#8b5cf6'
+      ctx.shadowBlur = 6
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)'
       ctx.beginPath()
       ctx.moveTo(-280 + 50, -180 + 30)
       ctx.lineTo(280 - 50, 20 - 20)
       ctx.stroke()
 
-      // bia (tráfego: 280, 20) -> tereza / analista / gestor / jade / iris
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.7)'
       ctx.beginPath()
       ctx.moveTo(280 - 20, 20 - 25)
       ctx.lineTo(280 + 20, 20 + 15)
       ctx.stroke()
 
-      // renato (bots: 180, -220) -> heitor / vitor / dev / qa / explore
+      ctx.shadowColor = '#c2410c'
       ctx.strokeStyle = 'rgba(194, 65, 12, 0.7)'
       ctx.beginPath()
       ctx.moveTo(180 - 20, -220 - 25)
@@ -612,6 +684,7 @@ export function PixelOffice({
       ctx.stroke()
 
       ctx.setLineDash([])
+      ctx.shadowBlur = 0
       ctx.restore()
 
       // 2. DESENHO DAS ILHAS / PLATAFORMAS POR DEPARTAMENTO
@@ -623,31 +696,31 @@ export function PixelOffice({
         ctx.translate(dept.gx, dept.gy)
 
         // Sombra da Plataforma
-        ctx.fillStyle = 'rgba(44, 40, 37, 0.10)'
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
         ctx.beginPath()
-        ctx.ellipse(0, 25, dept.largura / 1.8, dept.altura / 2.2, 0, 0, Math.PI * 2)
+        ctx.ellipse(0, 25, dept.largura / 1.7, dept.altura / 2.1, 0, 0, Math.PI * 2)
         ctx.fill()
 
-        // Corpo 3D da Plataforma (Base & Topo)
+        // Corpo 3D da Plataforma (Modo Dark HUD)
         const pw = dept.largura / 2
         const ph = dept.altura / 2
 
         // Paredes laterais da plataforma
-        ctx.fillStyle = '#e6dbc9'
+        ctx.fillStyle = '#0f172a'
         ctx.beginPath()
         ctx.moveTo(-pw, 0)
         ctx.lineTo(0, ph)
         ctx.lineTo(pw, 0)
-        ctx.lineTo(pw, 12)
-        ctx.lineTo(0, ph + 12)
-        ctx.lineTo(-pw, 12)
+        ctx.lineTo(pw, 14)
+        ctx.lineTo(0, ph + 14)
+        ctx.lineTo(-pw, 14)
         ctx.closePath()
         ctx.fill()
-        ctx.strokeStyle = '#d9ccb6'
+        ctx.strokeStyle = '#1e293b'
         ctx.stroke()
 
-        // Piso Superior Isométrico (#fdfaf3)
-        ctx.fillStyle = '#fdfaf3'
+        // Piso Superior Isométrico (#111827)
+        ctx.fillStyle = '#111827'
         ctx.beginPath()
         ctx.moveTo(0, -ph)
         ctx.lineTo(pw, 0)
@@ -656,13 +729,16 @@ export function PixelOffice({
         ctx.closePath()
         ctx.fill()
 
-        // Borda Colorida do Piso
+        // Borda Neon da Plataforma com Glow
+        ctx.shadowColor = dept.cor
+        ctx.shadowBlur = 12
         ctx.strokeStyle = dept.cor
         ctx.lineWidth = 2
         ctx.stroke()
+        ctx.shadowBlur = 0
 
-        // Textura do Grid do Piso
-        ctx.strokeStyle = '#f3e8d7'
+        // Grid do Piso Dark
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)'
         ctx.lineWidth = 1
         for (let i = -pw + 20; i < pw; i += 30) {
           ctx.beginPath()
@@ -671,13 +747,13 @@ export function PixelOffice({
           ctx.stroke()
         }
 
-        // DESENHO DOS AGENTES (BONECOS DE COSTAS EM CADAIRAS E MESAS)
+        // DESENHO DOS AGENTES (BONECOS 2.5D DE COSTAS)
         const maxDisplay = Math.min(ags.length, 6)
         ags.slice(0, maxDisplay).forEach((ag, idx) => {
           const col = idx % 3
           const row = Math.floor(idx / 3)
-          const ax = -pw + 35 + col * 55
-          const ay = -ph + 35 + row * 45
+          const ax = -pw + 38 + col * 60
+          const ay = -ph + 38 + row * 48
 
           const selecionado = foco === ag.id
 
@@ -688,65 +764,71 @@ export function PixelOffice({
                 ? 'TRABALHANDO'
                 : 'OCIOSO'
 
-          desenharMesaEAgente(ctx, ax, ay, ag, estadoAgente, selecionado, tick, reduzirMovimento)
+          const dimmed =
+            (filtroAgentes === 'vivos' && estadoAgente === 'PARADO') ||
+            (filtroAgentes === 'ativos' && estadoAgente !== 'TRABALHANDO')
+
+          desenharMesaEAgente(ctx, ax, ay, ag, estadoAgente, selecionado, tick, reduzirMovimento, dimmed)
         })
 
-        // CARTÃO FLUTUANTE DO DEPARTAMENTO (Top-Left da Plataforma)
+        // CARTÃO FLUTUANTE GLASSMORPHISM HUD DO DEPARTAMENTO
         const cardX = -pw - 10
-        const cardY = -ph - 65
+        const cardY = -ph - 72
+        const cardW = 150
+        const cardH = 64
 
         // Sombra do Cartão
-        ctx.fillStyle = 'rgba(44, 40, 37, 0.10)'
-        ctx.fillRect(cardX + 3, cardY + 3, 140, 64)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
+        ctx.fillRect(cardX + 3, cardY + 3, cardW, cardH)
 
-        // Fundo do Cartão Flutuante (#ffffff)
-        ctx.fillStyle = '#ffffff'
-        ctx.fillRect(cardX, cardY, 140, 64)
+        // Fundo Glassmorphism Fosco (#0f172a / 90%)
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)'
+        ctx.fillRect(cardX, cardY, cardW, cardH)
 
-        // Borda + Cor do Departamento
+        // Borda Neon do Cartão
         ctx.strokeStyle = dept.cor
         ctx.lineWidth = 1.5
-        ctx.strokeRect(cardX, cardY, 140, 64)
+        ctx.strokeRect(cardX, cardY, cardW, cardH)
 
-        // Top Header Card: Dot + Nome
+        // Top Header: Neon Dot + Nome
         ctx.fillStyle = dept.cor
         ctx.beginPath()
         ctx.arc(cardX + 10, cardY + 11, 3.5, 0, Math.PI * 2)
         ctx.fill()
 
         ctx.font = 'bold 9px sans-serif'
-        ctx.fillStyle = '#334155'
+        ctx.fillStyle = '#f8fafc'
         ctx.textAlign = 'left'
         ctx.fillText(dept.nome.toUpperCase(), cardX + 18, cardY + 14)
 
         // Agentes Contagem Grande
         ctx.font = 'bold 16px sans-serif'
-        ctx.fillStyle = '#0f172a'
+        ctx.fillStyle = '#f8fafc'
         ctx.fillText(`${ags.length}`, cardX + 10, cardY + 34)
 
         ctx.font = 'bold 8px sans-serif'
-        ctx.fillStyle = '#64748b'
+        ctx.fillStyle = '#94a3b8'
         ctx.fillText('agentes', cardX + 26, cardY + 34)
 
-        // Duas Linhas de Métrica
+        // Linhas de Métrica
         ctx.font = '8px sans-serif'
-        ctx.fillStyle = '#475569'
-        ctx.fillText(metric.m1, cardX + 70, cardY + 26)
-        ctx.fillText(metric.m2, cardX + 70, cardY + 36)
+        ctx.fillStyle = '#cbd5e1'
+        ctx.fillText(metric.m1, cardX + 75, cardY + 26)
+        ctx.fillText(metric.m2, cardX + 75, cardY + 36)
 
         // Rodapé Card: FAZENDO / PRÓXIMA / CONCLUÍDA
-        ctx.fillStyle = metric.aguardando_d2 ? '#fff7ed' : '#f8fafc'
-        ctx.fillRect(cardX, cardY + 46, 140, 18)
-        ctx.strokeStyle = metric.aguardando_d2 ? '#fdba74' : '#e2e8f0'
-        ctx.strokeRect(cardX, cardY + 46, 140, 18)
+        ctx.fillStyle = metric.aguardando_d2 ? 'rgba(194, 65, 12, 0.25)' : '#1e293b'
+        ctx.fillRect(cardX, cardY + 46, cardW, 18)
+        ctx.strokeStyle = metric.aguardando_d2 ? '#f97316' : '#334155'
+        ctx.strokeRect(cardX, cardY + 46, cardW, 18)
 
         const txtRodape = metric.aguardando_d2
           ? 'aguardando o dono (D2)'
           : `FAZENDO ${metric.doing} · PRÓXIMA ${metric.next} · FEITAS ${metric.done}`
 
         ctx.font = 'bold 8px sans-serif'
-        ctx.fillStyle = metric.aguardando_d2 ? '#c2410c' : '#1e293b'
-        ctx.fillText(txtRodape, cardX + (metric.aguardando_d2 ? 14 : 8), cardY + 58)
+        ctx.fillStyle = metric.aguardando_d2 ? '#fb923c' : '#f8fafc'
+        ctx.fillText(txtRodape, cardX + (metric.aguardando_d2 ? 16 : 8), cardY + 58)
 
         ctx.restore()
       })
@@ -761,7 +843,7 @@ export function PixelOffice({
 
     render()
     return () => cancelAnimationFrame(frame)
-  }, [agentesPorSquad, ativos, diretoresEstado, estado, foco, metricasSquad, pan, reduzirMovimento, zoom])
+  }, [agentesPorSquad, ativos, diretoresEstado, estado, filtroAgentes, foco, metricasSquad, pan, reduzirMovimento, zoom])
 
   const selecionarNoCanvas = (evento: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -838,35 +920,35 @@ export function PixelOffice({
   const textoBrainNotasRight = nosCountRight != null ? `${nosCountRight} NOTAS` : 'sem dado'
 
   return (
-    <div className="flex flex-col gap-4 font-sans text-tinta">
-      {/* BARRA SUPERIOR (TOP BAR) */}
-      <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-linha bg-[#fdfaf3] px-4 py-2.5 shadow-sm">
+    <div className="flex flex-col gap-4 font-sans text-slate-100">
+      {/* BARRA SUPERIOR (TOP BAR DARK HUD) */}
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-[#0f172a]/90 px-4 py-2.5 shadow-lg backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <span className="font-extrabold text-xs tracking-wider text-tinta uppercase">
-            AGENTS OFFICE <span className="text-tinta-2 font-normal">v3</span>
+          <span className="font-extrabold text-xs tracking-wider text-white uppercase">
+            AGENTS OFFICE <span className="text-cyan-400 font-normal">v3 HUD</span>
           </span>
-          <span className="hidden text-tinta-2 text-xs sm:inline">·</span>
-          <div className="flex items-center gap-1.5 text-xs text-tinta-2">
-            <span className="size-2 rounded-full bg-verde animate-pulse" />
+          <span className="hidden text-slate-500 text-xs sm:inline">·</span>
+          <div className="flex items-center gap-1.5 text-xs text-slate-300">
+            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="font-medium">Conectado a</span>
             <div className="flex items-center gap-1">
-              <span className="rounded bg-[#0284c7]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#0284c7]">Meta</span>
-              <span className="rounded bg-[#16a34a]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#16a34a]">OpenAI</span>
-              <span className="rounded bg-[#d97706]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#d97706]">Claude</span>
-              <span className="rounded bg-[#8b5cf6]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#8b5cf6]">Composio</span>
+              <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-bold text-sky-400 border border-sky-500/30">Meta</span>
+              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">OpenAI</span>
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/30">Claude</span>
+              <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold text-purple-400 border border-purple-500/30">Composio</span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-tinta-2">
-            <span className="size-2 rounded-full bg-verde" />
+          <div className="flex items-center gap-1.5 text-xs text-slate-300">
+            <span className="size-2 rounded-full bg-emerald-400" />
             <span className="font-medium">Roda em</span>
-            <span className="rounded bg-[#f59e0b]/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#b45309]">
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-400 border border-amber-500/30">
               PAINEL OS
             </span>
           </div>
-          <span className="font-mono text-xs font-bold text-tinta">
+          <span className="font-mono text-xs font-bold text-white">
             {horaLocal}
           </span>
         </div>
@@ -874,13 +956,13 @@ export function PixelOffice({
 
       {/* ÁREA PRINCIPAL: CANVAS ISOMÉTRICO (ESQUERDA) + PAINEL LATERAL DIREITO */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* CANVAS INTERATIVO 2.5D (ESQUERDA - 8 colunas) */}
+        {/* CANVAS INTERATIVO 2.5D DARK HUD (ESQUERDA - 8 colunas) */}
         <div
           ref={containerRef}
           tabIndex={0}
           role="region"
-          aria-label="Escritório virtual dos agentes em 2.5D"
-          className="relative min-h-[480px] w-full overflow-hidden rounded-xl border border-linha bg-[#f7f1e6] shadow-sm lg:col-span-8 lg:min-h-[580px]"
+          aria-label="Escritório virtual dos agentes em 2.5D HUD"
+          className="relative min-h-[480px] w-full overflow-hidden rounded-xl border border-slate-800 bg-[#070a12] shadow-xl lg:col-span-8 lg:min-h-[580px]"
         >
           <canvas
             ref={canvasRef}
@@ -896,17 +978,55 @@ export function PixelOffice({
             className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
           />
 
+          {/* SELETOR DE FILTRO DE AGENTES (CANTO SUPERIOR ESQUERDO) */}
+          <div className="pointer-events-auto absolute top-3 left-3 flex items-center gap-1.5 rounded-lg border border-slate-800 bg-[#0f172a]/95 p-1.5 shadow-lg backdrop-blur-md">
+            <span className="px-1 font-extrabold text-[10px] tracking-wider text-slate-400 uppercase">Ver Agentes:</span>
+            <button
+              type="button"
+              onClick={() => setFiltroAgentes('todos')}
+              className={`rounded px-2.5 py-1 font-extrabold text-[10px] transition-colors ${
+                filtroAgentes === 'todos'
+                  ? 'bg-sky-500 text-slate-950 shadow-sm'
+                  : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              Todos ({catalogoVisual.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroAgentes('vivos')}
+              className={`rounded px-2.5 py-1 font-extrabold text-[10px] transition-colors ${
+                filtroAgentes === 'vivos'
+                  ? 'bg-amber-500 text-slate-950 shadow-sm'
+                  : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              Vivos ({catalogoVisual.filter((ag) => ativos.has(ag.id) || ['luana', 'renato', 'bia'].includes(ag.id)).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroAgentes('ativos')}
+              className={`rounded px-2.5 py-1 font-extrabold text-[10px] transition-colors ${
+                filtroAgentes === 'ativos'
+                  ? 'bg-emerald-500 text-slate-950 shadow-sm animate-pulse'
+                  : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              ⚡ Somente Ativos ({ativos.size})
+            </button>
+          </div>
+
           {/* LEGENDAS DE INSTRUÇÃO NO CANTO INFERIOR ESQUERDO */}
-          <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-linha bg-[#fdfaf3]/90 px-3 py-1.5 text-[10px] text-tinta-2 shadow-sm backdrop-blur-sm">
+          <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-slate-800 bg-[#0f172a]/90 px-3 py-1.5 text-[10px] text-slate-300 shadow-lg backdrop-blur-md">
             Arraste para mover · Roda do mouse para Zoom · Clique nas plataformas
           </div>
 
           {/* CONTROLES DE CANVAS (CANTO INFERIOR DIREITO: +, -, RESET) */}
-          <div className="pointer-events-auto absolute bottom-3 right-3 flex flex-col gap-1 rounded-lg border border-linha bg-[#fdfaf3] p-1 shadow-md">
+          <div className="pointer-events-auto absolute bottom-3 right-3 flex flex-col gap-1 rounded-lg border border-slate-800 bg-[#0f172a] p-1 shadow-xl">
             <button
               type="button"
               onClick={() => setZoom((v) => arredondarZoom(v + 0.15))}
-              className="flex size-7 items-center justify-center rounded border border-linha bg-fundo text-xs font-bold text-tinta hover:bg-white active:scale-95"
+              className="flex size-7 items-center justify-center rounded border border-slate-700 bg-slate-900 text-xs font-bold text-white hover:bg-slate-800 active:scale-95"
               title="Aumentar Zoom"
             >
               +
@@ -914,7 +1034,7 @@ export function PixelOffice({
             <button
               type="button"
               onClick={() => setZoom((v) => arredondarZoom(v - 0.15))}
-              className="flex size-7 items-center justify-center rounded border border-linha bg-fundo text-xs font-bold text-tinta hover:bg-white active:scale-95"
+              className="flex size-7 items-center justify-center rounded border border-slate-700 bg-slate-900 text-xs font-bold text-white hover:bg-slate-800 active:scale-95"
               title="Diminuir Zoom"
             >
               −
@@ -922,7 +1042,7 @@ export function PixelOffice({
             <button
               type="button"
               onClick={resetView}
-              className="flex size-7 items-center justify-center rounded border border-linha bg-fundo text-[12px] font-bold text-tinta hover:bg-white active:scale-95"
+              className="flex size-7 items-center justify-center rounded border border-slate-700 bg-slate-900 text-[12px] font-bold text-white hover:bg-slate-800 active:scale-95"
               title="Resetar Visão"
             >
               ⌂
@@ -931,33 +1051,33 @@ export function PixelOffice({
         </div>
 
         {/* PAINEL LATERAL DIREITO (STATUS DE TAREFAS & BARRA DE BUSCA - 4 colunas) */}
-        <aside className="flex flex-col gap-3 rounded-xl border border-linha bg-[#fdfaf3] p-4 shadow-sm lg:col-span-4">
+        <aside className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-[#0f172a]/90 p-4 shadow-xl backdrop-blur-md lg:col-span-4">
           {/* BARRA DE TAREFAS (TASK SEARCH / INPUT BAR) */}
           <form onSubmit={adicionarTarefa} className="flex flex-col gap-2">
-            <div className="flex items-center rounded-lg border border-linha bg-white p-1 shadow-sm">
+            <div className="flex items-center rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-inner">
               <select
                 value={departamentoTarefa}
                 onChange={(e) => setDepartamentoTarefa(e.target.value)}
-                className="cursor-pointer bg-transparent px-2 text-xs font-bold text-tinta focus:outline-none"
+                className="cursor-pointer bg-transparent px-2 text-xs font-bold text-amber-400 focus:outline-none"
               >
-                <option value="luana">● LUANA</option>
-                <option value="conteúdo">● CONTEÚDO</option>
-                <option value="comercial">● COMERCIAL</option>
-                <option value="bots">● BOTS</option>
-                <option value="tráfego">● TRÁFEGO</option>
-                <option value="globais">● GLOBAIS</option>
+                <option value="luana" className="bg-slate-900 text-white">● LUANA</option>
+                <option value="conteúdo" className="bg-slate-900 text-white">● CONTEÚDO</option>
+                <option value="comercial" className="bg-slate-900 text-white">● COMERCIAL</option>
+                <option value="bots" className="bg-slate-900 text-white">● BOTS</option>
+                <option value="tráfego" className="bg-slate-900 text-white">● TRÁFEGO</option>
+                <option value="globais" className="bg-slate-900 text-white">● GLOBAIS</option>
               </select>
               <input
                 type="text"
                 value={textoNovaTarefa}
                 onChange={(e) => setTextoNovaTarefa(e.target.value)}
                 placeholder={`Digite uma tarefa para ${departamentoTarefa}...`}
-                className="w-full min-w-0 bg-transparent px-2 text-xs text-tinta placeholder:text-tinta-2 focus:outline-none"
+                className="w-full min-w-0 bg-transparent px-2 text-xs text-white placeholder:text-slate-500 focus:outline-none"
               />
               <button
                 type="submit"
                 disabled={enviandoTarefa || !textoNovaTarefa.trim()}
-                className="rounded-md bg-black px-3 py-1 text-xs font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="rounded-md bg-amber-500 px-3 py-1 text-xs font-bold text-slate-950 transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 {enviandoTarefa ? '...' : 'Enviar'}
               </button>
@@ -965,15 +1085,15 @@ export function PixelOffice({
           </form>
 
           {/* CARTÃO DE DESTAQUE DO HUB CENTRAL (O CÉRABRO) */}
-          <div className="rounded-lg border border-ambar/30 bg-ambar/10 p-3">
+          <div className="rounded-lg border border-sky-500/30 bg-sky-950/40 p-3 backdrop-blur-sm">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-tinta-forte">
-                O CÉREBRO <span className="font-normal text-tinta-2">{textoBrainNotasRight}</span>
+              <span className="font-bold text-xs text-sky-400">
+                O CÉREBRO <span className="font-normal text-slate-400">{textoBrainNotasRight}</span>
               </span>
             </div>
             <a
               href="#cofre"
-              className="mt-2 inline-block font-bold text-xs text-ambar hover:underline"
+              className="mt-2 inline-block font-bold text-xs text-sky-400 hover:underline"
             >
               Abrir o Cérebro →
             </a>
@@ -983,11 +1103,11 @@ export function PixelOffice({
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-xs tracking-wider text-tinta uppercase">
+                <span className="font-extrabold text-xs tracking-wider text-white uppercase">
                   Tarefas
                 </span>
               </div>
-              <span className="text-[11px] font-bold text-tinta-2">Todo o escritório</span>
+              <span className="text-[11px] font-bold text-slate-400">Todo o escritório</span>
             </div>
 
             {/* FILTROS EM PÍLULA */}
@@ -996,7 +1116,7 @@ export function PixelOffice({
                 type="button"
                 onClick={() => setFiltroStatus('Todas')}
                 className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Todas' ? 'bg-black text-white' : 'bg-linha text-tinta-2 hover:bg-black/10'
+                  filtroStatus === 'Todas' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                 }`}
               >
                 Todas {tarefas.length}
@@ -1005,7 +1125,7 @@ export function PixelOffice({
                 type="button"
                 onClick={() => setFiltroStatus('Na fila')}
                 className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Na fila' ? 'bg-black text-white' : 'bg-linha text-tinta-2 hover:bg-black/10'
+                  filtroStatus === 'Na fila' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                 }`}
               >
                 Na fila {tarefas.filter((t) => t.estado === 'aguardando').length}
@@ -1014,7 +1134,7 @@ export function PixelOffice({
                 type="button"
                 onClick={() => setFiltroStatus('Fazendo')}
                 className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Fazendo' ? 'bg-black text-white' : 'bg-linha text-tinta-2 hover:bg-black/10'
+                  filtroStatus === 'Fazendo' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                 }`}
               >
                 Fazendo {tarefas.filter((t) => t.estado === 'em_andamento').length}
@@ -1023,7 +1143,7 @@ export function PixelOffice({
                 type="button"
                 onClick={() => setFiltroStatus('Esperando')}
                 className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Esperando' ? 'bg-black text-white' : 'bg-linha text-tinta-2 hover:bg-black/10'
+                  filtroStatus === 'Esperando' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                 }`}
               >
                 Esperando 0
@@ -1032,7 +1152,7 @@ export function PixelOffice({
                 type="button"
                 onClick={() => setFiltroStatus('Feitas')}
                 className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Feitas' ? 'bg-black text-white' : 'bg-linha text-tinta-2 hover:bg-black/10'
+                  filtroStatus === 'Feitas' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                 }`}
               >
                 Feitas {tarefas.filter((t) => t.estado === 'feito').length}
@@ -1043,7 +1163,7 @@ export function PixelOffice({
           {/* LISTA VERTICAL DE TAREFAS */}
           <div className="flex max-h-[380px] flex-col gap-2 overflow-y-auto pr-1">
             {tarefasFiltradas.length === 0 ? (
-              <div className="p-4 text-center text-xs text-tinta-2">
+              <div className="p-4 text-center text-xs text-slate-400">
                 Nenhuma tarefa na fila ainda
               </div>
             ) : (
@@ -1052,20 +1172,20 @@ export function PixelOffice({
                 return (
                   <div
                     key={item.id}
-                    className="flex flex-col gap-1.5 rounded-lg border border-linha bg-white p-3 shadow-sm"
+                    className="flex flex-col gap-1.5 rounded-lg border border-slate-800 bg-slate-900/80 p-3 shadow-sm"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="rounded bg-[#f59e0b]/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#b45309]">
+                        <span className="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-400">
                           NA FILA
                         </span>
-                        <span className="font-semibold text-xs text-tinta leading-snug">
+                        <span className="font-semibold text-xs text-slate-200 leading-snug">
                           {item.texto}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[10px] font-medium text-tinta-2">
+                    <div className="flex items-center justify-between text-[10px] font-medium text-slate-400">
                       <span>aguardando {alvo}</span>
                       <span className="uppercase">TAREFA · {item.departamento}</span>
                     </div>
