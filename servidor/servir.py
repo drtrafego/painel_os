@@ -871,12 +871,28 @@ class Manipulador(SimpleHTTPRequestHandler):
             # Falha FECHADA: sem credencial válida no servidor, ninguém entra.
             self._recusar(503, str(e))
             return False
-        if not credencial_confere(
-            self.headers.get("Authorization", ""), usuario_ok, senha_ok
-        ):
+
+        auth_hdr = self.headers.get("Authorization", "")
+        if not auth_hdr:
+            cookie_hdr = self.headers.get("Cookie", "")
+            if "painel_os_auth=" in cookie_hdr:
+                for chunk in cookie_hdr.split(";"):
+                    if "painel_os_auth=" in chunk:
+                        val = chunk.split("painel_os_auth=", 1)[1].strip()
+                        if val:
+                            auth_hdr = f"Basic {val}"
+                            break
+
+        if not credencial_confere(auth_hdr, usuario_ok, senha_ok):
             time.sleep(ATRASO_FALHA)
             self._recusar(401, None)
             return False
+
+        if auth_hdr.startswith("Basic "):
+            self._auth_valida_b64 = auth_hdr.split(" ", 1)[1].strip()
+        else:
+            self._auth_valida_b64 = None
+
         return True
 
     def _recusar(self, codigo: int, motivo: str | None) -> None:
@@ -1095,6 +1111,11 @@ class Manipulador(SimpleHTTPRequestHandler):
         if getattr(self, "_sem_cache", False) or caminho.endswith(".html") or caminho == "/":
             self.send_header("Cache-Control", "no-store")
             self._sem_cache = False  # não duplicar o header
+        if getattr(self, "_auth_valida_b64", None):
+            self.send_header(
+                "Set-Cookie",
+                f"painel_os_auth={self._auth_valida_b64}; Max-Age=2592000; Path=/; SameSite=Lax",
+            )
         # Valem também no acesso temporário por HTTP direto. O nginx repete as
         # mesmas defesas depois do TLS; proteção não pode depender de uma rota.
         self.send_header("X-Content-Type-Options", "nosniff")
