@@ -56,6 +56,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import shutil
 import stat as stat_mod
 import subprocess
@@ -169,6 +170,16 @@ MAXIMO_REQUISICOES = 32
 ARTEFATO_MAX_BYTES = 300_000_000
 PACOTE_MAX_BYTES = 1_000_000_000
 
+# Sessão por cookie (25/09/2026, conserto do cookie painel_os_auth, que
+# carregava a senha em base64). Token opaco de alta entropia; só o SHA-256
+# dele mora em disco. 30 dias contados do LOGIN, sem renovar a cada resposta
+# (renovar a cada resposta era o que fazia a sessão nunca expirar de fato).
+SESSOES = RAIZ / "data" / "sessoes.json"
+SESSAO_DURACAO_S = 30 * 24 * 60 * 60
+NOME_COOKIE_SESSAO = "painel_os_sessao"
+NOME_COOKIE_LEGADO = "painel_os_auth"
+_trava_sessoes = threading.Lock()
+
 
 class CredencialQuebrada(RuntimeError):
     """O servidor não consegue saber quem é quem. Recusa tudo, e diz por quê."""
@@ -253,6 +264,136 @@ def credencial_confere(cabecalho: str, usuario_ok: bytes, senha_ok: bytes) -> bo
     certo_usuario = _igual(usuario, usuario_ok)
     certa_senha = _igual(senha, senha_ok)
     return certo_usuario and certa_senha
+
+
+# ------------------------------------------------------------------ sessão
+def _cookie_valor(cookie_hdr: str, nome: str) -> str:
+    """Primeiro cookie cujo nome bate exatamente. Não itera duplicatas de
+    propósito: mesmo comportamento simples que o parser antigo já tinha."""
+    alvo = f"{nome}="
+    for pedaco in (cookie_hdr or "").split(";"):
+        pedaco = pedaco.strip()
+        if pedaco.startswith(alvo):
+            return pedaco[len(alvo):].strip()
+    return ""
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _hash_credencial(usuario: bytes, senha: bytes) -> str:
+    """Muda sempre que a credencial no arquivo muda -> derruba sessão velha."""
+    return hashlib.sha256(usuario + b"\x00" + senha).hexdigest()
+
+
+def _ler_sessoes(caminho: Path = SESSOES) -> dict:
+    if not caminho.is_file():
+        return {"sessoes": {}}
+    try:
+        dados = json.loads(caminho.read_text(encoding="utf-8"))
+        if isinstance(dados, dict) and isinstance(dados.get("sessoes"), dict):
+            return dados
+    except Exception:
+        pass
+    return {"sessoes": {}}
+
+
+def _gravar_sessoes_atomico(dados: dict, caminho: Path = SESSOES) -> None:
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporario = tempfile.mkstemp(prefix=".sessoes-", suffix=".tmp", dir=caminho.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        if os.name != "nt":
+            os.chmod(temporario, 0o600)
+        os.replace(temporario, caminho)
+        if hasattr(os, "O_DIRECTORY"):
+            dirfd = os.open(caminho.parent, os.O_DIRECTORY)
+            try:
+                os.fsync(dirfd)
+            finally:
+                os.close(dirfd)
+    finally:
+        if os.path.exists(temporario):
+            os.unlink(temporario)
+
+
+def _achar_sessao(hash_token: str, dados: dict) -> tuple[str, dict] | None:
+    """Busca por comparação em tempo constante em vez do `in`/`[]` nativo do
+    dict, mesma disciplina de `_igual` para a credencial."""
+    alvo = hash_token.encode("utf-8")
+    for chave, registro in dados.get("sessoes", {}).items():
+        if isinstance(chave, str) and hmac.compare_digest(chave.encode("utf-8"), alvo):
+            return chave, registro
+    return None
+
+
+def _podar_sessoes_expiradas(dados: dict, agora: float) -> bool:
+    sessoes = dados.get("sessoes", {})
+    vencidas = [k for k, v in sessoes.items() if not isinstance(v, dict) or agora > float(v.get("expira_em", 0))]
+    for k in vencidas:
+        sessoes.pop(k, None)
+    return bool(vencidas)
+
+
+def criar_sessao(usuario: bytes, senha: bytes, caminho: Path = SESSOES) -> str:
+    """Cria uma sessão nova (só o LOGIN chama isto). Grava só o hash do
+    token; o valor cru só existe neste retorno e no cookie do navegador."""
+    token = secrets.token_urlsafe(32)
+    agora_dt = datetime.now(timezone.utc)
+    registro = {
+        "usuario": usuario.decode("utf-8", "replace"),
+        "criado_em": agora_dt.isoformat(),
+        "expira_em": agora_dt.timestamp() + SESSAO_DURACAO_S,
+        "credencial_hash": _hash_credencial(usuario, senha),
+    }
+    with _trava_sessoes:
+        dados = _ler_sessoes(caminho)
+        _podar_sessoes_expiradas(dados, agora_dt.timestamp())
+        dados["sessoes"][_hash_token(token)] = registro
+        _gravar_sessoes_atomico(dados, caminho)
+    return token
+
+
+def validar_sessao(token: str, usuario_ok: bytes, senha_ok: bytes, caminho: Path = SESSOES) -> bool:
+    if not token:
+        return False
+    hash_token = _hash_token(token)
+    with _trava_sessoes:
+        dados = _ler_sessoes(caminho)
+        achado = _achar_sessao(hash_token, dados)
+        if achado is None:
+            return False
+        chave, registro = achado
+        if not isinstance(registro, dict):
+            dados["sessoes"].pop(chave, None)
+            _gravar_sessoes_atomico(dados, caminho)
+            return False
+        expirado = time.time() > float(registro.get("expira_em", 0))
+        credencial_atual = _hash_credencial(usuario_ok, senha_ok).encode("utf-8")
+        credencial_gravada = str(registro.get("credencial_hash", "")).encode("utf-8")
+        credencial_bate = hmac.compare_digest(credencial_gravada, credencial_atual)
+        if expirado or not credencial_bate:
+            dados["sessoes"].pop(chave, None)
+            _gravar_sessoes_atomico(dados, caminho)
+            return False
+        return True
+
+
+def remover_sessao(token: str, caminho: Path = SESSOES) -> None:
+    if not token:
+        return
+    hash_token = _hash_token(token)
+    with _trava_sessoes:
+        dados = _ler_sessoes(caminho)
+        achado = _achar_sessao(hash_token, dados)
+        if achado is not None:
+            dados["sessoes"].pop(achado[0], None)
+            _gravar_sessoes_atomico(dados, caminho)
 
 
 def _ler_estado() -> dict:
@@ -865,6 +1006,17 @@ class Manipulador(SimpleHTTPRequestHandler):
         """
         if not super().parse_request():
             return False
+
+        # Flags de cookie para end_headers. Default: nada muda.
+        self._cookie_sessao_novo: str | None = None
+        self._cookie_sessao_apagar = False
+        cookie_hdr = self.headers.get("Cookie", "")
+        # O cookie antigo deixou de ser aceito (25/09/2026: carregava a senha
+        # em base64). Sinaliza para apagar em QUALQUER resposta em que ele
+        # aparecer, autenticada ou não, mesmo antes de saber se o request vai
+        # passar.
+        self._cookie_legado_apagar = bool(_cookie_valor(cookie_hdr, NOME_COOKIE_LEGADO))
+
         try:
             usuario_ok, senha_ok = ler_credencial()
         except CredencialQuebrada as e:
@@ -872,27 +1024,21 @@ class Manipulador(SimpleHTTPRequestHandler):
             self._recusar(503, str(e))
             return False
 
-        auth_hdr = self.headers.get("Authorization", "")
-        if not auth_hdr:
-            cookie_hdr = self.headers.get("Cookie", "")
-            if "painel_os_auth=" in cookie_hdr:
-                for chunk in cookie_hdr.split(";"):
-                    if "painel_os_auth=" in chunk:
-                        val = chunk.split("painel_os_auth=", 1)[1].strip()
-                        if val:
-                            auth_hdr = f"Basic {val}"
-                            break
+        # 1) Sessão por cookie válida -> autenticado, sem tocar em nada.
+        token_sessao = _cookie_valor(cookie_hdr, NOME_COOKIE_SESSAO)
+        if token_sessao and validar_sessao(token_sessao, usuario_ok, senha_ok, SESSOES):
+            return True
 
+        # 2) Sem sessão (ou sessão vencida/inválida): só entra via Basic Auth,
+        # e isso É um login -> cria sessão nova e pede pro navegador guardar
+        # o cookie. Nunca reaproveita a sessão vencida encontrada acima.
+        auth_hdr = self.headers.get("Authorization", "")
         if not credencial_confere(auth_hdr, usuario_ok, senha_ok):
             time.sleep(ATRASO_FALHA)
             self._recusar(401, None)
             return False
 
-        if auth_hdr.startswith("Basic "):
-            self._auth_valida_b64 = auth_hdr.split(" ", 1)[1].strip()
-        else:
-            self._auth_valida_b64 = None
-
+        self._cookie_sessao_novo = criar_sessao(usuario_ok, senha_ok, SESSOES)
         return True
 
     def _recusar(self, codigo: int, motivo: str | None) -> None:
@@ -1065,6 +1211,32 @@ class Manipulador(SimpleHTTPRequestHandler):
                 self._json(400, {"ok": False, "erro": f"JSON inválido: {e}"})
             return
 
+        if rota == "/api/logout":
+            servidor_endereco = str(self.server.server_address[0])
+            cliente_endereco = str(self.client_address[0]) if self.client_address else ""
+            if not canal_decisao_seguro(
+                servidor_endereco, cliente_endereco,
+                self.headers.get("X-Forwarded-Proto", ""),
+                HTTPS_ATIVO,
+            ):
+                self._json(503, {"erro": "ação indisponível até o HTTPS estar ativo"})
+                return
+            if self.headers.get("X-Painel-Intent") != "logout":
+                self._json(400, {"erro": "intenção humana ausente"})
+                return
+            try:
+                tamanho = int(self.headers.get("Content-Length", "0") or "0")
+            except ValueError:
+                tamanho = 0
+            if tamanho > 0:
+                self.rfile.read(min(tamanho, 4096))
+            token = _cookie_valor(self.headers.get("Cookie", ""), NOME_COOKIE_SESSAO)
+            remover_sessao(token, SESSOES)
+            self._cookie_sessao_novo = None
+            self._cookie_sessao_apagar = True
+            self._json(200, {"ok": True})
+            return
+
         if rota not in {"/api/aprovacoes/decidir", "/api/estudio/aprovacoes"}:
             self._json(404, {"erro": "rota não encontrada"})
             return
@@ -1111,10 +1283,27 @@ class Manipulador(SimpleHTTPRequestHandler):
         if getattr(self, "_sem_cache", False) or caminho.endswith(".html") or caminho == "/":
             self.send_header("Cache-Control", "no-store")
             self._sem_cache = False  # não duplicar o header
-        if getattr(self, "_auth_valida_b64", None):
+        # Cookie de sessão: só sai no LOGIN (token novo) ou no LOGOUT (apagar).
+        # Numa resposta comum, autenticada por sessão já válida, nenhum dos
+        # dois dispara, e o Max-Age não se renova sozinho a cada request.
+        novo_token = getattr(self, "_cookie_sessao_novo", None)
+        if novo_token:
             self.send_header(
                 "Set-Cookie",
-                f"painel_os_auth={self._auth_valida_b64}; Max-Age=2592000; Path=/; SameSite=Lax",
+                f"{NOME_COOKIE_SESSAO}={novo_token}; Max-Age={SESSAO_DURACAO_S}; "
+                "Path=/; HttpOnly; Secure; SameSite=Lax",
+            )
+        elif getattr(self, "_cookie_sessao_apagar", False):
+            self.send_header(
+                "Set-Cookie",
+                f"{NOME_COOKIE_SESSAO}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax",
+            )
+        if getattr(self, "_cookie_legado_apagar", False):
+            # O cookie velho carregava base64(usuario:senha). Some daqui pra
+            # frente, em toda resposta em que o navegador ainda o mandar.
+            self.send_header(
+                "Set-Cookie",
+                f"{NOME_COOKIE_LEGADO}=; Max-Age=0; Path=/; SameSite=Lax",
             )
         # Valem também no acesso temporário por HTTP direto. O nginx repete as
         # mesmas defesas depois do TLS; proteção não pode depender de uma rota.

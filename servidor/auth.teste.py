@@ -100,6 +100,7 @@ def main() -> int:
 
     escreve(f"# comentário ignorado\n\n{USUARIO}:{SENHA}\n")
     servir.CREDENCIAL = cred  # só no processo de teste; o servidor real não muda
+    servir.SESSOES = pasta / "sessoes.json"  # idem: nunca tocar em data/sessoes.json real
     servir.ATRASO_FALHA = 0.0  # o atraso é anti-varredura, não faz parte do que se prova
 
     srv, porta = sobe(partial(servir.Manipulador, directory=str(servir.DIST)))
