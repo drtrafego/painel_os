@@ -6,7 +6,7 @@
 
 import { corDaSessao } from '../ui/paleta'
 
-export type PixelAgentSquad = 'coordenação' | 'radar' | 'conteúdo' | 'comercial' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex'
+export type PixelAgentSquad = 'coordenação' | 'bots' | 'tráfego' | 'radar' | 'conteúdo' | 'comercial' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex'
 
 export type PixelAgent = {
   id: string
@@ -36,14 +36,16 @@ export function zoomParaEnquadrar(largura: number, altura: number, quantidade: n
 }
 
 export const PIXEL_AGENT_SQUADS: Array<{ id: PixelAgentSquad; nome: string; cor: string }> = [
-  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#c084fc' },
+  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16' },
+  { id: 'bots', nome: 'RENATO / BOTS', cor: '#c2410c' },
+  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#8b5cf6' },
+  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#d97706' },
+  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#16a34a' },
   { id: 'radar', nome: 'RADAR', cor: '#38bdf8' },
-  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#a3e635' },
-  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#f59e0b' },
   { id: 'destinos', nome: 'DESTINOS', cor: '#fb923c' },
   { id: 'análise', nome: 'DESTINOS / ANÁLISE', cor: '#facc15' },
-  { id: 'globais', nome: 'GLOBAIS', cor: '#60a5fa' },
-  { id: 'pipeline Codex', nome: 'PIPELINE CODEX', cor: '#f472b6' },
+  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4' },
+  { id: 'pipeline Codex', nome: 'PIPELINE CODEX', cor: '#ec4899' },
 ]
 
 export const PIXEL_AGENTS: PixelAgent[] = [
@@ -251,12 +253,17 @@ export function mesclarRuntimesNoCatalogo(
 const normalizarSquad = (squad: string): PixelAgentSquad => {
   if (squad === 'global') return 'globais'
   if (squad === 'conteudo') return 'conteúdo'
+  if (squad === 'comercial') return 'comercial'
+  if (squad === 'renato' || squad === 'bots') return 'bots'
+  if (squad === 'bia' || squad === 'tráfego' || squad === 'trafego') return 'tráfego'
+  if (squad === 'radar') return 'radar'
+  if (squad === 'destinos') return 'destinos'
+  if (squad === 'análise' || squad === 'analise') return 'análise'
   return 'coordenação'
 }
 
-const corDaSessaoPixel = (sessaoId: string, index: number) => {
-  if (sessaoId === 'renato') return corDaSessao(sessaoId)
-  return index % 2 ? '#22d3ee' : '#c084fc'
+const corDaSessaoPixel = (sessaoId: string, _index: number) => {
+  return corDaSessao(sessaoId)
 }
 
 /** Une o catálogo estático vigente aos registros medidos no estado do painel. */
@@ -268,6 +275,9 @@ export function montarCatalogoPixel(agentes: Array<{ id: string; nome: string; d
     catalogo.push(item)
   }
   agentes.forEach((agente, index) => inserir({ id: agente.id, nome: agente.nome || agente.id, papel: agente.descricao?.split(':')[0] || 'Agente operacional', squad: normalizarSquad(agente.squad), área: agente.squad, abreviação: (agente.nome || agente.id).slice(0, 2).toUpperCase(), cor: PIXEL_AGENT_SQUADS[index % PIXEL_AGENT_SQUADS.length].cor, descricao: agente.descricao }))
-  sessoes.filter((sessao) => sessao.id !== 'gastao' && sessao.nome.toLowerCase() !== 'gastão').forEach((sessao, index) => inserir({ id: sessao.id, nome: sessao.nome, papel: sessao.papel, squad: 'coordenação', área: sessao.camada, abreviação: sessao.nome.slice(0, 2).toUpperCase(), cor: corDaSessaoPixel(sessao.id, index), descricao: sessao.resumo }))
+  sessoes.filter((sessao) => sessao.id !== 'gastao' && sessao.nome.toLowerCase() !== 'gastão').forEach((sessao, index) => {
+    const squadSessao: PixelAgentSquad = sessao.id === 'renato' ? 'bots' : sessao.id === 'bia' ? 'tráfego' : 'coordenação'
+    inserir({ id: sessao.id, nome: sessao.nome, papel: sessao.papel, squad: squadSessao, área: sessao.camada, abreviação: sessao.nome.slice(0, 2).toUpperCase(), cor: corDaSessaoPixel(sessao.id, index), descricao: sessao.resumo })
+  })
   return catalogo
 }

@@ -367,6 +367,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
           <PixelOffice
             agentes={listaVivos}
             catalogo={catalogoPixel}
+            estado={estado}
             aoSelecionarAgente={(id) => setAgenteInspecionado(id)}
             agenteSelecionadoId={agenteInspecionado}
           />

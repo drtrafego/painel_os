@@ -152,6 +152,7 @@ LIMITE_ESPERA_COLETA = 8.0
 APROVACOES = RAIZ / "data" / "aprovacoes.json"
 POSTS_JSON = Path("/opt/gastaomatos/produtor_conteudo/data/posts.json")
 ARTEFATOS_RAIZ = Path("/opt/gastaomatos/produtor_conteudo/out").resolve()
+FILA_TAREFAS = RAIZ / "data" / "fila_tarefas.json"
 HTTPS_ATIVO = RAIZ / "servidor" / ".https-ativo"
 APROVACAO_ESTADOS_FINAIS = {"aprovado", "reprovado", "cancelado"}
 APROVACAO_TIPOS = {"conteudo", "documento", "campanha", "outro"}
@@ -160,8 +161,10 @@ ROTAS_API_VALIDAS = {
     "/api/agentes-vivos",
     "/api/ferramentas/acessos",
     "/api/estudio/artefato",
+    "/api/tarefas",
 }
 _trava_aprovacoes = threading.Lock()
+_trava_tarefas = threading.Lock()
 MAXIMO_REQUISICOES = 32
 ARTEFATO_MAX_BYTES = 300_000_000
 PACOTE_MAX_BYTES = 1_000_000_000
@@ -776,6 +779,75 @@ def enviar_aprovacao(pedido: object, caminho: Path = APROVACOES,
         return 201, {"id": item_id, "estado": "aguardando", "idempotente": False, "publicado": False}
 
 
+def _ler_fila_tarefas(caminho: Path = FILA_TAREFAS) -> dict:
+    if not caminho.is_file():
+        return {"schema_version": 1, "tarefas": []}
+    try:
+        dados = json.loads(caminho.read_text(encoding="utf-8"))
+        if isinstance(dados, dict) and isinstance(dados.get("tarefas"), list):
+            return dados
+    except Exception:
+        pass
+    return {"schema_version": 1, "tarefas": []}
+
+
+def _gravar_fila_tarefas_atomico(dados: dict, caminho: Path = FILA_TAREFAS) -> None:
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporario = tempfile.mkstemp(prefix=".tarefas-", suffix=".tmp", dir=caminho.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        if os.name != "nt":
+            os.chmod(temporario, 0o600)
+        os.replace(temporario, caminho)
+        if hasattr(os, "O_DIRECTORY"):
+            dirfd = os.open(caminho.parent, os.O_DIRECTORY)
+            try:
+                os.fsync(dirfd)
+            finally:
+                os.close(dirfd)
+    finally:
+        if os.path.exists(temporario):
+            os.unlink(temporario)
+
+
+def criar_tarefa(pedido: object, caminho: Path = FILA_TAREFAS) -> tuple[int, dict]:
+    if not isinstance(pedido, dict):
+        return 400, {"ok": False, "erro": "payload deve ser um objeto JSON"}
+    texto = pedido.get("texto")
+    departamento = pedido.get("departamento", "luana")
+    if not isinstance(texto, str) or not texto.strip():
+        return 400, {"ok": False, "erro": "texto da tarefa é obrigatório"}
+    if len(texto) > 500:
+        return 400, {"ok": False, "erro": "texto longo demais"}
+    if not isinstance(departamento, str) or not departamento.strip():
+        departamento = "luana"
+
+    agora_iso = datetime.now(timezone.utc).isoformat()
+    raw_id = f"{time.time_ns()}_{texto[:30]}"
+    task_id = f"tar_{hashlib.sha256(raw_id.encode()).hexdigest()[:12]}"
+
+    nova_tarefa = {
+        "id": task_id,
+        "texto": texto.strip(),
+        "departamento": departamento.strip().lower(),
+        "estado": "aguardando",
+        "criado_em": agora_iso,
+        "resultado": None,
+    }
+
+    with _trava_tarefas:
+        dados = _ler_fila_tarefas(caminho)
+        tarefas = dados.setdefault("tarefas", [])
+        tarefas.insert(0, nova_tarefa)
+        _gravar_fila_tarefas_atomico(dados, caminho)
+
+    return 200, {"ok": True, "tarefa": nova_tarefa}
+
+
 class Manipulador(SimpleHTTPRequestHandler):
 
     server_version = "PainelOS"
@@ -898,6 +970,13 @@ class Manipulador(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(corpo)
             return
+        if rota.path == "/api/tarefas":
+            try:
+                dados = _ler_fila_tarefas()
+                self._json(200, dados)
+            except Exception as e:
+                self._json(500, {"ok": False, "erro": str(e), "tarefas": []})
+            return
         if rota.path == "/api/estudio/artefato":
             if not canal_decisao_seguro(
                 str(self.server.server_address[0]),
@@ -956,6 +1035,20 @@ class Manipulador(SimpleHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         rota = self.path.split("?")[0]
+        if rota == "/api/tarefas":
+            try:
+                tamanho = int(self.headers.get("Content-Length", "0"))
+                if tamanho <= 0 or tamanho > 10000:
+                    self._json(400, {"ok": False, "erro": "Content-Length inválido"})
+                    return
+                corpo = self.rfile.read(tamanho).decode("utf-8")
+                pedido = json.loads(corpo)
+                codigo, resp = criar_tarefa(pedido)
+                self._json(codigo, resp)
+            except Exception as e:
+                self._json(400, {"ok": False, "erro": f"JSON inválido: {e}"})
+            return
+
         if rota not in {"/api/aprovacoes/decidir", "/api/estudio/aprovacoes"}:
             self._json(404, {"erro": "rota não encontrada"})
             return
