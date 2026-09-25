@@ -38,6 +38,7 @@ import stat as stat_mod
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 import urllib.error
 import urllib.request
@@ -186,6 +187,34 @@ MAPA_PASTA_SQUAD = {
 
 def agora_utc():
     return datetime.now(timezone.utc)
+
+
+def gravar_atomico(caminho: Path, dado) -> None:
+    """Escreve JSON atômico (tmp + os.replace) para os caches de leitura externa.
+
+    BUG LATENTE CORRIGIDO EM 25/09/2026: esta função era chamada em três
+    lugares (`ler_uso_planos`, `ler_financeiro`, `ler_redes_organicas`) sem
+    nunca ter sido definida neste arquivo nem importada. Todo `NameError`
+    caía no `except Exception: pass` de quem chamava, então o cache nunca
+    era escrito e ninguém via erro nenhum: os três caches sempre reconsultavam
+    a fonte, silenciosamente. Corrigido uma vez, corrige os três chamadores.
+    """
+    caminho = Path(caminho)
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".cache-", suffix=".json", dir=str(caminho.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(dado, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, caminho)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def _projeto_claude_da_pasta(pasta: Path) -> str:
@@ -1669,6 +1698,9 @@ def ler_ferramentas(configs_codex=CONFIGS_CODEX, configs_claude=CONFIGS_CLAUDE,
 CACHE_USO_PLANOS = PAINEL_OS_DIR / "data" / "cache_uso_planos.json"
 CACHE_FINANCEIRO = PAINEL_OS_DIR / "data" / "cache_financeiro.json"
 CACHE_REDES = PAINEL_OS_DIR / "data" / "cache_redes.json"
+CACHE_ANALYTICS = PAINEL_OS_DIR / "data" / "cache_analytics.json"
+CACHE_LINKEDIN_APIFY = PAINEL_OS_DIR / "data" / "cache_linkedin_apify.json"
+BLOQUEIO_LINKEDIN_APIFY = PAINEL_OS_DIR / "data" / "linkedin_apify_bloqueado.json"
 
 
 def ler_uso_planos_codex(buscar=None, pastas_sessoes=None):
@@ -2118,19 +2150,541 @@ def ler_financeiro(buscar=None, caminho_cache=CACHE_FINANCEIRO):
         return {**vazio, "status": "indeterminado", "erro": type(e).__name__}
 
 
+# ---------------------------------------------------------------------------
+# GA4 (casaldotrafego.com, propriedade 255274390) — rodada 25/09/2026.
+#
+# A credencial (service account GCP com escopo analytics.readonly) NÃO mora
+# neste código, em nenhuma forma: nem caminho fixo, nem valor. Ela é resolvida
+# só em tempo de execução, por PAINEL_GA4_CREDENCIAL (variável de ambiente) ou
+# por um `.env` local em `PAINEL_OS_DIR` (gitignorado, nunca commitado). Ver
+# README para o passo a passo sem o caminho real.
+# ---------------------------------------------------------------------------
+
+GA4_PROPRIEDADE = "255274390"
+GA4_ESCOPO = "https://www.googleapis.com/auth/analytics.readonly"
+
+
+def _resolver_credencial_ga4(caminho_config=None):
+    """PAINEL_GA4_CREDENCIAL no ambiente, senão a mesma chave num `.env` local."""
+    caminho = os.environ.get("PAINEL_GA4_CREDENCIAL")
+    if caminho:
+        return Path(caminho)
+    alvo = caminho_config if caminho_config is not None else (PAINEL_OS_DIR / ".env")
+    if alvo.is_file():
+        try:
+            for lin in alvo.read_text(encoding="utf-8").splitlines():
+                if lin.startswith("PAINEL_GA4_CREDENCIAL="):
+                    valor = lin.split("=", 1)[1].strip().strip("'\"")
+                    if valor:
+                        return Path(valor)
+        except OSError:
+            pass
+    return None
+
+
+def _obter_token_ga4(caminho_credencial: Path) -> str:
+    """Troca a service account por um token OAuth2 de leitura (analytics.readonly)."""
+    from google.oauth2 import service_account
+    from google.auth.transport.requests import Request as GoogleAuthRequest
+
+    credenciais = service_account.Credentials.from_service_account_file(
+        str(caminho_credencial), scopes=[GA4_ESCOPO]
+    )
+    credenciais.refresh(GoogleAuthRequest())
+    return credenciais.token
+
+
+def _runreport_ga4(token: str, propriedade: str, corpo: dict, timeout: int = 10) -> dict:
+    req = urllib.request.Request(
+        f"https://analyticsdata.googleapis.com/v1beta/properties/{propriedade}:runReport",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        data=json.dumps(corpo).encode("utf-8"),
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _buscar_analytics_ga4(token: str, propriedade: str = GA4_PROPRIEDADE) -> dict:
+    """5 chamadas runReport (totais 7d/30d, série diária, top páginas, top origens).
+
+    Contam como UMA coleta para efeito do cache de 1h: a régua "no máximo 1
+    chamada GA4 por hora" é sobre a FREQUÊNCIA da coleta, não sobre o número
+    de requisições HTTP dentro dela.
+    """
+    metricas_totais = [{"name": "activeUsers"}, {"name": "sessions"}, {"name": "screenPageViews"}]
+    totais_7d = _runreport_ga4(token, propriedade, {
+        "dateRanges": [{"startDate": "7daysAgo", "endDate": "today"}],
+        "metrics": metricas_totais,
+    })
+    totais_30d = _runreport_ga4(token, propriedade, {
+        "dateRanges": [{"startDate": "30daysAgo", "endDate": "today"}],
+        "metrics": metricas_totais,
+    })
+    serie_diaria_30d = _runreport_ga4(token, propriedade, {
+        "dateRanges": [{"startDate": "30daysAgo", "endDate": "today"}],
+        "dimensions": [{"name": "date"}],
+        "metrics": metricas_totais,
+        "orderBys": [{"dimension": {"dimensionName": "date"}}],
+    })
+    top_paginas = _runreport_ga4(token, propriedade, {
+        "dateRanges": [{"startDate": "30daysAgo", "endDate": "today"}],
+        "dimensions": [{"name": "pagePath"}],
+        "metrics": [{"name": "screenPageViews"}],
+        "orderBys": [{"metric": {"metricName": "screenPageViews"}, "desc": True}],
+        "limit": 5,
+    })
+    top_origens = _runreport_ga4(token, propriedade, {
+        "dateRanges": [{"startDate": "30daysAgo", "endDate": "today"}],
+        "dimensions": [{"name": "sessionSource"}],
+        "metrics": [{"name": "sessions"}],
+        "orderBys": [{"metric": {"metricName": "sessions"}, "desc": True}],
+        "limit": 5,
+    })
+    return {
+        "totais_7d": totais_7d,
+        "totais_30d": totais_30d,
+        "serie_diaria_30d": serie_diaria_30d,
+        "top_paginas": top_paginas,
+        "top_origens": top_origens,
+    }
+
+
+def _linhas_ga4(bruto: dict, chave: str) -> list:
+    bloco = bruto.get(chave) if isinstance(bruto, dict) else None
+    if not isinstance(bloco, dict):
+        return []
+    linhas = bloco.get("rows")
+    return linhas if isinstance(linhas, list) else []
+
+
+def _metrica_ga4(valores, indice) -> int | None:
+    if not isinstance(valores, list) or indice >= len(valores) or not isinstance(valores[indice], dict):
+        return None
+    try:
+        return int(valores[indice].get("value"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _processar_resposta_analytics(bruto: dict, agora_iso: str) -> dict:
+    """Extrai só o que a tela usa do runReport bruto do GA4; nunca inventa zero."""
+    def total(chave, indice):
+        linhas = _linhas_ga4(bruto, chave)
+        if not linhas or not isinstance(linhas[0], dict):
+            return None
+        return _metrica_ga4(linhas[0].get("metricValues"), indice)
+
+    usuarios_7d = total("totais_7d", 0)
+    sessoes_7d = total("totais_7d", 1)
+    visualizacoes_7d = total("totais_7d", 2)
+    usuarios_30d = total("totais_30d", 0)
+    sessoes_30d = total("totais_30d", 1)
+    visualizacoes_30d = total("totais_30d", 2)
+
+    serie = []
+    for linha in _linhas_ga4(bruto, "serie_diaria_30d"):
+        if not isinstance(linha, dict):
+            continue
+        dims = linha.get("dimensionValues")
+        if not isinstance(dims, list) or not dims or not isinstance(dims[0], dict):
+            continue
+        data_bruta = str(dims[0].get("value") or "")
+        if len(data_bruta) != 8 or not data_bruta.isdigit():
+            continue
+        vals = linha.get("metricValues")
+        serie.append({
+            "data": f"{data_bruta[0:4]}-{data_bruta[4:6]}-{data_bruta[6:8]}",
+            "usuarios_ativos": _metrica_ga4(vals, 0),
+            "sessoes": _metrica_ga4(vals, 1),
+            "visualizacoes": _metrica_ga4(vals, 2),
+        })
+    serie.sort(key=lambda x: x["data"])
+
+    top_paginas = []
+    for linha in _linhas_ga4(bruto, "top_paginas")[:5]:
+        if not isinstance(linha, dict):
+            continue
+        dims = linha.get("dimensionValues")
+        if not isinstance(dims, list) or not dims or not isinstance(dims[0], dict):
+            continue
+        caminho = dims[0].get("value")
+        if not caminho:
+            continue
+        # "pagePath" já vem sem query string na API; o split é defensivo.
+        caminho = str(caminho).split("?", 1)[0]
+        top_paginas.append({
+            "caminho": caminho,
+            "visualizacoes": _metrica_ga4(linha.get("metricValues"), 0),
+        })
+
+    top_origens = []
+    for linha in _linhas_ga4(bruto, "top_origens")[:5]:
+        if not isinstance(linha, dict):
+            continue
+        dims = linha.get("dimensionValues")
+        if not isinstance(dims, list) or not dims or not isinstance(dims[0], dict):
+            continue
+        origem = dims[0].get("value")
+        if not origem:
+            continue
+        top_origens.append({
+            "origem": str(origem),
+            "sessoes": _metrica_ga4(linha.get("metricValues"), 0),
+        })
+
+    tem_dado = any(
+        v is not None for v in (usuarios_7d, sessoes_7d, visualizacoes_7d, usuarios_30d, sessoes_30d, visualizacoes_30d)
+    ) or bool(serie) or bool(top_paginas) or bool(top_origens)
+
+    return {
+        "status": "pronto" if tem_dado else "sem_dado",
+        "atualizado_em": agora_iso,
+        "motivo": None if tem_dado else "resposta GA4 sem métricas aproveitáveis",
+        "propriedade_ga4": GA4_PROPRIEDADE,
+        "usuarios_ativos_7d": usuarios_7d,
+        "sessoes_7d": sessoes_7d,
+        "visualizacoes_7d": visualizacoes_7d,
+        "usuarios_ativos_30d": usuarios_30d,
+        "sessoes_30d": sessoes_30d,
+        "visualizacoes_30d": visualizacoes_30d,
+        "serie_diaria_30d": serie,
+        "top_paginas": top_paginas,
+        "top_origens": top_origens,
+    }
+
+
+def ler_analytics_ga4(caminho_cache=CACHE_ANALYTICS, buscar=None, caminho_config_ga4=None):
+    """GA4 do casaldotrafego.com (propriedade 255274390). Cache de 1h (1 coleta/hora)."""
+    agora_iso = agora_utc().isoformat()
+    vazio = {
+        "status": "sem_dado",
+        "atualizado_em": agora_iso,
+        "motivo": None,
+        "propriedade_ga4": GA4_PROPRIEDADE,
+        "usuarios_ativos_7d": None,
+        "sessoes_7d": None,
+        "visualizacoes_7d": None,
+        "usuarios_ativos_30d": None,
+        "sessoes_30d": None,
+        "visualizacoes_30d": None,
+        "serie_diaria_30d": [],
+        "top_paginas": [],
+        "top_origens": [],
+    }
+
+    if buscar is not None:
+        try:
+            bruto = buscar()
+        except Exception as e:
+            return {**vazio, "motivo": f"consulta GA4 falhou: {type(e).__name__}"}
+        if not isinstance(bruto, dict):
+            return {**vazio, "motivo": "resposta GA4 não é um objeto"}
+        return _processar_resposta_analytics(bruto, agora_iso)
+
+    if caminho_cache and Path(caminho_cache).is_file():
+        try:
+            st = Path(caminho_cache).stat()
+            idade_s = (datetime.now(timezone.utc).timestamp() - st.st_mtime)
+            if idade_s < 3600:
+                cache_obj = json.loads(Path(caminho_cache).read_text(encoding="utf-8"))
+                if isinstance(cache_obj, dict) and cache_obj.get("status") in ("pronto", "sem_dado"):
+                    return cache_obj
+        except Exception:
+            pass
+
+    caminho_credencial = _resolver_credencial_ga4(caminho_config_ga4)
+    if not caminho_credencial or not Path(caminho_credencial).is_file():
+        resultado = {**vazio, "motivo": "credencial GA4 não configurada (defina PAINEL_GA4_CREDENCIAL)"}
+    else:
+        try:
+            token = _obter_token_ga4(caminho_credencial)
+        except ImportError:
+            resultado = {**vazio, "motivo": "biblioteca google-auth não instalada"}
+        except Exception as e:
+            resultado = {**vazio, "motivo": f"falha ao gerar token GA4: {type(e).__name__}"}
+        else:
+            try:
+                bruto = _buscar_analytics_ga4(token)
+            except Exception as e:
+                resultado = {**vazio, "motivo": f"consulta GA4 falhou: {type(e).__name__}"}
+            else:
+                resultado = _processar_resposta_analytics(bruto, agora_iso)
+
+    if caminho_cache:
+        try:
+            gravar_atomico(Path(caminho_cache), resultado)
+        except Exception:
+            pass
+    return resultado
+
+
+# ---------------------------------------------------------------------------
+# LINKEDIN VIA APIFY — rodada 25/09/2026.
+#
+# A reconexão pela Composio NÃO resolve (o app dela só tem os escopos de
+# login/publicação, nunca leitura; ver entrega de 25/09). O Gastão autorizou
+# ler os posts públicos do perfil pessoal dele via Apify. O token
+# (APIFY_TOKEN) é resolvido em tempo de execução por variável de ambiente ou
+# pelo arquivo de configuração já existente da casa (RAIZ/luana/.env.apify);
+# nenhum valor de token aparece neste arquivo. O ATOR escolhido é
+# harvestapi/linkedin-profile-posts (sem cookie/login, ~US$ 2,00 por 1.000
+# posts extraídos): para um perfil pessoal de baixo volume o custo real fica
+# bem abaixo do teto de US$ 0,10 por execução.
+#
+# ‼️ NÃO TESTADO CONTRA O ATOR REAL: falta a URL pública do perfil do
+# LinkedIn do Gastão, que não está em nenhuma memória/conexão da casa
+# (varredura registrada na entrega de 25/09). A função funciona e está
+# coberta por teste com resposta falsa; falta só configurar
+# PAINEL_LINKEDIN_PERFIL_URL e rodar um smoke test real antes de confiar em
+# produção.
+# ---------------------------------------------------------------------------
+
+APIFY_ATOR_LINKEDIN = "harvestapi~linkedin-profile-posts"
+APIFY_TETO_USD = 0.10
+AVISO_LINKEDIN_APIFY = (
+    "dado vem de raspagem pública via Apify (curtidas, comentários, "
+    "compartilhamentos e texto). Impressões e visualizações NÃO existem por "
+    "este caminho: só aparecem dentro do painel de Analytics do próprio "
+    "LinkedIn, visível apenas para o dono da conta logado."
+)
+
+
+def _resolver_apify_token(caminho_config=None):
+    """APIFY_TOKEN no ambiente, senão o mesmo arquivo que a casa já usa (Composio/Instagram)."""
+    token = os.environ.get("APIFY_TOKEN")
+    if token:
+        return token
+    alvo = caminho_config if caminho_config is not None else (RAIZ / "luana/.env.apify")
+    if alvo.is_file():
+        try:
+            for lin in alvo.read_text(encoding="utf-8").splitlines():
+                if lin.startswith("APIFY_TOKEN="):
+                    valor = lin.split("=", 1)[1].strip().strip("'\"")
+                    if valor:
+                        return valor
+        except OSError:
+            pass
+    return None
+
+
+def _resolver_perfil_linkedin(caminho_config=None):
+    """URL pública do perfil pessoal a raspar: só variável de ambiente ou `.env` local."""
+    url = os.environ.get("PAINEL_LINKEDIN_PERFIL_URL")
+    if url:
+        return url
+    alvo = caminho_config if caminho_config is not None else (PAINEL_OS_DIR / ".env")
+    if alvo.is_file():
+        try:
+            for lin in alvo.read_text(encoding="utf-8").splitlines():
+                if lin.startswith("PAINEL_LINKEDIN_PERFIL_URL="):
+                    valor = lin.split("=", 1)[1].strip().strip("'\"")
+                    if valor:
+                        return valor
+        except OSError:
+            pass
+    return None
+
+
+def _buscar_linkedin_apify(token: str, perfil_url: str, limite: int = 20) -> dict:
+    """Roda o ator, espera terminar, mede o custo real e traz os últimos posts.
+
+    Fluxo em 3 chamadas (documentado, não coberto por execução real aqui):
+    inicia a run, faz polling até status terminal, lê o dataset. O custo vem
+    de `usageTotalUsd` da própria run, não de estimativa.
+    """
+    base = f"https://api.apify.com/v2/acts/{APIFY_ATOR_LINKEDIN}/runs?token={token}"
+    req_start = urllib.request.Request(
+        base,
+        headers={"Content-Type": "application/json"},
+        data=json.dumps({"profileUrls": [perfil_url], "maxPosts": limite}).encode("utf-8"),
+        method="POST",
+    )
+    with urllib.request.urlopen(req_start, timeout=15) as resp:
+        run = json.loads(resp.read().decode("utf-8")).get("data", {})
+
+    run_id = run.get("id")
+    if not run_id:
+        raise RuntimeError("Apify não devolveu id de run")
+
+    status = run.get("status")
+    tentativas = 0
+    while status not in ("SUCCEEDED", "FAILED", "TIMED-OUT", "ABORTED") and tentativas < 20:
+        time.sleep(3)
+        tentativas += 1
+        req_status = urllib.request.Request(f"https://api.apify.com/v2/actor-runs/{run_id}?token={token}")
+        with urllib.request.urlopen(req_status, timeout=10) as resp:
+            run = json.loads(resp.read().decode("utf-8")).get("data", {})
+        status = run.get("status")
+
+    if status != "SUCCEEDED":
+        raise RuntimeError(f"run Apify terminou com status {status}")
+
+    custo = run.get("usageTotalUsd")
+    dataset_id = run.get("defaultDatasetId")
+    if not dataset_id:
+        raise RuntimeError("run Apify sem defaultDatasetId")
+
+    req_itens = urllib.request.Request(
+        f"https://api.apify.com/v2/datasets/{dataset_id}/items?token={token}&limit={limite}"
+    )
+    with urllib.request.urlopen(req_itens, timeout=15) as resp:
+        itens = json.loads(resp.read().decode("utf-8"))
+
+    return {"posts": itens if isinstance(itens, list) else [], "custo_usd": custo}
+
+
+def _int_seguro(valor):
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
+
+
+def _processar_resposta_linkedin_apify(bruto: dict, agora_iso: str) -> dict:
+    itens = bruto.get("posts") if isinstance(bruto, dict) else None
+    custo = bruto.get("custo_usd") if isinstance(bruto, dict) else None
+    if not isinstance(itens, list):
+        return {
+            "status": "erro",
+            "atualizado_em": agora_iso,
+            "motivo": "resposta Apify sem lista de posts",
+            "custo_usd": custo,
+            "aviso_cobertura": AVISO_LINKEDIN_APIFY,
+            "posts": [],
+        }
+
+    posts = []
+    for item in itens[:20]:
+        if not isinstance(item, dict):
+            continue
+        texto = str(item.get("text") or item.get("commentary") or item.get("content") or "")
+        inicio = " ".join(texto.split()[:12])
+        posts.append({
+            "data": item.get("postedAt") or item.get("publishedAt") or item.get("date"),
+            "inicio_texto": inicio,
+            "curtidas": _int_seguro(item.get("likeCount") or item.get("reactionsCount") or item.get("reactions")),
+            "comentarios": _int_seguro(item.get("commentCount") or item.get("commentsCount") or item.get("comments")),
+            "compartilhamentos": _int_seguro(item.get("repostCount") or item.get("sharesCount") or item.get("shares")),
+        })
+
+    if custo is not None:
+        try:
+            custo_num = float(custo)
+        except (TypeError, ValueError):
+            custo_num = None
+        if custo_num is not None and custo_num > APIFY_TETO_USD:
+            return {
+                "status": "erro",
+                "atualizado_em": agora_iso,
+                "motivo": (
+                    f"custo da execução (US$ {custo_num:.4f}".replace(".", ",") + ") passou do teto de "
+                    f"US$ {APIFY_TETO_USD:.2f}".replace(".", ",") + "; não roda de novo até revisão manual"
+                ),
+                "custo_usd": custo_num,
+                "aviso_cobertura": AVISO_LINKEDIN_APIFY,
+                "posts": [],
+            }
+        custo = custo_num
+
+    return {
+        "status": "ok_apify",
+        "atualizado_em": agora_iso,
+        "motivo": None,
+        "custo_usd": custo,
+        "aviso_cobertura": AVISO_LINKEDIN_APIFY,
+        "posts": posts,
+    }
+
+
+def ler_linkedin_apify(
+    caminho_cache=CACHE_LINKEDIN_APIFY,
+    caminho_bloqueio=BLOQUEIO_LINKEDIN_APIFY,
+    buscar=None,
+    caminho_config_apify=None,
+    caminho_config_perfil=None,
+):
+    """Posts públicos do LinkedIn pessoal via Apify. Cache de 24h (1 coleta/dia)."""
+    agora_iso = agora_utc().isoformat()
+    vazio = {
+        "status": "sem_dado",
+        "atualizado_em": agora_iso,
+        "motivo": None,
+        "custo_usd": None,
+        "aviso_cobertura": AVISO_LINKEDIN_APIFY,
+        "posts": [],
+    }
+
+    if buscar is not None:
+        try:
+            bruto = buscar()
+        except Exception as e:
+            return {**vazio, "status": "erro", "motivo": f"consulta Apify falhou: {type(e).__name__}"}
+        if not isinstance(bruto, dict):
+            return {**vazio, "status": "erro", "motivo": "resposta Apify não é um objeto"}
+        return _processar_resposta_linkedin_apify(bruto, agora_iso)
+
+    if caminho_bloqueio and Path(caminho_bloqueio).is_file():
+        try:
+            bloqueio = json.loads(Path(caminho_bloqueio).read_text(encoding="utf-8"))
+            if isinstance(bloqueio, dict):
+                return {**vazio, "status": "erro", "motivo": bloqueio.get("motivo") or "execução bloqueada por teto de gasto excedido"}
+        except Exception:
+            pass
+
+    if caminho_cache and Path(caminho_cache).is_file():
+        try:
+            st = Path(caminho_cache).stat()
+            idade_s = (datetime.now(timezone.utc).timestamp() - st.st_mtime)
+            if idade_s < 86400:
+                cache_obj = json.loads(Path(caminho_cache).read_text(encoding="utf-8"))
+                if isinstance(cache_obj, dict) and cache_obj.get("status") in ("ok_apify", "erro", "sem_dado"):
+                    return cache_obj
+        except Exception:
+            pass
+
+    token = _resolver_apify_token(caminho_config_apify)
+    if not token:
+        resultado = {**vazio, "motivo": "token Apify não configurado (APIFY_TOKEN)"}
+    else:
+        perfil_url = _resolver_perfil_linkedin(caminho_config_perfil)
+        if not perfil_url:
+            resultado = {**vazio, "motivo": "perfil do LinkedIn não configurado (defina PAINEL_LINKEDIN_PERFIL_URL)"}
+        else:
+            try:
+                bruto = _buscar_linkedin_apify(token, perfil_url)
+            except Exception as e:
+                resultado = {**vazio, "status": "erro", "motivo": f"consulta Apify falhou: {type(e).__name__}"}
+            else:
+                resultado = _processar_resposta_linkedin_apify(bruto, agora_iso)
+
+    if resultado.get("status") == "erro" and resultado.get("custo_usd") is not None:
+        try:
+            if float(resultado["custo_usd"]) > APIFY_TETO_USD:
+                gravar_atomico(Path(caminho_bloqueio), {
+                    "motivo": resultado["motivo"],
+                    "bloqueado_em": agora_iso,
+                    "custo_usd": resultado["custo_usd"],
+                })
+        except Exception:
+            pass
+
+    if caminho_cache:
+        try:
+            gravar_atomico(Path(caminho_cache), resultado)
+        except Exception:
+            pass
+    return resultado
+
+
 def ler_redes_organicas(buscar=None, caminho_cache=CACHE_REDES):
-    """Lê insights orgânicos de redes (Instagram e LinkedIn)."""
+    """Lê insights orgânicos de redes (Instagram via Composio, LinkedIn via Apify)."""
     agora_iso = agora_utc().isoformat()
     vazio = {
         "status": "indeterminado",
         "atualizado_em": agora_iso,
         "erro": None,
         "instagram": None,
-        "linkedin": {
-            "status": "sem_permissao",
-            "motivo": "leitura de posts pessoais exige escopo r_member_social / Community Management API, não concedido nesta conexão",
-            "metricas": None,
-        },
+        "linkedin": None,
     }
 
     if buscar is not None:
@@ -2151,6 +2705,11 @@ def ler_redes_organicas(buscar=None, caminho_cache=CACHE_REDES):
                     return cache_obj
         except Exception:
             pass
+
+    # LinkedIn tem fonte, cache (24h) e teto de gasto próprios; não depende do
+    # Composio nem do resultado do Instagram abaixo.
+    linkedin_resultado = ler_linkedin_apify()
+    vazio["linkedin"] = linkedin_resultado
 
     comp_key = os.environ.get("COMPOSIO_API_KEY")
     if not comp_key:
@@ -2237,11 +2796,7 @@ def ler_redes_organicas(buscar=None, caminho_cache=CACHE_REDES):
                 "metricas_obtidas": metricas_obtidas,
                 "posts": [],
             },
-            "linkedin": {
-                "status": "sem_permissao",
-                "motivo": "leitura de posts pessoais exige escopo r_member_social / Community Management API, não concedido nesta conexão",
-                "metricas": None,
-            },
+            "linkedin": linkedin_resultado,
         }
 
         if caminho_cache:
@@ -5694,6 +6249,7 @@ def main():
     uso_planos = ler_uso_planos()
     financeiro = ler_financeiro()
     redes = ler_redes_organicas()
+    analytics = ler_analytics_ga4()
     diretiva = carregar_diretiva(DIRETIVA_JSON)
     if isinstance(diretiva, dict) and diretiva.get("objetivo"):
         limpo = rotulo_seguro(diretiva["objetivo"], limite=500)
@@ -5827,6 +6383,7 @@ def main():
         "uso_planos": uso_planos,
         "financeiro": financeiro,
         "redes": redes,
+        "analytics": analytics,
         "squads": SQUADS,
         "sessao": sessao,
         "agentes": agentes,

@@ -1518,5 +1518,171 @@ conferir("redes instagram seguidores lido", res_redes["instagram"]["seguidores"]
 conferir("redes linkedin motivo atualizado", "r_member_social" in res_redes["linkedin"]["motivo"], True)
 conferir("redes passa 100% na trava de privacidade public-repo", c.auditar_estado_publico({"redes": res_redes}), [])
 
+print("\n--- GA4 (casaldotrafego.com): ok, sem credencial, erro de API e cache (rodada 25/09)")
+
+# Números iguais aos medidos AO VIVO na entrega de 25/09/2026 (120/128/186 em
+# 7 dias). São públicos (métrica agregada do próprio site do Gastão), servem
+# de mock estável e continuam batendo com a execução real feita mais abaixo.
+dados_sinteticos_ga4_ok = {
+    "totais_7d": {"rows": [{"metricValues": [{"value": "120"}, {"value": "128"}, {"value": "186"}]}]},
+    "totais_30d": {"rows": [{"metricValues": [{"value": "420"}, {"value": "460"}, {"value": "610"}]}]},
+    "serie_diaria_30d": {
+        "rows": [
+            {"dimensionValues": [{"value": "20260902"}], "metricValues": [{"value": "15"}, {"value": "16"}, {"value": "22"}]},
+            {"dimensionValues": [{"value": "20260901"}], "metricValues": [{"value": "12"}, {"value": "13"}, {"value": "19"}]},
+        ]
+    },
+    "top_paginas": {
+        "rows": [
+            {"dimensionValues": [{"value": "/blog/como-usar-claude-code?utm_source=ig"}], "metricValues": [{"value": "85"}]},
+            {"dimensionValues": [{"value": "/"}], "metricValues": [{"value": "60"}]},
+        ]
+    },
+    "top_origens": {
+        "rows": [
+            {"dimensionValues": [{"value": "google"}], "metricValues": [{"value": "210"}]},
+            {"dimensionValues": [{"value": "(direct)"}], "metricValues": [{"value": "90"}]},
+        ]
+    },
+}
+res_ga4_ok = c.ler_analytics_ga4(buscar=lambda: dados_sinteticos_ga4_ok)
+conferir("GA4 ok: status pronto", res_ga4_ok["status"], "pronto")
+conferir("GA4 ok: usuarios_ativos_7d", res_ga4_ok["usuarios_ativos_7d"], 120)
+conferir("GA4 ok: sessoes_7d", res_ga4_ok["sessoes_7d"], 128)
+conferir("GA4 ok: visualizacoes_7d", res_ga4_ok["visualizacoes_7d"], 186)
+conferir("GA4 ok: usuarios_ativos_30d", res_ga4_ok["usuarios_ativos_30d"], 420)
+conferir("GA4 ok: série diária ordenada por data crescente", [d["data"] for d in res_ga4_ok["serie_diaria_30d"]], ["2026-09-01", "2026-09-02"])
+conferir("GA4 ok: top página SEM query string", res_ga4_ok["top_paginas"][0]["caminho"], "/blog/como-usar-claude-code")
+conferir("GA4 ok: top página com visualizações", res_ga4_ok["top_paginas"][0]["visualizacoes"], 85)
+conferir("GA4 ok: top origem", res_ga4_ok["top_origens"][0]["origem"], "google")
+conferir("GA4 ok: passa 100% na trava de privacidade public-repo", c.auditar_estado_publico({"analytics": res_ga4_ok}), [])
+
+ambiente_ga4_guardado = os.environ.pop("PAINEL_GA4_CREDENCIAL", None)
+try:
+    tmp_ga4_sem_cred = Path(tempfile.mkdtemp())
+    res_ga4_sem_cred = c.ler_analytics_ga4(
+        caminho_cache=tmp_ga4_sem_cred / "cache-inexistente.json",
+        caminho_config_ga4=tmp_ga4_sem_cred / "sem-config.env",
+    )
+    conferir("GA4 sem credencial: status sem_dado (nunca erro mudo)", res_ga4_sem_cred["status"], "sem_dado")
+    conferir("GA4 sem credencial: usuarios_ativos_7d fica None, nunca 0", res_ga4_sem_cred["usuarios_ativos_7d"], None)
+    conferir("GA4 sem credencial: motivo cita a variável certa", "PAINEL_GA4_CREDENCIAL" in (res_ga4_sem_cred["motivo"] or ""), True)
+
+    print("\n--- GA4: cache de 1h evita nova consulta (usa a mesma ausência de credencial acima)")
+    tmp_cache_ga4 = tmp_ga4_sem_cred / "cache_analytics.json"
+    tmp_cache_ga4.write_text(json.dumps(res_ga4_ok), encoding="utf-8")
+    res_ga4_cache_fresco = c.ler_analytics_ga4(caminho_cache=tmp_cache_ga4, caminho_config_ga4=tmp_ga4_sem_cred / "ainda-sem-config.env")
+    conferir("GA4 cache fresco (<1h): devolve o cache sem tentar credencial", res_ga4_cache_fresco["usuarios_ativos_7d"], 120)
+
+    antigo = datetime.datetime.now().timestamp() - 4000
+    os.utime(tmp_cache_ga4, (antigo, antigo))
+    res_ga4_cache_velho = c.ler_analytics_ga4(caminho_cache=tmp_cache_ga4, caminho_config_ga4=tmp_ga4_sem_cred / "continua-sem-config.env")
+    conferir("GA4 cache velho (>1h): não usa, busca de novo (sem credencial aqui, vira sem_dado)", res_ga4_cache_velho["status"], "sem_dado")
+finally:
+    if ambiente_ga4_guardado is not None:
+        os.environ["PAINEL_GA4_CREDENCIAL"] = ambiente_ga4_guardado
+    shutil.rmtree(tmp_ga4_sem_cred, ignore_errors=True)
+
+
+def _ga4_explode():
+    raise RuntimeError("timeout simulado na Analytics Data API")
+
+
+res_ga4_erro = c.ler_analytics_ga4(buscar=_ga4_explode)
+conferir("GA4 erro de API: status sem_dado (nunca zero)", res_ga4_erro["status"], "sem_dado")
+conferir("GA4 erro de API: motivo cita o tipo do erro", "RuntimeError" in (res_ga4_erro["motivo"] or ""), True)
+
+res_ga4_vazio = c.ler_analytics_ga4(buscar=lambda: {"totais_7d": {"rows": []}, "totais_30d": {}, "serie_diaria_30d": {}, "top_paginas": {}, "top_origens": {}})
+conferir("GA4 resposta 200 mas sem métrica nenhuma: sem_dado, não pronto com zero", res_ga4_vazio["status"], "sem_dado")
+
+print("\n--- LinkedIn via Apify: ok, sem credencial, erro de API, teto de gasto e cache (rodada 25/09)")
+
+dados_sinteticos_linkedin_ok = {
+    "posts": [
+        {
+            "postedAt": "2026-09-20T10:00:00Z",
+            "text": "Hoje eu testei um jeito novo de configurar hooks no Claude Code e o resultado surpreendeu todo mundo na call de squad.",
+            "likeCount": 42,
+            "commentCount": 5,
+            "repostCount": 2,
+        },
+        {
+            "postedAt": "2026-09-18T09:00:00Z",
+            "text": "Como eu uso MCP pra conectar minha agência inteira num painel só.",
+            "likeCount": 18,
+            "commentCount": 1,
+            "repostCount": 0,
+        },
+    ],
+    "custo_usd": 0.0042,
+}
+res_li_ok = c.ler_linkedin_apify(buscar=lambda: dados_sinteticos_linkedin_ok)
+conferir("linkedin apify ok: status", res_li_ok["status"], "ok_apify")
+conferir("linkedin apify ok: 2 posts extraídos", len(res_li_ok["posts"]), 2)
+conferir("linkedin apify ok: curtidas do primeiro post", res_li_ok["posts"][0]["curtidas"], 42)
+conferir("linkedin apify ok: início do texto truncado em até 12 palavras", len(res_li_ok["posts"][0]["inicio_texto"].split()) <= 12, True)
+conferir("linkedin apify ok: custo registrado no estado", res_li_ok["custo_usd"], 0.0042)
+conferir("linkedin apify ok: aviso fixo cita a lacuna de impressões", "impress" in res_li_ok["aviso_cobertura"].lower(), True)
+conferir("linkedin apify ok: passa 100% na trava de privacidade public-repo", c.auditar_estado_publico({"linkedin": res_li_ok}), [])
+
+token_apify_guardado = os.environ.pop("APIFY_TOKEN", None)
+try:
+    tmp_li_sem_token = Path(tempfile.mkdtemp())
+    res_li_sem_token = c.ler_linkedin_apify(
+        caminho_cache=tmp_li_sem_token / "cache-inexistente.json",
+        caminho_bloqueio=tmp_li_sem_token / "bloqueio-inexistente.json",
+        caminho_config_apify=tmp_li_sem_token / "sem-apify.env",
+    )
+    conferir("linkedin sem token: status sem_dado (nunca zero)", res_li_sem_token["status"], "sem_dado")
+    conferir("linkedin sem token: motivo cita APIFY_TOKEN", "APIFY_TOKEN" in (res_li_sem_token["motivo"] or ""), True)
+
+    print("\n--- linkedin: cache de 24h evita nova consulta")
+    tmp_cache_li = tmp_li_sem_token / "cache_linkedin.json"
+    tmp_bloqueio_li = tmp_li_sem_token / "bloqueio.json"
+    tmp_cache_li.write_text(json.dumps(res_li_ok), encoding="utf-8")
+    res_li_cache_fresco = c.ler_linkedin_apify(
+        caminho_cache=tmp_cache_li, caminho_bloqueio=tmp_bloqueio_li, caminho_config_apify=tmp_li_sem_token / "ainda-sem-apify.env"
+    )
+    conferir("linkedin cache fresco (<24h): devolve cache sem tentar token", res_li_cache_fresco["posts"][0]["curtidas"], 42)
+
+    antigo_li = datetime.datetime.now().timestamp() - 90000
+    os.utime(tmp_cache_li, (antigo_li, antigo_li))
+    res_li_cache_velho = c.ler_linkedin_apify(
+        caminho_cache=tmp_cache_li, caminho_bloqueio=tmp_bloqueio_li, caminho_config_apify=tmp_li_sem_token / "continua-sem-apify.env"
+    )
+    conferir("linkedin cache velho (>24h): não usa, cai em sem_dado", res_li_cache_velho["status"], "sem_dado")
+finally:
+    if token_apify_guardado is not None:
+        os.environ["APIFY_TOKEN"] = token_apify_guardado
+    shutil.rmtree(tmp_li_sem_token, ignore_errors=True)
+
+
+def _li_explode():
+    raise TimeoutError("apify sem resposta")
+
+
+res_li_erro = c.ler_linkedin_apify(buscar=_li_explode)
+conferir("linkedin erro de API: status erro", res_li_erro["status"], "erro")
+conferir("linkedin erro de API: motivo cita o tipo do erro", "TimeoutError" in (res_li_erro["motivo"] or ""), True)
+
+dados_sinteticos_linkedin_caro = {"posts": [{"text": "post caro de testar", "likeCount": 1}], "custo_usd": 0.53}
+res_li_caro = c.ler_linkedin_apify(buscar=lambda: dados_sinteticos_linkedin_caro)
+conferir("linkedin teto de gasto: status erro quando custo > US$ 0,10", res_li_caro["status"], "erro")
+conferir("linkedin teto de gasto: motivo cita o teto", "0,10" in res_li_caro["motivo"], True)
+conferir("linkedin teto de gasto: não devolve post nenhum no erro", res_li_caro["posts"], [])
+
+tmp_bloqueio_persistido = Path(tempfile.mkdtemp()) / "bloqueio.json"
+tmp_bloqueio_persistido.write_text(
+    json.dumps({"motivo": "custo passou do teto em execução anterior", "bloqueado_em": "2026-09-25T00:00:00Z", "custo_usd": 0.53}),
+    encoding="utf-8",
+)
+res_li_bloqueado = c.ler_linkedin_apify(
+    caminho_cache=tmp_bloqueio_persistido.parent / "cache-nao-existe.json",
+    caminho_bloqueio=tmp_bloqueio_persistido,
+)
+conferir("linkedin bloqueado por teto anterior: status erro sem tentar de novo", res_li_bloqueado["status"], "erro")
+conferir("linkedin bloqueado: motivo vem do arquivo de bloqueio", "teto" in res_li_bloqueado["motivo"], True)
+shutil.rmtree(tmp_bloqueio_persistido.parent, ignore_errors=True)
+
 print("\n" + ("TODOS PASSARAM" if falhas == 0 else f"{falhas} FALHA(S)"))
 sys.exit(0 if falhas == 0 else 1)

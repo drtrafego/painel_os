@@ -947,6 +947,43 @@ com 2,5 segundos entre respostas e teto de 16 tentativas, e para assim que
 recebe o snapshot concluído. Não há requisições sobrepostas e não é preciso
 atualizar a página na mão.
 
+## GA4 e LinkedIn (blocos `analytics` e `redes.linkedin`)
+
+Os dois lêem fonte externa e nenhuma credencial mora neste repositório, nem
+como caminho fixo nem como valor. Copie `.env.example` para `.env` (na raiz
+de `painel_os`, já no `.gitignore`) e preencha:
+
+```bash
+cp .env.example .env
+# edite .env com o caminho real da service account e a URL do perfil
+```
+
+- **`PAINEL_GA4_CREDENCIAL`**: caminho, nesta máquina, do JSON de uma service
+  account GCP com escopo `analytics.readonly` e acesso à propriedade GA4 do
+  casaldotrafego.com (255274390). Sem ela, `analytics.status` vem `sem_dado`
+  com o motivo, nunca com número zero. Cache de 1h (`data/cache_analytics.json`,
+  gitignorado): no máximo 1 coleta por hora, mesmo com o painel sendo aberto
+  várias vezes.
+- **`PAINEL_LINKEDIN_PERFIL_URL`**: URL pública do perfil pessoal do Gastão no
+  LinkedIn. Sem ela, `redes.linkedin.status` vem `sem_dado` com o motivo, e
+  **nenhuma chamada à Apify é feita** (não gasta nada por engano). Com ela e
+  com `APIFY_TOKEN` configurado (variável de ambiente ou o arquivo que a casa
+  já usa para outras raspagens), lê os últimos 20 posts públicos via o ator
+  `harvestapi/linkedin-profile-posts`: data, início do texto, curtidas,
+  comentários e compartilhamentos. **Nunca traz impressão nem visualização**
+  (isso só existe dentro do Analytics do próprio LinkedIn, visível só pro
+  dono da conta logado) — o estado carrega esse aviso junto, sempre. Cache de
+  24h (`data/cache_linkedin_apify.json`). Teto de gasto de US$ 0,10 por
+  execução: se uma execução custar mais que isso, ela fica registrada como
+  `erro` e a próxima chamada **não roda de novo sozinha**
+  (`data/linkedin_apify_bloqueado.json`); para destravar, apague esse arquivo
+  depois de revisar o motivo.
+
+⚠️ Isto é `.env` LOCAL do processo que roda o coletor. No servidor de
+produção, a variável precisa estar no ambiente de quem sobe
+`servidor/servir.py` (ele chama o coletor como subprocesso e herda o
+ambiente do processo pai), não só na sua máquina de desenvolvimento.
+
 ## Ingestão local de chamadas
 
 O painel **não acessa o Drive**. Exportações estruturadas colocadas em
