@@ -33,6 +33,8 @@ export type VistaId =
   | 'estudio'
   | 'aprovacoes'
   | 'cobrancas'
+  | 'financeiro'
+  | 'redes'
   | 'diretores'
   | 'tarefas'
   | 'pipeline'
@@ -121,6 +123,27 @@ export const VISTAS: readonly Vista[] = [
         'não procurei fonte para esta ainda, e digo isso em vez de escrever uma frase que ' +
         'parece levantamento. ⚠️ E ela leva nome de cliente e valor por dentro: quando existir, ' +
         'entra agregada, porque nome de cliente não aparece em tela nenhuma desta casa.',
+    },
+  },
+  {
+    id: 'financeiro',
+    nome: 'Financeiro',
+    pergunta: 'quanto a operação fatura, arrecada e tem a receber',
+    icone: 'grafico',
+    dado: {
+      tipo: 'medido',
+      fonte: 'GET /dashboard/metrics da API financeira, reduzido a KPIs agregados sem PII',
+    },
+  },
+  {
+    id: 'redes',
+    nome: 'Redes sociais',
+    pergunta: 'qual o alcance e engajamento orgânico das mídias sociais',
+    icone: 'megafone',
+    dado: {
+      tipo: 'parcial',
+      fonte: 'Composio Instagram Graph API para @gastaomatos (seguidores, alcance, salvamentos)',
+      deFora: 'LinkedIn orgânico requer escopo r_organization_social adicional na conexão OAuth',
     },
   },
   {

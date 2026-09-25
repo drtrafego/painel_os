@@ -1124,6 +1124,7 @@ try:
     # Subpasta comercial-squad
     com_sq = pasta_global_fake / "comercial-squad" / "agents"
     com_sq.mkdir(parents=True)
+    (com_sq / "elza.md").write_text("---\nname: elza\ndescription: Diretora comercial e orquestração\n---\nCorpo", encoding="utf-8")
     (com_sq / "otto-radar.md").write_text("---\nname: otto-radar\ndescription: Radar comercial\n---\nCorpo", encoding="utf-8")
     (com_sq / "zara-triagem.md").write_text("---\nname: zara-triagem\ndescription: Triagem comercial\n---\nCorpo", encoding="utf-8")
 
@@ -1145,8 +1146,11 @@ try:
     desc_achados = c.descobrir_agentes(pasta_codex=codex_arquivado, pasta_global=pasta_global_fake)
     mapa_achados = {a["id"]: a for a in desc_achados}
 
+    conferir("elza classificada como squad comercial", mapa_achados.get("elza", {}).get("squad"), "comercial")
+    conferir("elza marcada como regente", mapa_achados.get("elza", {}).get("regente"), True)
     conferir("otto-radar classificado como squad comercial", mapa_achados.get("otto-radar", {}).get("squad"), "comercial")
     conferir("zara-triagem classificado como squad comercial", mapa_achados.get("zara-triagem", {}).get("squad"), "comercial")
+    conferir("total de agentes sem duplicação", len(desc_achados), 5)
     conferir("pasta desconhecida classificada como desconhecido", mapa_achados.get("novo-agente", {}).get("squad"), "desconhecido")
     conferir("agente da raiz classificado como global", mapa_achados.get("raiz", {}).get("squad"), "global")
     conferir("arquivo sem name: descartado", "sem-name" in mapa_achados, False)
@@ -1241,7 +1245,7 @@ finally:
 print("\n--- mapa interativo horizontal do setor comercial")
 wf_com = c.gerar_workflow_setor_comercial()
 conferir("workflow comercial schema_version é 2", wf_com.get("schema_version"), 2)
-conferir("workflow comercial tem 4 fases", len(wf_com.get("phases", [])), 4)
+conferir("workflow comercial tem 5 fases", len(wf_com.get("phases", [])), 5)
 conferir("workflow comercial tem os 2 gates de segurança do Gastão",
          any(n.get("id") == "gastao_plano" for n in wf_com.get("nodes", [])) and
          any(n.get("id") == "gastao_textos" for n in wf_com.get("nodes", [])), True)
@@ -1391,6 +1395,59 @@ try:
     conferir("presença não publica caminho", c.auditar_estado_publico(presenca), [])
 finally:
     shutil.rmtree(tmp_sessao, ignore_errors=True)
+
+print("\n--- uso do plano codex: parser de event_msg e isolamento de credits")
+tmp_codex_dir = Path(tempfile.mkdtemp())
+sess_dir = tmp_codex_dir / ".codex-luana" / "sessions"
+sess_dir.mkdir(parents=True)
+sess_file = sess_dir / "2026-09-25.jsonl"
+linha_codex_event_msg = json.dumps({
+    "type": "event_msg",
+    "payload": {
+        "type": "token_count",
+        "info": {
+            "total_token_usage": {"total_tokens": 4500},
+            "last_token_usage": {"input_tokens": 300, "output_tokens": 150}
+        },
+        "rate_limits": {
+            "primary": {"used_percent": 16.0, "window_minutes": 10080, "resets_at": 1790400000},
+            "secondary": {"used_percent": 5.0, "window_minutes": 1440, "resets_at": 1790400000},
+            "credits": {"balance": 99.99, "account_id": "segredo_vivos_nao_vaza"}
+        }
+    }
+})
+sess_file.write_text(linha_codex_event_msg + "\n", encoding="utf-8")
+
+res_codex = c.ler_uso_planos_codex(pastas_sessoes=[sess_dir, tmp_codex_dir / "vazio2", tmp_codex_dir / "vazio3"])
+conferir("codex primario_percentual lido de event_msg.payload", res_codex["primario_percentual"], 16.0)
+conferir("codex tokens_24h_estimativa lido de info.total_token_usage", res_codex["tokens_24h_estimativa"], 4500)
+conferir("codex credits vaza apenas has_credits (True)", res_codex["has_credits"], True)
+conferir("uso_planos.codex passa na trava de privacidade sem vazar", c.auditar_estado_publico({"uso_planos_codex": res_codex}), [])
+
+shutil.rmtree(tmp_codex_dir)
+
+print("\n--- financeiro: allowlist e isolamento de PII (rodada 8)")
+dados_sinteticos_financeiro = {
+    "mrr": 15000.0,
+    "periodToReceive": 8000.0,
+    "periodReceived": 12000.0,
+    "overdueAmount": 1500.0,
+    "activeClients": 12,
+    "overdueClients": 1,
+    "contratosNovos": 2,
+    "contratosEncerrados": 0,
+    "displayCurrency": "BRL",
+    "clientes_detalhados": [{"nome": "Cliente Vazado S.A.", "cnpj": "12.345.678/0001-99", "email": "contato@vazado.com"}],
+    "recentInvoices": [{"id": "inv_123", "valor": 5000, "cliente_id": "cli_99"}],
+    "secret_api_key": "sk_live_1234567890"
+}
+res_fin = c.ler_financeiro(buscar=lambda: dados_sinteticos_financeiro)
+conferir("financeiro status é pronto com mock", res_fin["status"], "pronto")
+conferir("financeiro mrr_atual lido corretamente", res_fin["mrr_atual"], 15000.0)
+conferir("financeiro descarta clientes_detalhados (PII)", "clientes_detalhados" in res_fin, False)
+conferir("financeiro descarta recentInvoices (PII)", "recentInvoices" in res_fin, False)
+conferir("financeiro descarta secret_api_key", "secret_api_key" in res_fin, False)
+conferir("financeiro passa 100% na trava de privacidade public-repo", c.auditar_estado_publico({"financeiro": res_fin}), [])
 
 print("\n" + ("TODOS PASSARAM" if falhas == 0 else f"{falhas} FALHA(S)"))
 sys.exit(0 if falhas == 0 else 1)

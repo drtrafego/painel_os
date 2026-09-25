@@ -4,9 +4,7 @@
  * de /api/agentes-vivos; um item sem sessão nunca é promovido a "executando".
  */
 
-import { corDaSessao } from '../ui/paleta.ts'
-
-export type PixelAgentSquad = 'coordenação' | 'radar' | 'conteúdo' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex'
+export type PixelAgentSquad = 'coordenação' | 'radar' | 'conteúdo' | 'comercial' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex'
 
 export type PixelAgent = {
   id: string
@@ -39,6 +37,7 @@ export const PIXEL_AGENT_SQUADS: Array<{ id: PixelAgentSquad; nome: string; cor:
   { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#c084fc' },
   { id: 'radar', nome: 'RADAR', cor: '#38bdf8' },
   { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#a3e635' },
+  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#f59e0b' },
   { id: 'destinos', nome: 'DESTINOS', cor: '#fb923c' },
   { id: 'análise', nome: 'DESTINOS / ANÁLISE', cor: '#facc15' },
   { id: 'globais', nome: 'GLOBAIS', cor: '#60a5fa' },
@@ -46,7 +45,15 @@ export const PIXEL_AGENT_SQUADS: Array<{ id: PixelAgentSquad; nome: string; cor:
 ]
 
 export const PIXEL_AGENTS: PixelAgent[] = [
-  { id: 'iris', nome: 'Íris', papel: 'Orquestradora', squad: 'coordenação', área: 'Operação', abreviação: 'ÍR', cor: '#c084fc', aliases: ['orquestradora'] },
+  { id: 'iris', nome: 'Íris', papel: 'Orquestradora de conteúdo', squad: 'conteúdo', área: 'Regência', abreviação: 'ÍR', cor: '#c084fc', aliases: ['orquestradora', 'iris-regente'] },
+  { id: 'elza', nome: 'Elza', papel: 'Diretora comercial', squad: 'comercial', área: 'Regência', abreviação: 'EL', cor: '#c084fc', aliases: ['diretora-comercial', 'comercial-squad', 'elza-regente'] },
+  { id: 'zara', nome: 'Zara', papel: 'Triagem e ICP', squad: 'comercial', área: 'Qualificação', abreviação: 'ZA', cor: '#f59e0b', aliases: ['zara-triagem'] },
+  { id: 'otto', nome: 'Otto', papel: 'Radar e sinais', squad: 'comercial', área: 'Sinais', abreviação: 'OT', cor: '#d97706', aliases: ['otto-radar'] },
+  { id: 'bento', nome: 'Bento', papel: 'Estrategista da conta', squad: 'comercial', área: 'Estratégia', abreviação: 'BE', cor: '#b45309', aliases: ['bento-estrategista'] },
+  { id: 'maya', nome: 'Maya', papel: 'Copy e abordagem', squad: 'comercial', área: 'Abordagem', abreviação: 'MA', cor: '#f59e0b', aliases: ['maya-copy'] },
+  { id: 'olga', nome: 'Olga', papel: 'Fiscal de copy', squad: 'comercial', área: 'Fiscalização', abreviação: 'OL', cor: '#d97706', aliases: ['olga-fiscal'] },
+  { id: 'caio', nome: 'Caio', papel: 'Operador de envio', squad: 'comercial', área: 'Operação', abreviação: 'CA', cor: '#b45309', aliases: ['caio-envio'] },
+  { id: 'hugo', nome: 'Hugo', papel: 'Analista e métricas', squad: 'comercial', área: 'Métricas', abreviação: 'HU', cor: '#92400e', aliases: ['hugo-analista'] },
   { id: 'nova-mineradora', nome: 'Nova Mineradora', papel: 'Descoberta multicanal', squad: 'radar', área: 'Mineração', abreviação: 'NM', cor: '#38bdf8', aliases: ['nova_mineradora', 'nova', 'mineradora'] },
   { id: 'vega', nome: 'Vega', papel: 'Síntese editorial de radar', squad: 'radar', área: 'Radar', abreviação: 'VE', cor: '#60a5fa' },
   { id: 'suri', nome: 'Suri', papel: 'Estrategista', squad: 'conteúdo', área: 'Estratégia', abreviação: 'SU', cor: '#a3e635', aliases: ['estrategia', 'suri-estrategista'] },

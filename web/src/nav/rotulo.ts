@@ -81,6 +81,27 @@ const SONDAS: Partial<Record<VistaId, Sonda>> = {
     }
   },
 
+  financeiro: (e) => {
+    const d = e.financeiro
+    if (!d) return { respondeu: false, porque: 'os dados financeiros não vieram no estado atual' }
+    if (d.status === 'erro' || d.erro) return { respondeu: false, porque: d.erro ?? 'a API financeira retornou erro' }
+    return {
+      respondeu: true,
+      fonte: `API financeira consultada ${hora(d.atualizado_em)}: MRR R$ ${d.mrr_atual?.toLocaleString('pt-BR') ?? 0}`,
+    }
+  },
+
+  redes: (e) => {
+    const d = e.redes
+    if (!d) return { respondeu: false, porque: 'os dados de redes sociais não vieram no estado atual' }
+    if (d.status === 'erro' || d.erro) return { respondeu: false, porque: d.erro ?? 'erro ao ler dados de redes' }
+    return {
+      respondeu: true,
+      fonte: `Instagram @gastaomatos: ${d.instagram?.seguidores ?? 0} seguidores e ${d.instagram?.alcance_agregado ?? 0} alcance`,
+      deFora: d.linkedin?.motivo ? `LinkedIn: ${d.linkedin.motivo}` : undefined,
+    }
+  },
+
   ferramentas: (e) => {
     const d = e.ferramentas
     if (!d) return { respondeu: false, porque: 'o inventário de ferramentas não veio no estado atual' }

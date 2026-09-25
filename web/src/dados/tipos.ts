@@ -509,4 +509,43 @@ export type Estado = {
   }
 
   uso_planos?: UsoPlanos
+  financeiro?: {
+    status: 'pronto' | 'erro' | 'indeterminado'
+    atualizado_em: string
+    erro?: string | null
+    a_receber_mes: number | null
+    recebido_mes: number | null
+    faturado_mes: number | null
+    despesa_mes: number | null
+    mrr_atual: number | null
+    mrr_mes_anterior: number | null
+    clientes_ativos: number | null
+    clientes_em_atraso: number | null
+    valor_em_atraso: number | null
+    contratos_novos_mes: number | null
+    contratos_encerrados_mes: number | null
+    moeda_exibicao: string | null
+    cambio_usd_brl: number | null
+    cambio_usd_ars: number | null
+    tendencia_mensal: { mes: string; faturado: number; despesa: number; mrr: number }[]
+    por_canal_aquisicao: { canal: string; mrr: number; total: number; clientes: number }[]
+    proximas_cobrancas_qtd: number | null
+  }
+  redes?: {
+    status: 'pronto' | 'erro' | 'indeterminado'
+    atualizado_em: string
+    erro?: string | null
+    instagram: {
+      seguidores: number | null
+      alcance_agregado: number | null
+      salvamentos_agregado: number | null
+      metricas_obtidas: string[]
+      posts: { permalink: string; alcance: number | null; salvamentos: number | null }[]
+    } | null
+    linkedin: {
+      status: 'disponivel' | 'sem_permissao' | 'nao_testado'
+      motivo?: string
+      metricas: Record<string, number> | null
+    } | null
+  }
 }

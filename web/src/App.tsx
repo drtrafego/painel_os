@@ -26,6 +26,8 @@ const Cofre = lazy(() => import('./telas/Cofre').then((m) => ({ default: m.Cofre
 const Estudio = lazy(() => import('./telas/Estudio').then((m) => ({ default: m.Estudio })))
 const Aprovacoes = lazy(() => import('./telas/Aprovacoes').then((m) => ({ default: m.Aprovacoes })))
 const Cobrancas = lazy(() => import('./telas/Cobrancas').then((m) => ({ default: m.Cobrancas })))
+const Financeiro = lazy(() => import('./telas/Financeiro').then((m) => ({ default: m.Financeiro })))
+const Redes = lazy(() => import('./telas/Redes').then((m) => ({ default: m.Redes })))
 const OQueFalta = lazy(() => import('./telas/OQueFalta').then((m) => ({ default: m.OQueFalta })))
 
 function CarregandoTela() {
@@ -226,6 +228,10 @@ export default function App() {
         return <Aprovacoes {...comum} />
       case 'cobrancas':
         return <Cobrancas {...comum} />
+      case 'financeiro':
+        return <Financeiro {...comum} />
+      case 'redes':
+        return <Redes {...comum} />
       case 'falta':
         return <OQueFalta {...comum} />
     }

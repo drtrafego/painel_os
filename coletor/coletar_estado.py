@@ -1604,6 +1604,8 @@ def ler_ferramentas(configs_codex=CONFIGS_CODEX, configs_claude=CONFIGS_CLAUDE,
 
 
 CACHE_USO_PLANOS = PAINEL_OS_DIR / "data" / "cache_uso_planos.json"
+CACHE_FINANCEIRO = PAINEL_OS_DIR / "data" / "cache_financeiro.json"
+CACHE_REDES = PAINEL_OS_DIR / "data" / "cache_redes.json"
 
 
 def ler_uso_planos_codex(buscar=None, pastas_sessoes=None):
@@ -1619,6 +1621,7 @@ def ler_uso_planos_codex(buscar=None, pastas_sessoes=None):
         "primario_reset": None,
         "secundario_percentual": None,
         "secundario_reset": None,
+        "has_credits": None,
         "plano": None,
         "conta_compartilhada": True,
         "tokens_24h_estimativa": None,
@@ -1676,11 +1679,16 @@ def ler_uso_planos_codex(buscar=None, pastas_sessoes=None):
                     obj = json.loads(lin)
                     if not isinstance(obj, dict):
                         continue
+                    payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
                     t_count = None
-                    if obj.get("type") == "token_count" and isinstance(obj.get("payload"), dict):
-                        t_count = obj["payload"]
+                    if obj.get("type") == "event_msg" and payload.get("type") == "token_count":
+                        t_count = payload
+                    elif obj.get("type") == "token_count":
+                        t_count = payload if payload else obj
                     elif isinstance(obj.get("rate_limits"), dict):
                         t_count = obj
+                    elif isinstance(payload.get("rate_limits"), dict):
+                        t_count = payload
 
                     if t_count and isinstance(t_count.get("rate_limits"), dict):
                         if (ultimo_mtime_rate_limits is None) or (mtime_dt > ultimo_mtime_rate_limits):
@@ -1688,11 +1696,28 @@ def ler_uso_planos_codex(buscar=None, pastas_sessoes=None):
                             ultimo_token_count = t_count
 
                     if mtime_dt >= limite_24h:
-                        if isinstance(t_count, dict) and isinstance(t_count.get("total_token_usage"), dict):
-                            toks = t_count["total_token_usage"].get("total_tokens") or 0
+                        toks = None
+                        if isinstance(t_count, dict):
+                            info = t_count.get("info") if isinstance(t_count.get("info"), dict) else {}
+                            ttu = info.get("total_token_usage") if isinstance(info.get("total_token_usage"), dict) else (
+                                t_count.get("total_token_usage") if isinstance(t_count.get("total_token_usage"), dict) else {}
+                            )
+                            if isinstance(ttu, dict) and "total_tokens" in ttu and isinstance(ttu["total_tokens"], (int, float)):
+                                toks = int(ttu["total_tokens"])
+                            elif "tokens" in t_count and isinstance(t_count["tokens"], (int, float)):
+                                toks = int(t_count["tokens"])
+
+                        if toks is None and isinstance(payload, dict):
+                            info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
+                            ttu = info.get("total_token_usage") if isinstance(info.get("total_token_usage"), dict) else {}
+                            if isinstance(ttu, dict) and "total_tokens" in ttu and isinstance(ttu["total_tokens"], (int, float)):
+                                toks = int(ttu["total_tokens"])
+
+                        if toks is None and "tokens" in obj and isinstance(obj["tokens"], (int, float)):
+                            toks = int(obj["tokens"])
+
+                        if toks is not None:
                             soma_dir += toks
-                        elif "tokens" in obj and isinstance(obj["tokens"], (int, float)):
-                            soma_dir += int(obj["tokens"])
                 except Exception:
                     continue
 
@@ -1709,6 +1734,7 @@ def ler_uso_planos_codex(buscar=None, pastas_sessoes=None):
     rl = ultimo_token_count["rate_limits"]
     pri = rl.get("primary") if isinstance(rl.get("primary"), dict) else None
     sec = rl.get("secondary") if isinstance(rl.get("secondary"), dict) else None
+    has_credits = bool(rl.get("credits")) if rl.get("credits") is not None else None
 
     pri_perc = pri.get("used_percent") if pri else None
     pri_dias = round(pri["window_minutes"] / 1440.0, 1) if pri and isinstance(pri.get("window_minutes"), (int, float)) else None
@@ -1736,6 +1762,7 @@ def ler_uso_planos_codex(buscar=None, pastas_sessoes=None):
         "primario_reset": pri_reset,
         "secundario_percentual": sec_perc,
         "secundario_reset": sec_reset,
+        "has_credits": has_credits,
         "plano": str(plano) if plano else "prolite",
         "conta_compartilhada": True,
         "tokens_24h_estimativa": soma_total if any(v is not None for v in tokens_24h_map.values()) else None,
@@ -1864,6 +1891,274 @@ def ler_uso_planos(caminho_cache=CACHE_USO_PLANOS, buscar_codex=None, pasta_proj
             pass
 
     return resultado
+
+
+ALLOWLIST_FINANCEIRO = {
+    "a_receber_mes",
+    "recebido_mes",
+    "faturado_mes",
+    "despesa_mes",
+    "mrr_atual",
+    "mrr_mes_anterior",
+    "clientes_ativos",
+    "clientes_em_atraso",
+    "valor_em_atraso",
+    "contratos_novos_mes",
+    "contratos_encerrados_mes",
+    "moeda_exibicao",
+    "cambio_usd_brl",
+    "cambio_usd_ars",
+    "tendencia_mensal",
+    "por_canal_aquisicao",
+    "proximas_cobrancas_qtd",
+}
+
+
+def _processar_resposta_financeira(bruto: dict, agora_iso: str) -> dict:
+    """Filtra rigorosamente a resposta financeira garantindo que só chaves da allowlist saem."""
+    prev = bruto.get("previous") if isinstance(bruto.get("previous"), dict) else {}
+    rate = bruto.get("rate") if isinstance(bruto.get("rate"), dict) else {}
+
+    chart_raw = bruto.get("chartData") if isinstance(bruto.get("chartData"), list) else []
+    tendencia = []
+    for item in chart_raw:
+        if isinstance(item, dict):
+            tendencia.append({
+                "mes": str(item.get("month", "")),
+                "faturado": item.get("income"),
+                "despesa": item.get("expense"),
+                "mrr": item.get("mrr"),
+            })
+
+    source_raw = bruto.get("sourceBreakdown") if isinstance(bruto.get("sourceBreakdown"), list) else []
+    canais = []
+    for item in source_raw:
+        if isinstance(item, dict):
+            canais.append({
+                "canal": str(item.get("code", "")),
+                "mrr": item.get("mrr"),
+                "total": item.get("total"),
+                "clientes": item.get("clients"),
+            })
+
+    upcoming = bruto.get("upcomingInvoices")
+    proximas_qtd = len(upcoming) if isinstance(upcoming, list) else None
+
+    res = {
+        "status": "pronto",
+        "atualizado_em": agora_iso,
+        "erro": None,
+        "a_receber_mes": bruto.get("periodToReceive"),
+        "recebido_mes": bruto.get("periodReceived"),
+        "faturado_mes": bruto.get("periodIncome"),
+        "despesa_mes": bruto.get("periodExpense"),
+        "mrr_atual": bruto.get("mrr"),
+        "mrr_mes_anterior": prev.get("mrr"),
+        "clientes_ativos": bruto.get("activeClients"),
+        "clientes_em_atraso": bruto.get("overdueClients"),
+        "valor_em_atraso": bruto.get("overdueAmount"),
+        "contratos_novos_mes": bruto.get("contratosNovos"),
+        "contratos_encerrados_mes": bruto.get("contratosEncerrados"),
+        "moeda_exibicao": bruto.get("displayCurrency") or "BRL",
+        "cambio_usd_brl": rate.get("usd_brl"),
+        "cambio_usd_ars": rate.get("usd_ars"),
+        "tendencia_mensal": tendencia,
+        "por_canal_aquisicao": canais,
+        "proximas_cobrancas_qtd": proximas_qtd,
+    }
+
+    chaves_invalidas = set(res.keys()) - ALLOWLIST_FINANCEIRO - {"status", "atualizado_em", "erro"}
+    if chaves_invalidas:
+        raise ValueError(f"chaves não autorizadas na saída financeira: {chaves_invalidas}")
+
+    return res
+
+
+def ler_financeiro(buscar=None, caminho_cache=CACHE_FINANCEIRO):
+    """Lê métricas financeiras agregadas (GET /dashboard/metrics) descartando qualquer PII."""
+    agora_iso = agora_utc().isoformat()
+    vazio = {
+        "status": "indeterminado",
+        "atualizado_em": agora_iso,
+        "erro": None,
+        "a_receber_mes": None,
+        "recebido_mes": None,
+        "faturado_mes": None,
+        "despesa_mes": None,
+        "mrr_atual": None,
+        "mrr_mes_anterior": None,
+        "clientes_ativos": None,
+        "clientes_em_atraso": None,
+        "valor_em_atraso": None,
+        "contratos_novos_mes": None,
+        "contratos_encerrados_mes": None,
+        "moeda_exibicao": "BRL",
+        "cambio_usd_brl": None,
+        "cambio_usd_ars": None,
+        "tendencia_mensal": [],
+        "por_canal_aquisicao": [],
+        "proximas_cobrancas_qtd": None,
+    }
+
+    if buscar is not None:
+        try:
+            bruto = buscar()
+            if isinstance(bruto, dict):
+                return _processar_resposta_financeira(bruto, agora_iso)
+        except Exception as e:
+            return {**vazio, "status": "erro", "erro": type(e).__name__}
+
+    if caminho_cache and Path(caminho_cache).is_file():
+        try:
+            st = Path(caminho_cache).stat()
+            idade_s = (datetime.now(timezone.utc).timestamp() - st.st_mtime)
+            if idade_s < 600:
+                cache_obj = json.loads(Path(caminho_cache).read_text(encoding="utf-8"))
+                if isinstance(cache_obj, dict) and cache_obj.get("status") in ("pronto", "indeterminado"):
+                    return cache_obj
+        except Exception:
+            pass
+
+    try:
+        segredos_path = RAIZ / "luana/.env.secrets"
+        if not segredos_path.is_file():
+            return {**vazio, "status": "indeterminado", "erro": "luana/.env.secrets indisponível"}
+        segredos = segredos_path.read_text(encoding="utf-8")
+        m = re.search(r"^AGENT_API_KEY=(?:['\"])?([^'\"\n]+)", segredos, re.MULTILINE)
+        if not m:
+            return {**vazio, "status": "indeterminado", "erro": "AGENT_API_KEY não encontrada"}
+
+        req = urllib.request.Request(
+            "https://financeiro.casaldotrafego.com/api/agent/v1/dashboard/metrics",
+            headers={"Authorization": f"Bearer {m.group(1).strip()}", "x-agent-actor": "painel-os-readonly"},
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            corpo = json.loads(resp.read().decode("utf-8"))
+            if not isinstance(corpo, dict):
+                return {**vazio, "status": "erro", "erro": "resposta financeira não é um objeto"}
+            resultado = _processar_resposta_financeira(corpo, agora_iso)
+            if caminho_cache:
+                try:
+                    gravar_atomico(Path(caminho_cache), resultado)
+                except Exception:
+                    pass
+            return resultado
+    except Exception as e:
+        if caminho_cache and Path(caminho_cache).is_file():
+            try:
+                cache_obj = json.loads(Path(caminho_cache).read_text(encoding="utf-8"))
+                if isinstance(cache_obj, dict):
+                    cache_obj["status"] = "indeterminado"
+                    return cache_obj
+            except Exception:
+                pass
+        return {**vazio, "status": "indeterminado", "erro": type(e).__name__}
+
+
+def ler_redes_organicas(buscar=None, caminho_cache=CACHE_REDES):
+    """Lê insights orgânicos de redes (Instagram e LinkedIn)."""
+    agora_iso = agora_utc().isoformat()
+    vazio = {
+        "status": "indeterminado",
+        "atualizado_em": agora_iso,
+        "erro": None,
+        "instagram": None,
+        "linkedin": {
+            "status": "sem_permissao",
+            "motivo": "escopo r_organization_social_feed não autorizado na chave Composio atual",
+            "metricas": None,
+        },
+    }
+
+    if buscar is not None:
+        try:
+            bruto = buscar()
+            if isinstance(bruto, dict):
+                return bruto
+        except Exception as e:
+            return {**vazio, "status": "erro", "erro": type(e).__name__}
+
+    if caminho_cache and Path(caminho_cache).is_file():
+        try:
+            st = Path(caminho_cache).stat()
+            idade_s = (datetime.now(timezone.utc).timestamp() - st.st_mtime)
+            if idade_s < 1800:
+                cache_obj = json.loads(Path(caminho_cache).read_text(encoding="utf-8"))
+                if isinstance(cache_obj, dict) and cache_obj.get("status") in ("pronto", "indeterminado"):
+                    return cache_obj
+        except Exception:
+            pass
+
+    comp_key = os.environ.get("COMPOSIO_API_KEY")
+    if not comp_key:
+        comp_env = Path.home() / ".composio_env"
+        if comp_env.is_file():
+            for lin in comp_env.read_text(encoding="utf-8").splitlines():
+                if lin.startswith("COMPOSIO_API_KEY="):
+                    comp_key = lin.split("=", 1)[1].strip().strip("'\"")
+                    break
+
+    if not comp_key:
+        return {**vazio, "status": "indeterminado", "erro": "chave Composio não encontrada"}
+
+    ig_user_id = "26530904369921644"
+    conn_id = "ca_4DZxyWqyHq4W"
+
+    try:
+        headers = {"x-api-key": comp_key, "Content-Type": "application/json"}
+        req_account = urllib.request.Request(
+            "https://backend.composio.dev/api/v1/actions/execute",
+            headers=headers,
+            data=json.dumps({
+                "connection_id": conn_id,
+                "endpoint": f"/{ig_user_id}",
+                "method": "GET",
+                "params": {"fields": "followers_count,media_count,name,username"}
+            }).encode("utf-8")
+        )
+        seguidores = None
+        with urllib.request.urlopen(req_account, timeout=8) as resp:
+            res_json = json.loads(resp.read().decode("utf-8"))
+            data = res_json.get("data") if isinstance(res_json, dict) else {}
+            if isinstance(data, dict):
+                resp_body = data.get("response_data") if isinstance(data.get("response_data"), dict) else data
+                if isinstance(resp_body, dict):
+                    seguidores = resp_body.get("followers_count")
+
+        resultado = {
+            "status": "pronto",
+            "atualizado_em": agora_iso,
+            "erro": None,
+            "instagram": {
+                "seguidores": seguidores,
+                "alcance_agregado": None,
+                "salvamentos_agregado": None,
+                "metricas_obtidas": ["followers_count"] if seguidores is not None else [],
+                "posts": [],
+            },
+            "linkedin": {
+                "status": "sem_permissao",
+                "motivo": "escopo r_organization_social_feed não autorizado na chave Composio atual",
+                "metricas": None,
+            },
+        }
+
+        if caminho_cache:
+            try:
+                gravar_atomico(Path(caminho_cache), resultado)
+            except Exception:
+                pass
+        return resultado
+    except Exception as e:
+        if caminho_cache and Path(caminho_cache).is_file():
+            try:
+                cache_obj = json.loads(Path(caminho_cache).read_text(encoding="utf-8"))
+                if isinstance(cache_obj, dict):
+                    cache_obj["status"] = "indeterminado"
+                    return cache_obj
+            except Exception:
+                pass
+        return {**vazio, "status": "indeterminado", "erro": type(e).__name__}
 
 
 def ler_cobrancas(buscar=None):
@@ -2141,6 +2436,7 @@ def descobrir_agentes(pasta_codex: Path = AGENTES_CODEX, pasta_global: Path = No
                     "modelo": fm.get("model") or None,
                     "ferramentas": ferramentas or None,
                     "squad": squad,
+                    "regente": (id_ in ("iris", "elza")) or bool(fm.get("regente")) or (fm.get("tier") == 0),
                     "origem": "catálogo operacional normalizado",
                     "arquivo": f"agente:{squad}/{id_}",
                     "linhas": texto.count("\n") + 1,
@@ -3302,8 +3598,8 @@ def renderizar_html_workflow_quem_convoca_quem(workflow: dict) -> str:
       background-image: radial-gradient(var(--card-border) 1px, transparent 1px);
       background-size: 24px 24px;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      align-items: flex-start;
+      justify-content: flex-start;
     }}
     svg {{
       display: block;
@@ -3516,42 +3812,46 @@ def gerar_workflow_setor_comercial() -> dict:
             {"id": "comercial", "label": "Setor comercial"}
         ],
         "phases": [
-            {"id": "sinal-plano", "label": "Sinal e plano", "fromCol": 0, "toCol": 2},
-            {"id": "aprovacao-plano", "label": "Aprovação", "fromCol": 3, "toCol": 3, "variant": "security"},
-            {"id": "texto-fiscal", "label": "Texto e fiscal", "fromCol": 4, "toCol": 6, "variant": "security"},
-            {"id": "ativacao-aprendizado", "label": "Ativação, fechamento e aprendizado", "fromCol": 7, "toCol": 9, "variant": "emphasis"},
+            {"id": "regencia", "label": "Regência", "fromCol": 0, "toCol": 0, "variant": "emphasis"},
+            {"id": "sinal-plano", "label": "Sinal e plano", "fromCol": 1, "toCol": 3},
+            {"id": "aprovacao-plano", "label": "Aprovação", "fromCol": 4, "toCol": 4, "variant": "security"},
+            {"id": "texto-fiscal", "label": "Texto e fiscal", "fromCol": 5, "toCol": 7, "variant": "security"},
+            {"id": "ativacao-aprendizado", "label": "Ativação, fechamento e aprendizado", "fromCol": 8, "toCol": 10, "variant": "emphasis"},
         ],
         "mainPath": [
-            "zara", "otto", "bento", "gastao_plano",
+            "elza", "zara", "otto", "bento", "gastao_plano",
             "maya", "olga", "gastao_textos",
             "caio", "clay", "hugo"
         ],
         "semanticChecks": {
-            "allowedRoots": ["zara"],
+            "allowedRoots": ["elza"],
             "allowedTerminals": ["hugo"],
             "requiredEdges": [
+                {"from": "elza", "to": "zara"},
                 {"from": "bento", "to": "gastao_plano"},
                 {"from": "gastao_plano", "to": "maya"},
                 {"from": "olga", "to": "gastao_textos"},
                 {"from": "gastao_textos", "to": "caio"},
             ],
             "requiredPaths": [
-                {"from": "zara", "to": "hugo"}
+                {"from": "elza", "to": "hugo"}
             ]
         },
         "nodes": [
-            {"id": "zara", "lane": "comercial", "col": 0, "type": "backend", "label": "Zara", "sublabel": "triagem e ICP", "width": 125, "yOffset": 0},
-            {"id": "otto", "lane": "comercial", "col": 1, "type": "backend", "label": "Otto", "sublabel": "radar e sinais", "width": 125, "yOffset": 0},
-            {"id": "bento", "lane": "comercial", "col": 2, "type": "backend", "label": "Bento", "sublabel": "estrategista da conta", "width": 135, "yOffset": 0},
-            {"id": "gastao_plano", "lane": "comercial", "col": 3, "type": "security", "label": "Gastão", "sublabel": "aprova o plano", "width": 145, "yOffset": 0, "variant": "security"},
-            {"id": "maya", "lane": "comercial", "col": 4, "type": "backend", "label": "Maya", "sublabel": "copy e abordagem", "width": 135, "yOffset": 0},
-            {"id": "olga", "lane": "comercial", "col": 5, "type": "security", "label": "Olga", "sublabel": "fiscal de copy (PASSA)", "width": 145, "yOffset": 0},
-            {"id": "gastao_textos", "lane": "comercial", "col": 6, "type": "security", "label": "Gastão", "sublabel": "aprova textos e hash", "width": 155, "yOffset": 0, "variant": "security"},
-            {"id": "caio", "lane": "comercial", "col": 7, "type": "backend", "label": "Caio", "sublabel": "operador de envio", "width": 135, "yOffset": 0},
-            {"id": "clay", "lane": "comercial", "col": 8, "type": "backend", "label": "Clay", "sublabel": "closer (reunião)", "width": 125, "yOffset": 0},
-            {"id": "hugo", "lane": "comercial", "col": 9, "type": "database", "label": "Hugo", "sublabel": "analista e métricas", "width": 135, "yOffset": 0},
+            {"id": "elza", "lane": "comercial", "col": 0, "type": "regente", "label": "Elza", "sublabel": "diretora e regência", "width": 135, "yOffset": 0},
+            {"id": "zara", "lane": "comercial", "col": 1, "type": "backend", "label": "Zara", "sublabel": "triagem e ICP", "width": 125, "yOffset": 0},
+            {"id": "otto", "lane": "comercial", "col": 2, "type": "backend", "label": "Otto", "sublabel": "radar e sinais", "width": 125, "yOffset": 0},
+            {"id": "bento", "lane": "comercial", "col": 3, "type": "backend", "label": "Bento", "sublabel": "estrategista da conta", "width": 135, "yOffset": 0},
+            {"id": "gastao_plano", "lane": "comercial", "col": 4, "type": "security", "label": "Gastão", "sublabel": "aprova o plano", "width": 145, "yOffset": 0, "variant": "security"},
+            {"id": "maya", "lane": "comercial", "col": 5, "type": "backend", "label": "Maya", "sublabel": "copy e abordagem", "width": 135, "yOffset": 0},
+            {"id": "olga", "lane": "comercial", "col": 6, "type": "security", "label": "Olga", "sublabel": "fiscal de copy (PASSA)", "width": 145, "yOffset": 0},
+            {"id": "gastao_textos", "lane": "comercial", "col": 7, "type": "security", "label": "Gastão", "sublabel": "aprova textos e hash", "width": 155, "yOffset": 0, "variant": "security"},
+            {"id": "caio", "lane": "comercial", "col": 8, "type": "backend", "label": "Caio", "sublabel": "operador de envio", "width": 135, "yOffset": 0},
+            {"id": "clay", "lane": "comercial", "col": 9, "type": "backend", "label": "Clay", "sublabel": "closer (reunião)", "width": 125, "yOffset": 0},
+            {"id": "hugo", "lane": "comercial", "col": 10, "type": "database", "label": "Hugo", "sublabel": "analista e métricas", "width": 135, "yOffset": 0},
         ],
         "edges": [
+            {"id": "elza-zara", "from": "elza", "to": "zara", "label": "orquestra", "variant": "emphasis", "role": "main"},
             {"id": "zara-otto", "from": "zara", "to": "otto", "label": "leads ICP", "variant": "default", "role": "main"},
             {"id": "otto-bento", "from": "otto", "to": "bento", "label": "sinais", "variant": "default", "role": "main"},
             {"id": "bento-gastao", "from": "bento", "to": "gastao_plano", "label": "plano", "variant": "security", "role": "main"},
@@ -3580,10 +3880,11 @@ def renderizar_html_workflow_setor_comercial(workflow: dict) -> str:
     node_y = 120
 
     phases_info = [
-        {"id": "sinal-plano", "nome": "Sinal e plano", "fromCol": 0, "toCol": 2, "cor": "#58a6ff", "badge": "FASE 1"},
-        {"id": "aprovacao-plano", "nome": "Aprovação", "fromCol": 3, "toCol": 3, "cor": "#f59e0b", "badge": "GATE HUMANO"},
-        {"id": "texto-fiscal", "nome": "Texto e fiscal", "fromCol": 4, "toCol": 6, "cor": "#f59e0b", "badge": "FASE 2 & FISCAL"},
-        {"id": "ativacao-aprendizado", "nome": "Ativação, fechamento e dados", "fromCol": 7, "toCol": 9, "cor": "#7ee787", "badge": "FASE 3"},
+        {"id": "regencia", "nome": "Regência", "fromCol": 0, "toCol": 0, "cor": "#c084fc", "badge": "REGENTE"},
+        {"id": "sinal-plano", "nome": "Sinal e plano", "fromCol": 1, "toCol": 3, "cor": "#58a6ff", "badge": "FASE 1"},
+        {"id": "aprovacao-plano", "nome": "Aprovação", "fromCol": 4, "toCol": 4, "cor": "#f59e0b", "badge": "GATE HUMANO"},
+        {"id": "texto-fiscal", "nome": "Texto e fiscal", "fromCol": 5, "toCol": 7, "cor": "#f59e0b", "badge": "FASE 2 & FISCAL"},
+        {"id": "ativacao-aprendizado", "nome": "Ativação, fechamento e dados", "fromCol": 8, "toCol": 10, "cor": "#7ee787", "badge": "FASE 3"},
     ]
 
     svg_w = start_x * 2 + len(nodes) * col_w
@@ -3615,7 +3916,13 @@ def renderizar_html_workflow_setor_comercial(workflow: dict) -> str:
         ntype = n.get("type", "backend")
         is_security = ntype == "security" or n.get("variant") == "security"
 
-        if is_security:
+        if ntype == "regente" or nid == "elza":
+            cor_borda = "#c084fc"
+            cor_badge = "#c084fc"
+            badge_bg = "rgba(192, 132, 252, 0.15)"
+            badge_txt = "REGENTE"
+            classe_extra = "node-regente"
+        elif is_security:
             cor_borda = "#f59e0b"
             cor_badge = "#f59e0b"
             badge_bg = "rgba(245, 158, 11, 0.15)"
@@ -5128,18 +5435,9 @@ RE_SEGREDO_PUBLICO = re.compile(
     re.IGNORECASE,
 )
 RE_CHAVE_SECRETA = re.compile(
-    r"(?:token(?!s)|senha|password|secret|api[_-]?key|authorization)", re.IGNORECASE
+    r"(?:auth[_-]?token|access[_-]?token|refresh[_-]?token|api[_-]?token|user[_-]?token|secret[_-]?token|\btoken\b|senha|password|secret|api[_-]?key|authorization)",
+    re.IGNORECASE,
 )
-# ‼️ `token(?!s)`, NÃO `token`: a rodada 10 (uso dos planos) introduziu chaves
-# legítimas de CONTAGEM (tokens_24h, tokens_24h_estimativa), sempre no plural,
-# nunca nome de credencial. Toda chave de credencial real desta casa é
-# singular (access_token, id_token, refresh_token, accessToken): a trava
-# derrubava main() inteiro com "chave de credencial proibida" nas chaves de
-# contagem, um falso positivo, não um vazamento (os valores vêm de
-# `ler_uso_planos_codex`/`ler_uso_planos_claude`, que só devolvem inteiro
-# somado, nunca o token bruto). Achado e corrigido durante o merge da rodada
-# 10 (24/09/2026): sem isto o coletor nunca termina com `uso_planos` no
-# estado.
 
 # ---------------------------------------------------------------------------
 # NÚMERO DE PESSOA NA PORTA FINAL
@@ -5293,6 +5591,8 @@ def main():
     followup = ler_followup()
     calendario = ler_calendario()
     uso_planos = ler_uso_planos()
+    financeiro = ler_financeiro()
+    redes = ler_redes_organicas()
     diretiva = carregar_diretiva(DIRETIVA_JSON)
     if isinstance(diretiva, dict) and diretiva.get("objetivo"):
         limpo = rotulo_seguro(diretiva["objetivo"], limite=500)
@@ -5423,7 +5723,9 @@ def main():
         "calendario": calendario,
         "diretiva": diretiva,
         "uso_planos": uso_planos,
-        "squads": squads,
+        "financeiro": financeiro,
+        "redes": redes,
+        "squads": SQUADS,
         "sessao": sessao,
         "agentes": agentes,
         "convocacoes_fora_da_casa": de_fora,
