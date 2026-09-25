@@ -170,6 +170,10 @@ SQUADS = {
         "descricao": "Tráfego pago dos clientes da Bia: diagnóstico, campanha pausada, fiscal e ligar só com o dono.",
         "regente": "tereza",
     },
+    "desconhecido": {
+        "nome": "Não catalogado",
+        "descricao": "Pasta de squad nova que ainda não está no MAPA_PASTA_SQUAD do coletor. Cadastrar lá.",
+    },
     "bots": {
         "nome": "Squad de bots",
         "descricao": "Conserto e evolução dos bots do Renato: cópia, revisão, troca atômica e conversa real.",
