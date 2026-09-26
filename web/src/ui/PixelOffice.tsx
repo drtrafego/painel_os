@@ -11,6 +11,7 @@ import {
   type PixelAgent,
   type PixelAgentSquad,
 } from '../dados/pixel-agents'
+import { AgenteVivoCard, montarResumoAgenteVivo } from './AgenteVivoCard'
 import { COR_DA_SESSAO } from './paleta'
 
 export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, obterAtivosNoCatalogo }
@@ -42,7 +43,7 @@ function arredondarZoom(valor: number) {
   return Number(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, valor)).toFixed(2))
 }
 
-const DEPARTAMENTOS_CONFIG: Array<{
+type DepartamentoVisual = {
   id: PixelAgentSquad
   nome: string
   cor: string
@@ -50,7 +51,9 @@ const DEPARTAMENTOS_CONFIG: Array<{
   gy: number
   largura: number
   altura: number
-}> = [
+}
+
+const DEPARTAMENTOS_CONFIG: DepartamentoVisual[] = [
   { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: 0, gy: -220, largura: 260, altura: 165 },
   { id: 'bots', nome: 'RENATO / BOTS', cor: '#f97316', gx: 270, gy: -110, largura: 260, altura: 165 },
   { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#a855f7', gx: 270, gy: 150, largura: 260, altura: 165 },
@@ -58,6 +61,75 @@ const DEPARTAMENTOS_CONFIG: Array<{
   { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -270, gy: 150, largura: 260, altura: 165 },
   { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#f59e0b', gx: -270, gy: -110, largura: 260, altura: 165 },
 ]
+
+const DEPARTAMENTOS_MOBILE_CONFIG: DepartamentoVisual[] = [
+  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: -138, gy: -170, largura: 230, altura: 148 },
+  { id: 'bots', nome: 'RENATO / BOTS', cor: '#f97316', gx: 138, gy: -170, largura: 230, altura: 148 },
+  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#a855f7', gx: 138, gy: 24, largura: 230, altura: 148 },
+  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#10b981', gx: -138, gy: 218, largura: 230, altura: 148 },
+  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: 138, gy: 218, largura: 230, altura: 148 },
+  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#f59e0b', gx: -138, gy: 24, largura: 230, altura: 148 },
+]
+
+function departamentosParaLargura(largura: number) {
+  return largura < 640 ? DEPARTAMENTOS_MOBILE_CONFIG : DEPARTAMENTOS_CONFIG
+}
+
+function boundsDepartamentos(departamentos: DepartamentoVisual[]) {
+  let esquerda = Infinity
+  let direita = -Infinity
+  let topo = Infinity
+  let baixo = -Infinity
+
+  departamentos.forEach((dept) => {
+    const metadeLargura = dept.largura / 2
+    const metadeAltura = dept.altura / 2
+    esquerda = Math.min(esquerda, dept.gx - metadeLargura - 8)
+    direita = Math.max(direita, dept.gx + metadeLargura + 8)
+    topo = Math.min(topo, dept.gy - metadeAltura - 88)
+    baixo = Math.max(baixo, dept.gy + metadeAltura + 30)
+  })
+
+  return {
+    esquerda,
+    direita,
+    topo,
+    baixo,
+    largura: direita - esquerda,
+    altura: baixo - topo,
+    centroX: (esquerda + direita) / 2,
+    centroY: (topo + baixo) / 2,
+  }
+}
+
+function vistaInicialMapa(largura: number, altura: number) {
+  const mobile = largura < 640
+  const departamentos = departamentosParaLargura(largura)
+  const bounds = boundsDepartamentos(departamentos)
+  const margemX = mobile ? 12 : 34
+  const margemTopo = mobile ? 8 : 28
+  const margemBase = mobile ? 24 : 36
+  const zoomCalculado = Math.min(
+    (largura - margemX * 2) / bounds.largura,
+    (altura - margemTopo - margemBase) / bounds.altura
+  )
+  const zoomMinimo = mobile ? 0.7 : 0.68
+  const zoomMaximo = mobile ? 0.86 : 1
+  const zoom = arredondarZoom(Math.min(zoomMaximo, Math.max(zoomMinimo, zoomCalculado)))
+
+  return {
+    zoom,
+    pan: mobile
+      ? {
+          x: -bounds.centroX * zoom,
+          y: margemTopo - altura / 2 - bounds.topo * zoom,
+        }
+      : {
+          x: -bounds.centroX * zoom,
+          y: -bounds.centroY * zoom,
+        },
+  }
+}
 
 function desenharMesaEAgente(
   ctx: CanvasRenderingContext2D,
@@ -300,10 +372,10 @@ function desenharMesaEAgente(
   // 6. Etiqueta Holográfica HUD com Nome do Agente
   const tagY = -36
   const nomeExibicao = ag.nome.slice(0, 11)
-  ctx.font = 'bold 9px sans-serif'
+  ctx.font = 'bold 10px sans-serif'
   const larguraTexto = ctx.measureText(nomeExibicao).width
   const tagW = Math.max(38, larguraTexto + 12)
-  const tagH = 15
+  const tagH = 16
 
   // Fundo Dark Glassmorphism com borda neon
   ctx.fillStyle = 'rgba(15, 23, 42, 0.92)'
@@ -320,7 +392,7 @@ function desenharMesaEAgente(
 
   ctx.fillStyle = '#f8fafc'
   ctx.textAlign = 'center'
-  ctx.fillText(nomeExibicao, 3, tagY + 11)
+  ctx.fillText(nomeExibicao, 3, tagY + 12)
 
   // 7. BADGE FLUTUANTE ⚡ ATIVO PARA AGENTES TRABALHANDO
   if (ehTrabalhando) {
@@ -332,7 +404,7 @@ function desenharMesaEAgente(
     ctx.fillStyle = '#eab308'
     ctx.fillRect(-22, badgeY + badgePulso, 44, 12)
     ctx.fillStyle = '#0f172a'
-    ctx.font = 'extrabold 8px sans-serif'
+    ctx.font = 'extrabold 8.5px sans-serif'
     ctx.textAlign = 'center'
     ctx.fillText('⚡ ATIVO', 0, badgeY + badgePulso + 9)
     ctx.restore()
@@ -350,6 +422,7 @@ export function PixelOffice({
 }: PixelOfficeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const vistaManualRef = useRef(false)
 
   const [zoom, setZoom] = useState(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 640) {
@@ -446,6 +519,29 @@ export function PixelOffice({
   }
 
   const catalogoVisual = useMemo(() => mesclarRuntimesNoCatalogo(catalogo, agentes), [agentes, catalogo])
+  const agentesTrabalhando = useMemo(() => agentes.filter((agente) => agente.estado === 'trabalhando'), [agentes])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const ajustarVista = () => {
+      if (vistaManualRef.current) return
+      const largura = container.clientWidth
+      const altura = container.clientHeight
+      if (!largura || !altura) return
+      const vista = vistaInicialMapa(largura, altura)
+      setZoom(vista.zoom)
+      setPan(vista.pan)
+    }
+
+    ajustarVista()
+
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(ajustarVista)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
 
   const { ativos, diretoresEstado } = useMemo(() => {
     const conjuntoAtivos = new Set<string>()
@@ -636,15 +732,16 @@ export function PixelOffice({
       const estadoFinal = temSubAtivo || sessaoRaiz?.estado === 'trabalhando' ? 'trabalhando' : sessaoAtiva ? 'silencioso' : 'parado'
       const statusRotulo = estadoFinal === 'trabalhando' ? 'TRABALHANDO' : estadoFinal === 'silencioso' ? 'OCIOSO' : 'PARADO'
 
-      const modelo = sessaoRaiz?.modelo_legivel || sessaoRaiz?.modelo || subagentesDoDiretor.find((s) => s.modelo)?.modelo_legivel || 'Claude 3.7 Sonnet (orquestrador)'
-      const esforco = sessaoRaiz?.esforco || 'medium (padrão)'
+      const modelo = sessaoRaiz?.modelo_legivel || sessaoRaiz?.modelo || subagentesDoDiretor.find((s) => s.modelo)?.modelo_legivel || 'sem dado'
+      const esforco = sessaoRaiz?.esforco || 'sem dado'
       const dono = foco.charAt(0).toUpperCase() + foco.slice(1)
-      const rodandoHa = sessaoRaiz?.rodando_ha || (sessaoRaiz?.inicio ? `desde ${sessaoRaiz.inicio}` : 'sessão ativa')
-      const ultimaAtiv = sessaoRaiz?.silencio_s === 0 ? 'agora' : sessaoRaiz?.silencio_s != null ? `${sessaoRaiz.silencio_s}s atrás` : (sessaoRaiz?.ultima_atividade || 'atividade recente')
-      const ferramentas = subagentesDoDiretor.reduce((acc, s) => acc + (s.ferramentas_usadas ?? 0), sessaoRaiz?.ferramentas_usadas ?? 0)
-      const tokens = sessaoRaiz?.tokens_formatado || (sessaoRaiz?.tokens_total ? sessaoRaiz.tokens_total.toLocaleString('pt-BR') : 'sem dado de tokens para sessão principal')
-      const tarefa = sessaoRaiz?.tarefa || subagentesDoDiretor.find((s) => s.tarefa)?.tarefa || `Orquestração de tarefas do setor ${foco}`
-      const quemMandou = sessaoRaiz?.quem_mandou || `Painel OS / ${dono}`
+      const rodandoHa = sessaoRaiz?.rodando_ha || (sessaoRaiz?.inicio ? `desde ${sessaoRaiz.inicio}` : 'sem dado')
+      const ultimaAtiv = sessaoRaiz?.silencio_s === 0 ? 'agora' : sessaoRaiz?.silencio_s != null ? `${sessaoRaiz.silencio_s}s atrás` : (sessaoRaiz?.ultima_atividade || 'sem dado')
+      const ferramentasUsadas = subagentesDoDiretor.reduce((acc, s) => acc + (s.ferramentas_usadas ?? 0), sessaoRaiz?.ferramentas_usadas ?? 0)
+      const ferramentas = sessaoRaiz?.ferramentas_usadas != null || subagentesDoDiretor.some((s) => s.ferramentas_usadas != null) ? `${ferramentasUsadas} usadas` : 'sem dado'
+      const tokens = sessaoRaiz?.tokens_formatado || (sessaoRaiz?.tokens_total != null ? sessaoRaiz.tokens_total.toLocaleString('pt-BR') : 'sem dado')
+      const tarefa = sessaoRaiz?.tarefa || subagentesDoDiretor.find((s) => s.tarefa)?.tarefa || sessaoRaiz?.descricao || sessaoRaiz?.etapa || 'sem dado'
+      const quemMandou = sessaoRaiz?.quem_mandou || sessaoRaiz?.pai || 'sem dado'
 
       return {
         id: foco,
@@ -672,7 +769,7 @@ export function PixelOffice({
     const statusRotulo = estadoAg === 'trabalhando' ? 'TRABALHANDO' : estadoAg === 'silencioso' ? 'OCIOSO' : 'PARADO'
 
     const donoNorm = normalizarDonoId(noVivo?.dono)
-    const donoFormatted = donoNorm ? donoNorm.charAt(0).toUpperCase() + donoNorm.slice(1) : noCat?.área || '—'
+    const donoFormatted = donoNorm ? donoNorm.charAt(0).toUpperCase() + donoNorm.slice(1) : noCat?.área || 'sem dado'
 
     return {
       id: foco,
@@ -681,19 +778,63 @@ export function PixelOffice({
       squad: noCat?.squad || 'globais',
       estado: estadoAg,
       statusRotulo,
-      modelo: noVivo?.modelo_legivel || noVivo?.modelo || 'Claude 3.7 Sonnet',
-      esforco: noVivo?.esforco || 'medium (padrão)',
+      modelo: noVivo?.modelo_legivel || noVivo?.modelo || 'sem dado',
+      esforco: noVivo?.esforco || 'sem dado',
       dono: donoFormatted,
-      rodandoHa: noVivo?.rodando_ha || (noVivo?.inicio ? `desde ${noVivo.inicio}` : 'sessão recente'),
-      ultimaAtiv: noVivo?.silencio_s === 0 ? 'agora' : noVivo?.silencio_s != null ? `${noVivo.silencio_s}s atrás` : (noVivo?.ultima_atividade || 'atividade recente'),
-      ferramentas: `${noVivo?.ferramentas_usadas ?? 0} usadas`,
-      tokens: noVivo?.tokens_formatado || (noVivo?.tokens_total ? noVivo.tokens_total.toLocaleString('pt-BR') : 'sem dado de tokens para este subagente'),
-      tarefa: noVivo?.tarefa || noVivo?.etapa || noVivo?.descricao || (noVivo?.ferramenta ? `Executando ${noVivo.ferramenta}` : noCat?.papel || 'Pronto para execução'),
-      quemMandou: noVivo?.quem_mandou || (donoNorm ? `Convocado por ${donoFormatted}` : 'Painel OS'),
+      rodandoHa: noVivo?.rodando_ha || (noVivo?.inicio ? `desde ${noVivo.inicio}` : 'sem dado'),
+      ultimaAtiv: noVivo?.silencio_s === 0 ? 'agora' : noVivo?.silencio_s != null ? `${noVivo.silencio_s}s atrás` : (noVivo?.ultima_atividade || 'sem dado'),
+      ferramentas: noVivo?.ferramentas_usadas != null ? `${noVivo.ferramentas_usadas} usadas` : 'sem dado',
+      tokens: noVivo?.tokens_formatado || (noVivo?.tokens_total != null ? noVivo.tokens_total.toLocaleString('pt-BR') : 'sem dado'),
+      tarefa: noVivo?.tarefa || noVivo?.etapa || noVivo?.descricao || noCat?.descricao || noCat?.papel || 'sem dado',
+      quemMandou: noVivo?.quem_mandou || noVivo?.pai || 'sem dado',
       subagentes: [],
       isDirector: false
     }
   }, [foco, catalogoVisual, agentes, ativos])
+
+  const localizarAgenteNoMapa = (agenteId: string) => {
+    const larguraCanvas = containerRef.current?.clientWidth ?? 800
+    const departamentos = departamentosParaLargura(larguraCanvas)
+
+    for (const dept of departamentos) {
+      const ags = agentesPorSquad.get(dept.id) ?? []
+      const pw = dept.largura / 2
+      const ph = dept.altura / 2
+      const maxDisplay = Math.min(ags.length, 6)
+
+      for (let idx = 0; idx < maxDisplay; idx++) {
+        const ag = ags[idx]
+        if (ag.id !== agenteId && !ag.aliases?.includes(agenteId)) continue
+        const col = idx % 3
+        const row = Math.floor(idx / 3)
+        return {
+          x: dept.gx - pw + 42 + col * 65,
+          y: dept.gy - ph + 40 + row * 52,
+        }
+      }
+    }
+
+    return null
+  }
+
+  const focarMesaNoMapa = (agenteId: string) => {
+    const container = containerRef.current
+    const posicao = localizarAgenteNoMapa(agenteId)
+    if (!container || !posicao) return
+    vistaManualRef.current = true
+    const deslocamentoY = container.clientWidth < 640 ? -container.clientHeight * 0.14 : 0
+    setPan({
+      x: -posicao.x * zoom,
+      y: -posicao.y * zoom + deslocamentoY,
+    })
+  }
+
+  const selecionarAgenteVivo = (agente: AgenteVivo) => {
+    const resumo = montarResumoAgenteVivo(agente, catalogoVisual)
+    setFoco(resumo.focoId)
+    aoSelecionarAgente?.(resumo.focoId)
+    focarMesaNoMapa(resumo.focoId)
+  }
 
   // Desenho Canvas Isometric 2.5D Cyberpunk HUD (Opção 1)
   useEffect(() => {
@@ -710,6 +851,7 @@ export function PixelOffice({
       const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
       const larguraCss = container ? container.clientWidth : 800
       const alturaCss = container ? container.clientHeight : 540
+      const departamentos = departamentosParaLargura(larguraCss)
 
       if (canvas.width !== Math.round(larguraCss * dpr) || canvas.height !== Math.round(alturaCss * dpr)) {
         canvas.width = Math.round(larguraCss * dpr)
@@ -775,7 +917,7 @@ export function PixelOffice({
       const nosCount = estado?.cofre?.nos?.length
       const textoHubNotas = nosCount != null ? `${nosCount} NOTAS` : 'sem dado'
 
-      DEPARTAMENTOS_CONFIG.forEach((dept, deptIdx) => {
+      departamentos.forEach((dept, deptIdx) => {
         // Três cabos paralelos curvados por squad
         const offsets = [-4, 0, 4]
         offsets.forEach((offset, idx) => {
@@ -923,7 +1065,7 @@ export function PixelOffice({
       ctx.restore()
 
       // 4. DESENHO DAS PLATAFORMAS 3D FLUTUANTES (ISLANDS - OPÇÃO 1)
-      DEPARTAMENTOS_CONFIG.forEach((dept) => {
+      departamentos.forEach((dept) => {
         const ags = agentesPorSquad.get(dept.id) ?? []
         const metric = metricasSquad.get(dept.id) ?? { m1: 'sem dado', m2: 'sem dado', doing: 0, next: 0, done: 0, aguardando_d2: false }
 
@@ -1117,6 +1259,7 @@ export function PixelOffice({
     const rect = canvas.getBoundingClientRect()
     const larguraCss = rect.width
     const alturaCss = rect.height
+    const departamentos = departamentosParaLargura(larguraCss)
 
     const mundoX = (evento.clientX - rect.left - larguraCss / 2 - pan.x) / zoom
     const mundoY = (evento.clientY - rect.top - alturaCss / 2 - pan.y) / zoom
@@ -1124,7 +1267,7 @@ export function PixelOffice({
     // 1. CHECAGEM DIRETA NAS MESAS DE AGENTES (Raio amplo de toque ~35px)
     let agenteEncontrado: string | null = null
 
-    for (const dept of DEPARTAMENTOS_CONFIG) {
+    for (const dept of departamentos) {
       const ags = agentesPorSquad.get(dept.id) ?? []
       const pw = dept.largura / 2
       const ph = dept.altura / 2
@@ -1135,7 +1278,7 @@ export function PixelOffice({
         const col = idx % 3
         const row = Math.floor(idx / 3)
         const ax = dept.gx - pw + 42 + col * 65
-        const ay = dept.gy - ph + 42 + row * 52
+        const ay = dept.gy - ph + 40 + row * 52
 
         // Distância euclidiana para área de toque confortável na mesa
         const dist = Math.hypot(ax - mundoX, ay - mundoY)
@@ -1156,7 +1299,7 @@ export function PixelOffice({
 
     // 2. CHECAGEM EXCLUSIVA NO CARTÃO FLUTUANTE DE CABEÇALHO DO SQUAD (Não no piso inteiro!)
     let deptEncontrado: string | null = null
-    for (const dept of DEPARTAMENTOS_CONFIG) {
+    for (const dept of departamentos) {
       const pw = dept.largura / 2
       const ph = dept.altura / 2
       const cardX = dept.gx - pw - 6
@@ -1183,6 +1326,7 @@ export function PixelOffice({
 
   const iniciarArrasto = (evento: React.PointerEvent<HTMLCanvasElement>) => {
     if (evento.button !== 0) return
+    vistaManualRef.current = true
     setArrastando(true)
     setPontoArrasto({ x: evento.clientX, y: evento.clientY, panX: pan.x, panY: pan.y })
     evento.currentTarget.setPointerCapture(evento.pointerId)
@@ -1200,8 +1344,16 @@ export function PixelOffice({
   }
 
   const resetView = () => {
-    setPan({ x: 0, y: 0 })
-    setZoom(typeof window !== 'undefined' && window.innerWidth < 640 ? 0.72 : 1.0)
+    const container = containerRef.current
+    vistaManualRef.current = false
+    if (!container) {
+      setPan({ x: 0, y: 0 })
+      setZoom(typeof window !== 'undefined' && window.innerWidth < 640 ? 0.72 : 1.0)
+      return
+    }
+    const vista = vistaInicialMapa(container.clientWidth, container.clientHeight)
+    setZoom(vista.zoom)
+    setPan(vista.pan)
   }
 
   // Filtragem de Tarefas para o Painel Lateral
@@ -1231,6 +1383,47 @@ export function PixelOffice({
 
   return (
     <div className="flex flex-col gap-4 font-sans text-slate-100">
+      <section className="rounded-xl border border-slate-800 bg-[#0f172a]/95 p-3 shadow-xl backdrop-blur-md font-mono">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-[11px] font-black uppercase tracking-wider text-[#facc15]">
+              AGENTES TRABALHANDO AGORA
+            </h2>
+            <p className="mt-0.5 text-[10px] text-slate-400">
+              {agentesTrabalhando.length} agente(s) em execução visível
+            </p>
+          </div>
+          <span className="shrink-0 border border-black bg-[#1e293b] px-2 py-1 text-[10px] font-black uppercase text-[#a3e635] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            /api/agentes-vivos
+          </span>
+        </div>
+
+        {agentesTrabalhando.length === 0 ? (
+          <div className="border-2 border-dashed border-slate-700 bg-[#0f172a]/60 p-4 text-center text-xs text-slate-400">
+            Nenhum agente trabalhando neste instante.
+          </div>
+        ) : (
+          <div className="-mx-3 overflow-x-auto px-3 pb-1">
+            <div className="flex w-max min-w-full gap-3">
+              {agentesTrabalhando.map((agente) => {
+                const resumo = montarResumoAgenteVivo(agente, catalogoVisual)
+                return (
+                  <AgenteVivoCard
+                    key={resumo.chave}
+                    agente={agente}
+                    catalogo={catalogoVisual}
+                    selecionado={foco === resumo.focoId}
+                    onClick={() => selecionarAgenteVivo(agente)}
+                    modo="faixa"
+                    className="min-h-[172px] w-[286px] shrink-0 sm:w-[318px] lg:w-[336px]"
+                  />
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* ÁREA PRINCIPAL: CANVAS ISOMÉTRICO (ESQUERDA) + PAINEL LATERAL DIREITO */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* CANVAS INTERATIVO 2.5D DARK HUD (ESQUERDA - 8 colunas) */}
@@ -1239,7 +1432,7 @@ export function PixelOffice({
           tabIndex={0}
           role="region"
           aria-label="Escritório virtual dos agentes em 2.5D HUD"
-          className="relative min-h-[520px] w-full overflow-hidden rounded-xl border border-slate-800 bg-[#070a12] shadow-xl lg:col-span-8 lg:min-h-[620px]"
+          className="relative min-h-[390px] w-full overflow-hidden rounded-xl border border-slate-800 bg-[#070a12] shadow-xl sm:min-h-[520px] lg:col-span-8 lg:min-h-[620px]"
         >
           <canvas
             ref={canvasRef}
@@ -1250,6 +1443,7 @@ export function PixelOffice({
             onPointerCancel={finalizarArrasto}
             onWheel={(e) => {
               e.preventDefault()
+              vistaManualRef.current = true
               setZoom((valor) => arredondarZoom(valor * (e.deltaY < 0 ? 1.12 : 0.9)))
             }}
             className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
@@ -1375,49 +1569,14 @@ export function PixelOffice({
             </div>
           )}
 
-          {/* PAINEL DE ATIVIDADE DO ESCRITÓRIO (RODADAPÉ DO MAPA - ITEM 4) */}
-          <div className="pointer-events-auto absolute bottom-3 left-3 right-16 flex flex-col gap-1.5 rounded-lg border border-slate-800 bg-[#0f172a]/95 p-2.5 shadow-lg backdrop-blur-md max-w-xl">
-            <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-1">
-              <span className="font-extrabold text-[10px] tracking-wider text-amber-400 uppercase flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                ATIVIDADE EM TEMPO REAL
-              </span>
-              <span className="text-[10px] font-bold text-slate-400">
-                {ativos.size} agente(s) executando
-              </span>
-            </div>
-            {/* Últimas Ações Vivas */}
-            <div className="flex max-h-16 flex-col gap-1 overflow-y-auto pr-1 text-[10px] text-slate-300">
-              {agentes.filter((ag) => ag.estado === 'trabalhando').length === 0 ? (
-                <div className="py-0.5 text-slate-400 italic">
-                  Nenhum agente em execução ativa neste instante.
-                </div>
-              ) : (
-                agentes
-                  .filter((ag) => ag.estado === 'trabalhando')
-                  .slice(0, 3)
-                  .map((ag) => (
-                    <div key={ag.id} className="flex items-center justify-between gap-2">
-                      <span className="font-bold text-sky-400 truncate max-w-[140px]">
-                        ● {ag.papel || ag.identidade || ag.id}
-                      </span>
-                      <span className="truncate text-slate-300 max-w-[200px]">
-                        {ag.etapa || ag.ferramenta || ag.tarefa || 'executando'}
-                      </span>
-                      <span className="font-mono text-emerald-400 shrink-0">
-                        {ag.silencio_s === 0 ? 'agora' : `${ag.silencio_s}s atrás`}
-                      </span>
-                    </div>
-                  ))
-              )}
-            </div>
-          </div>
-
           {/* CONTROLES DE CANVAS (CANTO INFERIOR DIREITO: +, -, RESET) */}
           <div className="pointer-events-auto absolute bottom-3 right-3 flex flex-col gap-1 rounded-lg border border-slate-800 bg-[#0f172a] p-1 shadow-xl">
             <button
               type="button"
-              onClick={() => setZoom((v) => arredondarZoom(v + 0.15))}
+              onClick={() => {
+                vistaManualRef.current = true
+                setZoom((v) => arredondarZoom(v + 0.15))
+              }}
               className="flex size-7 items-center justify-center rounded border border-slate-700 bg-slate-900 text-xs font-bold text-white hover:bg-slate-800 active:scale-95"
               title="Aumentar Zoom"
             >
@@ -1425,7 +1584,10 @@ export function PixelOffice({
             </button>
             <button
               type="button"
-              onClick={() => setZoom((v) => arredondarZoom(v - 0.15))}
+              onClick={() => {
+                vistaManualRef.current = true
+                setZoom((v) => arredondarZoom(v - 0.15))
+              }}
               className="flex size-7 items-center justify-center rounded border border-slate-700 bg-slate-900 text-xs font-bold text-white hover:bg-slate-800 active:scale-95"
               title="Diminuir Zoom"
             >
@@ -1442,8 +1604,53 @@ export function PixelOffice({
           </div>
         </div>
 
+        <div className="flex flex-col gap-4 lg:col-span-4">
+          <section className="rounded-xl border border-slate-800 bg-[#0f172a]/95 p-3 shadow-xl backdrop-blur-md font-mono">
+            <div className="mb-2 flex items-center justify-between gap-3 border-b border-slate-800 pb-2">
+              <span className="flex min-w-0 items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-400">
+                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="truncate">ATIVIDADE EM TEMPO REAL</span>
+              </span>
+              <span className="shrink-0 text-[10px] font-bold text-slate-400">
+                {agentesTrabalhando.length} executando
+              </span>
+            </div>
+
+            <div className="flex max-h-[220px] flex-col gap-1.5 overflow-y-auto pr-1 text-[10px] text-slate-300">
+              {agentesTrabalhando.length === 0 ? (
+                <div className="py-1 text-slate-400 italic">
+                  Nenhum agente em execução ativa neste instante.
+                </div>
+              ) : (
+                agentesTrabalhando.slice(0, 8).map((agente) => {
+                  const resumo = montarResumoAgenteVivo(agente, catalogoVisual)
+                  return (
+                    <button
+                      type="button"
+                      key={resumo.chave}
+                      onClick={() => selecionarAgenteVivo(agente)}
+                      className={`grid grid-cols-[minmax(72px,0.75fr)_minmax(0,1.35fr)_auto] items-center gap-2 rounded border border-slate-800 bg-slate-900/70 px-2 py-1.5 text-left hover:border-slate-600 ${
+                        foco === resumo.focoId ? 'ring-1 ring-[#a3e635]' : ''
+                      }`}
+                    >
+                      <span className="truncate font-bold text-sky-400" title={resumo.nome}>
+                        {resumo.nome}
+                      </span>
+                      <span className="truncate text-slate-300" title={resumo.tarefa}>
+                        {resumo.tarefa}
+                      </span>
+                      <span className="shrink-0 font-mono text-emerald-400">
+                        {resumo.ultimaAtividade}
+                      </span>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          </section>
+
         {/* PAINEL LATERAL DIREITO (STATUS DE TAREFAS & BARRA DE BUSCA - 4 colunas) */}
-        <aside className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-[#0f172a]/90 p-4 shadow-xl backdrop-blur-md lg:col-span-4">
+        <aside className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-[#0f172a]/90 p-4 shadow-xl backdrop-blur-md">
           {/* BARRA DE TAREFAS (TASK SEARCH / INPUT BAR) */}
           <form onSubmit={adicionarTarefa} className="flex flex-col gap-2">
             <div className="flex items-center rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-inner">
@@ -1587,6 +1794,7 @@ export function PixelOffice({
             )}
           </div>
         </aside>
+        </div>
       </div>
     </div>
   )

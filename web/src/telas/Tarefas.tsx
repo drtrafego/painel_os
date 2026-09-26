@@ -2,20 +2,11 @@ import { useMemo, useState } from 'react'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
 import { contarAgentesVivosNaContagem } from '../dados/agentes-vivos'
 import { montarCatalogoPixel } from '../dados/pixel-agents'
+import { AgenteVivoCard, classeDonoPixel } from '../ui/AgenteVivoCard'
 import { PixelOffice } from '../ui/PixelOffice'
 import { porSquad, squadsComAgentes } from '../dados/estado'
 import type { PropsTela } from './Vazias'
 import type { AgenteVivo } from '../dados/tipos'
-
-const CLASSE_DONO_PIXEL: Record<string, string> = {
-  luana: 'bg-[#38bdf8] text-black',
-  renato: 'bg-renato text-black',
-  bia: 'bg-[#f472b6] text-black',
-}
-
-const classeDonoPixel = (dono: string | undefined) => (
-  dono ? CLASSE_DONO_PIXEL[dono] ?? 'bg-slate-300 text-black' : 'bg-slate-300 text-black'
-)
 
 /** Janela Estilo Pixel Art Retrô com Barra de Título e Botões */
 function PixelJanela({
@@ -95,7 +86,7 @@ function InspectorAgente({
       ? agente.silencio_s === 0
         ? 'agora'
         : `${agente.silencio_s}s atrás`
-      : agente.ultima_atividade || '—'
+      : agente.ultima_atividade || 'sem dado'
 
   return (
     <div className="border-4 border-black bg-[#0f172a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-3 min-w-0">
@@ -161,29 +152,29 @@ function InspectorAgente({
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 min-w-0 pt-1">
         <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
           <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Modelo</div>
-          <div className="text-xs font-black text-[#38bdf8] truncate mt-0.5" title={agente.modelo_legivel || agente.modelo || '—'}>
-            {agente.modelo_legivel || agente.modelo || '—'}
+          <div className="text-xs font-black text-[#38bdf8] truncate mt-0.5" title={agente.modelo_legivel || agente.modelo || 'sem dado'}>
+            {agente.modelo_legivel || agente.modelo || 'sem dado'}
           </div>
         </div>
 
         <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
           <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Esforço</div>
           <div className="text-xs font-black text-slate-100 truncate mt-0.5">
-            {agente.esforco || '—'}
+            {agente.esforco || 'sem dado'}
           </div>
         </div>
 
         <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
           <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Dono</div>
           <div className="text-xs font-black text-slate-100 truncate mt-0.5">
-            {donoFormatado || '—'}
+            {donoFormatado || 'sem dado'}
           </div>
         </div>
 
         <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
           <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Rodando há</div>
           <div className="text-xs font-black text-slate-100 truncate mt-0.5">
-            {agente.rodando_ha || (agente.inicio ? `desde ${agente.inicio}` : '—')}
+            {agente.rodando_ha || (agente.inicio ? `desde ${agente.inicio}` : 'sem dado')}
           </div>
         </div>
 
@@ -197,22 +188,22 @@ function InspectorAgente({
         <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
           <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Ferramentas usadas</div>
           <div className="text-xs font-black text-slate-100 truncate mt-0.5" title={agente.ferramenta ? `Ativa: ${agente.ferramenta}` : undefined}>
-            {agente.ferramentas_usadas ?? 0}
+            {agente.ferramentas_usadas ?? 'sem dado'}
             {agente.ferramenta ? ` (${agente.ferramenta})` : ''}
           </div>
         </div>
 
         <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
           <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Tokens gastos</div>
-          <div className="text-xs font-black text-[#facc15] truncate mt-0.5" title={agente.tokens_total ? `${agente.tokens_total} tokens` : undefined}>
-            {agente.tokens_formatado || (agente.tokens_total ? `${agente.tokens_total}` : '—')}
+          <div className="text-xs font-black text-[#facc15] truncate mt-0.5" title={agente.tokens_total != null ? `${agente.tokens_total} tokens` : undefined}>
+            {agente.tokens_formatado || (agente.tokens_total != null ? `${agente.tokens_total}` : 'sem dado')}
           </div>
         </div>
 
         <div className="col-span-2 sm:col-span-2 lg:col-span-2 border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
           <div className="text-[9.5px] uppercase font-bold text-slate-400">Quem mandou</div>
-          <div className="text-xs font-black text-slate-100 mt-0.5 break-words [overflow-wrap:anywhere] leading-snug" title={agente.quem_mandou || agente.pai || '—'}>
-            {agente.quem_mandou || agente.pai || '—'}
+          <div className="text-xs font-black text-slate-100 mt-0.5 break-words [overflow-wrap:anywhere] leading-snug" title={agente.quem_mandou || agente.pai || 'sem dado'}>
+            {agente.quem_mandou || agente.pai || 'sem dado'}
           </div>
         </div>
       </div>
@@ -419,93 +410,14 @@ export function Tarefas({ estado, vista }: PropsTela) {
                 const chave = ag.dono ? `${ag.dono}:${ag.id}` : ag.id
                 const isSelected = agenteInspecionado === chave || agenteInspecionado === ag.id
                 return (
-                  <div
+                  <AgenteVivoCard
                     key={chave}
+                    agente={ag}
+                    catalogo={catalogoPixel}
+                    selecionado={isSelected}
                     onClick={() => setAgenteInspecionado(isSelected ? null : chave)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        setAgenteInspecionado(isSelected ? null : chave)
-                      }
-                    }}
-                    className={`flex min-w-0 flex-col justify-between border-2 border-black bg-[#0f172a] p-3.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 cursor-pointer text-left ${
-                      isSelected ? 'ring-2 ring-[#a3e635] bg-[#1e293b]' : ''
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center justify-between gap-1.5 border-b border-slate-700 pb-2">
-                        <div className="flex min-w-0 items-center gap-1.5 truncate">
-                          {ag.dono && (
-                            <span
-                              className={`shrink-0 border border-black px-1.5 py-0.5 text-[8.5px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                                classeDonoPixel(ag.dono)
-                              }`}
-                              title={`Origem: ${ag.dono.toUpperCase()}`}
-                            >
-                              {ag.dono.toUpperCase()}
-                            </span>
-                          )}
-                          <span className="truncate text-xs font-black uppercase text-[#38bdf8]" title={ag.id}>
-                            {ag.id}
-                          </span>
-                        </div>
-                        <span
-                          className={`shrink-0 border border-black px-1.5 py-0.5 text-[9px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                            ag.estado === 'trabalhando'
-                              ? 'bg-[#a3e635] text-black'
-                              : ag.estado === 'silencioso'
-                              ? 'bg-[#facc15] text-black'
-                              : 'bg-slate-500 text-white'
-                          }`}
-                        >
-                          {ag.estado === 'trabalhando' ? 'EXEC' : ag.estado === 'silencioso' ? 'OCIOSO' : 'FORA'}
-                        </span>
-                      </div>
-
-                      {/* Chips compactos de modelo, tokens e esforço */}
-                      {(ag.modelo_legivel || ag.tokens_formatado || ag.esforco) && (
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {ag.modelo_legivel && (
-                            <span
-                              className="border border-slate-700 bg-slate-800/90 px-1.5 py-0.5 text-[9px] font-bold text-[#38bdf8] truncate max-w-[140px]"
-                              title={ag.modelo_legivel}
-                            >
-                              🤖 {ag.modelo_legivel}
-                            </span>
-                          )}
-                          {ag.tokens_formatado && (
-                            <span
-                              className="border border-slate-700 bg-slate-800/90 px-1.5 py-0.5 text-[9px] font-bold text-[#facc15]"
-                              title={`${ag.tokens_total ?? ''} tokens`}
-                            >
-                              🪙 {ag.tokens_formatado}
-                            </span>
-                          )}
-                          {ag.esforco && (
-                            <span className="border border-slate-700 bg-slate-800/90 px-1.5 py-0.5 text-[9px] font-bold text-slate-300">
-                              ⚡ {ag.esforco}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      <div
-                        className="mt-2.5 min-w-0 border-l-2 border-[#38bdf8] pl-2 text-xs text-slate-200 line-clamp-3 leading-relaxed break-words break-all [overflow-wrap:anywhere]"
-                        title={ag.tarefa || ag.descricao || ag.etapa || 'Etapa não informada'}
-                      >
-                        {ag.tarefa || ag.descricao || ag.etapa || 'ETAPA EM ANDAMENTO'}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between border-t border-slate-700/80 pt-2 text-[10px] text-slate-400">
-                      <span className="truncate max-w-[120px] font-semibold">
-                        {ag.ferramenta ? `TOOL: ${ag.ferramenta}` : ag.fase}
-                      </span>
-                      <span className="tabular-nums font-mono text-[#a3e635]">
-                        {ag.silencio_s !== null && ag.silencio_s !== undefined ? `${ag.silencio_s}s` : ''}
-                      </span>
-                    </div>
-                  </div>
+                    modo="terminal"
+                  />
                 )
               })}
             </div>
@@ -712,7 +624,7 @@ function PixelKpi({
         )}
       </div>
       <div className={`mt-2 text-3xl sm:text-4xl font-black tabular-nums ${cor}`}>
-        {valor !== null && valor !== undefined ? valor : '—'}
+        {valor !== null && valor !== undefined ? valor : 'sem dado'}
       </div>
       {nota && <div className="mt-1.5 text-[10px] font-medium text-slate-400">{nota}</div>}
     </div>
@@ -755,7 +667,7 @@ function PixelLinha({
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="truncate font-semibold uppercase text-slate-200">{nome}</span>
         <span className="font-black tabular-nums text-white">
-          {valor ?? '—'}
+          {valor ?? 'sem dado'}
           {isClickable && <span className="ml-1 text-[10px] text-[#facc15]">▼</span>}
         </span>
       </div>
