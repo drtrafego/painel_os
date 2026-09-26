@@ -58,10 +58,10 @@ export function Redes({ estado, vista }: PropsTela) {
       {/* Detalhe do Instagram e do LinkedIn */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Conector Instagram */}
-        <section className="carta p-4">
+        <section className="carta p-4 min-w-0">
           <Cabecalho cor="var(--color-rosa)">Instagram @gastaomatos</Cabecalho>
           <div className="mt-2 text-xs leading-relaxed text-tinta-2">
-            Conexão ativa via Composio Graph API (user_id: 26530904369921644).
+            Conexão ativa via Graph API integrada ao coletor de métricas orgânicas.
           </div>
           <div className="mt-3">
             <div className="rotulo mb-1">Métricas obtidas</div>

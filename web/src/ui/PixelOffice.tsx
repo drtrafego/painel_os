@@ -4,47 +4,51 @@ import {
   chaveAgente,
   formatarRotulo,
   mesclarRuntimesNoCatalogo,
-  normalizarDonoId,
   obterAtivosNoCatalogo,
   PIXEL_AGENTS,
+  PIXEL_AGENT_SQUADS,
   resolverAgenteNoCatalogo,
   type PixelAgent,
   type PixelAgentSquad,
 } from '../dados/pixel-agents'
-import { AgenteVivoCard, montarResumoAgenteVivo } from './AgenteVivoCard'
-import { COR_DA_SESSAO } from './paleta'
+import {
+  avancarEstadoAnimacao,
+  criarEstadoInicialBoneco,
+  type EstadoAnimacaoBoneco,
+  type Posicao2D,
+} from '../dados/escritorio-animacao'
+import { useAgentesVivos } from '../dados/useAgentesVivos'
 
 export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, obterAtivosNoCatalogo }
-
-interface TarefaItem {
-  id: string
-  texto: string
-  departamento: string
-  estado: 'aguardando' | 'em_andamento' | 'feito' | 'erro'
-  criado_em: string
-  progresso?: number
-  resultado?: string | null
-}
 
 interface PixelOfficeProps {
   agentes: AgenteVivo[]
   catalogo?: PixelAgent[]
   estado?: Estado
-  aoSelecionarAgente?: (agenteId: string) => void
+  aoSelecionarAgente?: (chaveExecucao: string) => void
   agenteSelecionadoId?: string | null
+  soAtivos?: boolean
+  aoAlternarSoAtivos?: (soAtivos: boolean) => void
+  aoAbrirCerebro?: () => void
 }
 
-type FiltroStatus = 'Todas' | 'Na fila' | 'Fazendo' | 'Esperando' | 'Feitas'
+const ZOOM_MIN = 0.4
+const ZOOM_MAX = 2.2
 
-const ZOOM_MIN = 0.35
-const ZOOM_MAX = 2.5
-
-function arredondarZoom(valor: number) {
-  return Number(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, valor)).toFixed(2))
+interface MesaCalculada {
+  id: string
+  chave: string
+  agente: PixelAgent
+  squad: PixelAgentSquad
+  x: number
+  y: number
+  largura: number
+  altura: number
+  execucao?: AgenteVivo
 }
 
-type DepartamentoVisual = {
-  id: PixelAgentSquad
+interface IlhaSquadCalculada {
+  squad: PixelAgentSquad
   nome: string
   cor: string
   gx: number
@@ -53,1277 +57,491 @@ type DepartamentoVisual = {
   altura: number
 }
 
-const DEPARTAMENTOS_CONFIG: DepartamentoVisual[] = [
-  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: 0, gy: -220, largura: 260, altura: 165 },
-  { id: 'bots', nome: 'RENATO / BOTS', cor: '#f97316', gx: 270, gy: -110, largura: 260, altura: 165 },
-  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#a855f7', gx: 270, gy: 150, largura: 260, altura: 165 },
-  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#10b981', gx: 0, gy: 250, largura: 260, altura: 165 },
-  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -270, gy: 150, largura: 260, altura: 165 },
-  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#f59e0b', gx: -270, gy: -110, largura: 260, altura: 165 },
+// Configuração espacial dos clusters/departamentos no piso contínuo
+const CLUSTERS_CONFIG: Array<{ id: PixelAgentSquad; nome: string; cor: string; gx: number; gy: number; largura: number; altura: number }> = [
+  { id: 'coordenação', nome: 'COORDENAÇÃO · LUANA', cor: '#84cc16', gx: 0, gy: -210, largura: 300, altura: 170 },
+  { id: 'bots', nome: 'RENATO / BOTS', cor: '#f97316', gx: 280, gy: -100, largura: 280, altura: 170 },
+  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#a855f7', gx: 280, gy: 140, largura: 280, altura: 170 },
+  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#10b981', gx: 0, gy: 240, largura: 300, altura: 170 },
+  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -280, gy: 140, largura: 280, altura: 170 },
+  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#f59e0b', gx: -280, gy: -100, largura: 280, altura: 170 },
 ]
-
-const DEPARTAMENTOS_MOBILE_CONFIG: DepartamentoVisual[] = [
-  { id: 'coordenação', nome: 'COORDENAÇÃO', cor: '#84cc16', gx: -138, gy: -170, largura: 230, altura: 148 },
-  { id: 'bots', nome: 'RENATO / BOTS', cor: '#f97316', gx: 138, gy: -170, largura: 230, altura: 148 },
-  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#a855f7', gx: 138, gy: 24, largura: 230, altura: 148 },
-  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#10b981', gx: -138, gy: 218, largura: 230, altura: 148 },
-  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: 138, gy: 218, largura: 230, altura: 148 },
-  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#f59e0b', gx: -138, gy: 24, largura: 230, altura: 148 },
-]
-
-function departamentosParaLargura(largura: number) {
-  return largura < 640 ? DEPARTAMENTOS_MOBILE_CONFIG : DEPARTAMENTOS_CONFIG
-}
-
-function boundsDepartamentos(departamentos: DepartamentoVisual[]) {
-  let esquerda = Infinity
-  let direita = -Infinity
-  let topo = Infinity
-  let baixo = -Infinity
-
-  departamentos.forEach((dept) => {
-    const metadeLargura = dept.largura / 2
-    const metadeAltura = dept.altura / 2
-    esquerda = Math.min(esquerda, dept.gx - metadeLargura - 8)
-    direita = Math.max(direita, dept.gx + metadeLargura + 8)
-    topo = Math.min(topo, dept.gy - metadeAltura - 88)
-    baixo = Math.max(baixo, dept.gy + metadeAltura + 30)
-  })
-
-  return {
-    esquerda,
-    direita,
-    topo,
-    baixo,
-    largura: direita - esquerda,
-    altura: baixo - topo,
-    centroX: (esquerda + direita) / 2,
-    centroY: (topo + baixo) / 2,
-  }
-}
-
-function vistaInicialMapa(largura: number, altura: number) {
-  const mobile = largura < 640
-  const departamentos = departamentosParaLargura(largura)
-  const bounds = boundsDepartamentos(departamentos)
-  const margemX = mobile ? 12 : 34
-  const margemTopo = mobile ? 8 : 28
-  const margemBase = mobile ? 24 : 36
-  const zoomCalculado = Math.min(
-    (largura - margemX * 2) / bounds.largura,
-    (altura - margemTopo - margemBase) / bounds.altura
-  )
-  const zoomMinimo = mobile ? 0.7 : 0.68
-  const zoomMaximo = mobile ? 0.86 : 1
-  const zoom = arredondarZoom(Math.min(zoomMaximo, Math.max(zoomMinimo, zoomCalculado)))
-
-  return {
-    zoom,
-    pan: mobile
-      ? {
-          x: -bounds.centroX * zoom,
-          y: margemTopo - altura / 2 - bounds.topo * zoom,
-        }
-      : {
-          x: -bounds.centroX * zoom,
-          y: -bounds.centroY * zoom,
-        },
-  }
-}
-
-function desenharMesaEAgente(
-  ctx: CanvasRenderingContext2D,
-  ax: number,
-  ay: number,
-  ag: PixelAgent,
-  estadoAgente: 'TRABALHANDO' | 'OCIOSO' | 'PARADO',
-  selecionado: boolean,
-  tick: number,
-  reduzirMovimento: boolean
-) {
-  ctx.save()
-  ctx.translate(ax, ay)
-
-  const corSetor = ag.cor || '#38bdf8'
-  const ehTrabalhando = estadoAgente === 'TRABALHANDO'
-  const ehParado = estadoAgente === 'PARADO'
-
-  // 0. AURA NEON NO CHÃO PARA AGENTES ATIVOS (TRABALHANDO)
-  if (ehTrabalhando) {
-    const auraPulso = !reduzirMovimento ? 16 + Math.sin(tick * 0.12) * 6 : 16
-    ctx.save()
-    ctx.shadowColor = corSetor
-    ctx.shadowBlur = auraPulso
-    ctx.strokeStyle = corSetor
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.ellipse(0, 10, 28, 14, 0, 0, Math.PI * 2)
-    ctx.stroke()
-    ctx.restore()
-  }
-
-  // 1. Sombra da mesa no piso dark
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)'
-  ctx.beginPath()
-  ctx.ellipse(0, 10, 24, 11, 0, 0, Math.PI * 2)
-  ctx.fill()
-
-  // 2. Tampo da Mesa Isométrica Dark Tech (Console Titânio)
-  ctx.fillStyle = '#1e293b'
-  ctx.strokeStyle = selecionado ? '#f59e0b' : ehTrabalhando ? corSetor : '#334155'
-  ctx.lineWidth = selecionado ? 2.5 : 1.2
-  ctx.beginPath()
-  ctx.moveTo(0, -14)
-  ctx.lineTo(19, -6)
-  ctx.lineTo(0, 2)
-  ctx.lineTo(-19, -6)
-  ctx.closePath()
-  ctx.fill()
-  ctx.stroke()
-
-  // Borda frontal neon da mesa
-  ctx.strokeStyle = ehTrabalhando ? corSetor : 'rgba(255, 255, 255, 0.15)'
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.moveTo(-19, -6)
-  ctx.lineTo(0, 2)
-  ctx.lineTo(19, -6)
-  ctx.stroke()
-
-  // Espessura / Chassis da mesa
-  ctx.fillStyle = '#0f172a'
-  ctx.beginPath()
-  ctx.moveTo(-19, -6)
-  ctx.lineTo(0, 2)
-  ctx.lineTo(0, 6)
-  ctx.lineTo(-19, -2)
-  ctx.closePath()
-  ctx.fill()
-
-  ctx.beginPath()
-  ctx.moveTo(0, 2)
-  ctx.lineTo(19, -6)
-  ctx.lineTo(19, -2)
-  ctx.lineTo(0, 6)
-  ctx.closePath()
-  ctx.fill()
-
-  // Pés metálicos da mesa
-  ctx.strokeStyle = '#475569'
-  ctx.lineWidth = 1.2
-  ctx.beginPath()
-  ctx.moveTo(-16, -3)
-  ctx.lineTo(-16, 8)
-  ctx.moveTo(16, -3)
-  ctx.lineTo(16, 8)
-  ctx.stroke()
-
-  // 3. SETUP MULTI-MONITOR (Principal + Lateral Angulado) - Estilo Opção 1
-  // Suporte do monitor central
-  ctx.fillStyle = '#334155'
-  ctx.fillRect(-3, -10, 6, 2)
-  ctx.fillRect(-1, -13, 2, 4)
-
-  // Carcaça dos monitores
-  ctx.fillStyle = '#0a0f1d'
-  // Monitor central
-  ctx.fillRect(-11, -23, 22, 11)
-  // Monitor lateral angulado (direita)
-  ctx.save()
-  ctx.translate(10, -21)
-  ctx.rotate(0.2)
-  ctx.fillStyle = '#0a0f1d'
-  ctx.fillRect(0, 0, 10, 10)
-  ctx.restore()
-
-  // Telas dos monitores
-  if (ehTrabalhando) {
-    const pulso = !reduzirMovimento ? Math.sin(tick * 0.15) * 0.2 : 0
-    ctx.shadowColor = corSetor
-    ctx.shadowBlur = 12
-
-    // Tela Principal com dados brilhantes
-    ctx.fillStyle = corSetor
-    ctx.fillRect(-10, -22, 20, 9)
-
-    // Scanlines e blocos de código no monitor
-    ctx.fillStyle = `rgba(255, 255, 255, ${0.8 + pulso})`
-    ctx.fillRect(-8, -20, 12, 1.8)
-    ctx.fillRect(-8, -17, 16, 1.5)
-    ctx.fillRect(-8, -14, 9, 1.5)
-
-    // Tela lateral com mini barras de dados
-    ctx.save()
-    ctx.translate(10, -21)
-    ctx.rotate(0.2)
-    ctx.fillStyle = corSetor
-    ctx.fillRect(1, 1, 8, 8)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
-    ctx.fillRect(2, 3, 4, 1.2)
-    ctx.fillRect(2, 5, 6, 1.2)
-    ctx.restore()
-
-    ctx.shadowBlur = 0
-
-    // Feixe de luz cônica projetada pelo monitor na mesa
-    const r = parseInt(corSetor.slice(1, 3), 16) || 56
-    const g = parseInt(corSetor.slice(3, 5), 16) || 189
-    const b = parseInt(corSetor.slice(5, 7), 16) || 248
-    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.18)`
-    ctx.beginPath()
-    ctx.moveTo(-10, -11)
-    ctx.lineTo(10, -11)
-    ctx.lineTo(15, -1)
-    ctx.lineTo(-15, -1)
-    ctx.closePath()
-    ctx.fill()
-  } else if (!ehParado) {
-    // Modo Ocioso (standby console)
-    ctx.fillStyle = '#0f172a'
-    ctx.fillRect(-10, -22, 20, 9)
-    ctx.fillStyle = '#38bdf8'
-    ctx.fillRect(-8, -18, 5, 1.2)
-
-    ctx.save()
-    ctx.translate(10, -21)
-    ctx.rotate(0.2)
-    ctx.fillStyle = '#0f172a'
-    ctx.fillRect(1, 1, 8, 8)
-    ctx.restore()
-  } else {
-    // Monitor totalmente desligado para PARADO
-    ctx.fillStyle = '#050811'
-    ctx.fillRect(-10, -22, 20, 9)
-  }
-
-  // Partículas de faíscas neon subindo se estiver TRABALHANDO
-  if (ehTrabalhando && !reduzirMovimento) {
-    ctx.save()
-    for (let i = 0; i < 3; i++) {
-      const pOffset = (tick * 1.5 + i * 18) % 25
-      const px = Math.sin(tick * 0.1 + i * 2) * 7
-      const py = -24 - pOffset
-      const alpha = 1 - pOffset / 25
-      ctx.fillStyle = corSetor
-      ctx.globalAlpha = alpha
-      ctx.beginPath()
-      ctx.arc(px, py, 1.5, 0, Math.PI * 2)
-      ctx.fill()
-    }
-    ctx.restore()
-  }
-
-  // Teclado com iluminação LED
-  ctx.fillStyle = ehTrabalhando ? corSetor : '#475569'
-  ctx.fillRect(-7, -4, 14, 3)
-
-  // 4. Cadeira Gamer / Ergonômica Sci-Fi
-  const chairY = 8
-  ctx.strokeStyle = '#334155'
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.moveTo(-6, chairY + 6)
-  ctx.lineTo(6, chairY + 6)
-  ctx.moveTo(0, chairY + 2)
-  ctx.lineTo(0, chairY + 6)
-  ctx.stroke()
-
-  ctx.fillStyle = '#1e293b'
-  ctx.beginPath()
-  ctx.ellipse(0, chairY + 2, 8, 4, 0, 0, Math.PI * 2)
-  ctx.fill()
-
-  // Encosto alto da cadeira
-  ctx.fillStyle = '#0f172a'
-  ctx.strokeStyle = '#334155'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.rect(-6, chairY - 6, 12, 8)
-  ctx.fill()
-  ctx.stroke()
-
-  // 5. Operador Seated (Cadeira vazia se PARADO!)
-  if (!ehParado) {
-    const animY = ehTrabalhando && !reduzirMovimento ? Math.sin(tick * 0.25) * 0.8 : 0
-
-    // Torso / Traje com cor do setor
-    ctx.fillStyle = corSetor
-    ctx.beginPath()
-    ctx.rect(-7, chairY - 7 + animY, 14, 9)
-    ctx.fill()
-
-    // Braços no teclado
-    ctx.strokeStyle = corSetor
-    ctx.lineWidth = 2.5
-    ctx.beginPath()
-    ctx.moveTo(-5, chairY - 3 + animY)
-    ctx.lineTo(-4, -2)
-    ctx.moveTo(5, chairY - 3 + animY)
-    ctx.lineTo(4, -2)
-    ctx.stroke()
-
-    // Cabeça
-    ctx.fillStyle = '#475569'
-    ctx.beginPath()
-    ctx.arc(0, chairY - 11 + animY, 4.5, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  // 6. Etiqueta Holográfica HUD com Nome do Agente
-  const tagY = -36
-  const nomeExibicao = ag.nome.slice(0, 11)
-  ctx.font = 'bold 10px sans-serif'
-  const larguraTexto = ctx.measureText(nomeExibicao).width
-  const tagW = Math.max(38, larguraTexto + 12)
-  const tagH = 16
-
-  // Fundo Dark Glassmorphism com borda neon
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)'
-  ctx.strokeStyle = selecionado ? '#f59e0b' : ehTrabalhando ? corSetor : '#334155'
-  ctx.lineWidth = selecionado ? 2 : 1
-  ctx.fillRect(-tagW / 2, tagY, tagW, tagH)
-  ctx.strokeRect(-tagW / 2, tagY, tagW, tagH)
-
-  // Indicador de status neon
-  ctx.fillStyle = ehTrabalhando ? corSetor : ehParado ? '#ef4444' : '#64748b'
-  ctx.beginPath()
-  ctx.arc(-tagW / 2 + 6, tagY + tagH / 2, 2.5, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.fillStyle = '#f8fafc'
-  ctx.textAlign = 'center'
-  ctx.fillText(nomeExibicao, 3, tagY + 12)
-
-  // 7. BADGE FLUTUANTE ⚡ ATIVO PARA AGENTES TRABALHANDO
-  if (ehTrabalhando) {
-    const badgeY = tagY - 14
-    const badgePulso = !reduzirMovimento ? Math.sin(tick * 0.2) * 1.5 : 0
-    ctx.save()
-    ctx.shadowColor = '#eab308'
-    ctx.shadowBlur = 8
-    ctx.fillStyle = '#eab308'
-    ctx.fillRect(-22, badgeY + badgePulso, 44, 12)
-    ctx.fillStyle = '#0f172a'
-    ctx.font = 'extrabold 8.5px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('⚡ ATIVO', 0, badgeY + badgePulso + 9)
-    ctx.restore()
-  }
-
-  ctx.restore()
-}
 
 export function PixelOffice({
   agentes,
   catalogo = PIXEL_AGENTS,
-  estado,
   aoSelecionarAgente,
   agenteSelecionadoId,
+  soAtivos = false,
+  aoAlternarSoAtivos,
+  aoAbrirCerebro,
 }: PixelOfficeProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const vistaManualRef = useRef(false)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const animFrameRef = useRef<number | null>(null)
+  const estadosBonecosRef = useRef<Map<string, EstadoAnimacaoBoneco>>(new Map())
+  const ultimoTimestampRef = useRef<number>(performance.now())
 
-  const [zoom, setZoom] = useState(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 640) {
-      return 0.72
-    }
-    return 1.0
-  })
-  const [pan, setPan] = useState({ x: 0, y: 0 })
+  // Sonda de Agentes Vivos Compartilhada
+  const { statusLeitura, recebidoEm, falhouHaSegundos, erro: erroSonda } = useAgentesVivos()
+
+  // Controle de Câmera (Pan & Zoom)
+  const [zoom, setZoom] = useState(1.0)
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [arrastando, setArrastando] = useState(false)
   const [pontoArrasto, setPontoArrasto] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
-  const [foco, setFoco] = useState<string | null>(agenteSelecionadoId ?? null)
+  const vistaManualRef = useRef(false)
+
+  // Respeita preferência do usuário por movimento reduzido
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
-
-  // Estado da Barra de Tarefas & Painel Lateral
-  const [departamentoTarefa, setDepartamentoTarefa] = useState<string>('luana')
-  const [textoNovaTarefa, setTextoNovaTarefa] = useState<string>('')
-  const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('Todas')
-  const [enviandoTarefa, setEnviandoTarefa] = useState<boolean>(false)
-  const [tarefas, setTarefas] = useState<TarefaItem[]>([])
-
-  // Buscar Tarefas do Servidor (/api/tarefas)
   useEffect(() => {
-    let cancelado = false
-    const carregarTarefas = async () => {
-      try {
-        const resp = await fetch('/api/tarefas')
-        if (resp.ok) {
-          const dados = await resp.json()
-          if (dados.tarefas && Array.isArray(dados.tarefas) && !cancelado) {
-            if (dados.tarefas.length > 0) {
-              setTarefas((prev) => {
-                const idsExistentes = new Set(prev.map((t) => t.id))
-                const novas = dados.tarefas.filter((t: TarefaItem) => !idsExistentes.has(t.id))
-                return [...novas, ...prev]
-              })
-            }
-          }
-        }
-      } catch {
-        // Fallback silencioso
-      }
-    }
-    carregarTarefas()
-    const timer = setInterval(carregarTarefas, 15000)
-    return () => {
-      cancelado = true
-      clearInterval(timer)
-    }
-  }, [])
-
-  // Inserir Nova Tarefa via POST /api/tarefas
-  const adicionarTarefa = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    const texto = textoNovaTarefa.trim()
-    if (!texto || enviandoTarefa) return
-
-    setEnviandoTarefa(true)
-    const dept = departamentoTarefa.toLowerCase()
-
-    try {
-      const resp = await fetch('/api/tarefas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texto, departamento: dept }),
-      })
-      if (resp.ok) {
-        const resData = await resp.json()
-        if (resData.ok && resData.tarefa) {
-          setTarefas((prev) => [resData.tarefa, ...prev])
-        }
-      } else {
-        const localItem: TarefaItem = {
-          id: `tar_local_${Date.now()}`,
-          texto,
-          departamento: dept,
-          estado: 'aguardando',
-          criado_em: new Date().toISOString(),
-        }
-        setTarefas((prev) => [localItem, ...prev])
-      }
-    } catch {
-      const localItem: TarefaItem = {
-        id: `tar_local_${Date.now()}`,
-        texto,
-        departamento: dept,
-        estado: 'aguardando',
-        criado_em: new Date().toISOString(),
-      }
-      setTarefas((prev) => [localItem, ...prev])
-    } finally {
-      setTextoNovaTarefa('')
-      setEnviandoTarefa(false)
-    }
-  }
-
-  const catalogoVisual = useMemo(() => mesclarRuntimesNoCatalogo(catalogo, agentes), [agentes, catalogo])
-  const agentesTrabalhando = useMemo(() => agentes.filter((agente) => agente.estado === 'trabalhando'), [agentes])
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const ajustarVista = () => {
-      if (vistaManualRef.current) return
-      const largura = container.clientWidth
-      const altura = container.clientHeight
-      if (!largura || !altura) return
-      const vista = vistaInicialMapa(largura, altura)
-      setZoom(vista.zoom)
-      setPan(vista.pan)
-    }
-
-    ajustarVista()
-
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(ajustarVista)
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [])
-
-  const { ativos, diretoresEstado } = useMemo(() => {
-    const conjuntoAtivos = new Set<string>()
-    const diretoresTrabalhando = new Set<string>()
-    const diretoresVivos = new Set<string>()
-
-    for (const ag of agentes) {
-      const itemCat = resolverAgenteNoCatalogo(ag, catalogoVisual)
-      const catId = itemCat?.id ?? ag.id
-      const donoNorm = normalizarDonoId(ag.dono)
-
-      if (ag.estado === 'trabalhando') {
-        conjuntoAtivos.add(catId)
-        if (donoNorm) diretoresTrabalhando.add(donoNorm)
-        if (catId === 'luana' || catId === 'renato' || catId === 'bia') {
-          diretoresTrabalhando.add(catId)
-        }
-      }
-      if (ag.estado === 'trabalhando' || ag.estado === 'silencioso') {
-        if (donoNorm) diretoresVivos.add(donoNorm)
-        if (catId === 'luana' || catId === 'renato' || catId === 'bia') {
-          diretoresVivos.add(catId)
-        }
-      }
-    }
-
-    diretoresTrabalhando.forEach((dirId) => conjuntoAtivos.add(dirId))
-
-    const mapaEstado = new Map<string, 'TRABALHANDO' | 'OCIOSO' | 'PARADO'>()
-    ;['luana', 'renato', 'bia'].forEach((dirId) => {
-      if (diretoresTrabalhando.has(dirId)) {
-        mapaEstado.set(dirId, 'TRABALHANDO')
-      } else if (diretoresVivos.has(dirId)) {
-        mapaEstado.set(dirId, 'OCIOSO')
-      } else {
-        mapaEstado.set(dirId, 'PARADO')
-      }
-    })
-
-    return { ativos: conjuntoAtivos, diretoresEstado: mapaEstado }
-  }, [agentes, catalogoVisual])
-
-  useEffect(() => {
+    if (typeof window === 'undefined') return
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const atualizar = () => setReduzirMovimento(media.matches)
-    atualizar()
-    media.addEventListener('change', atualizar)
-    return () => media.removeEventListener('change', atualizar)
+    setReduzirMovimento(media.matches)
+    const listener = (e: MediaQueryListEvent) => setReduzirMovimento(e.matches)
+    media.addEventListener('change', listener)
+    return () => media.removeEventListener('change', listener)
   }, [])
 
-  useEffect(() => {
-    if (agenteSelecionadoId !== undefined) {
-      setFoco(agenteSelecionadoId)
-    }
-  }, [agenteSelecionadoId])
+  // Mesclagem do catálogo com agentes em tempo de execução
+  const catalogoVisual = useMemo(() => {
+    return mesclarRuntimesNoCatalogo(catalogo, agentes)
+  }, [catalogo, agentes])
 
-  // Agrupamento dos agentes por Squad/Departamento
+  // Agrupamento por squad
   const agentesPorSquad = useMemo(() => {
     const mapa = new Map<PixelAgentSquad, PixelAgent[]>()
-    DEPARTAMENTOS_CONFIG.forEach((d) => mapa.set(d.id, []))
-
+    PIXEL_AGENT_SQUADS.forEach((s) => mapa.set(s.id, []))
     catalogoVisual.forEach((ag) => {
-      let squadKey = ag.squad
-      if (ag.id === 'renato') squadKey = 'bots'
-      if (ag.id === 'bia') squadKey = 'tráfego'
-      if (ag.id === 'luana') squadKey = 'coordenação'
-
-      const lista = mapa.get(squadKey) ?? mapa.get('coordenação')!
+      const lista = mapa.get(ag.squad) ?? []
       lista.push(ag)
+      mapa.set(ag.squad, lista)
     })
-
-    // GARANTIR QUE OS 3 DIRETORES FIQUEM SEMPRE PRESENTES
-    const diretoresIDs = ['luana', 'renato', 'bia']
-    diretoresIDs.forEach((dirId) => {
-      const existe = Array.from(mapa.values()).some((arr) => arr.some((a) => a.id === dirId))
-      if (!existe) {
-        const donoCor = COR_DA_SESSAO[dirId] ?? '#84cc16'
-        const papel = dirId === 'renato' ? 'Dono dos bots' : dirId === 'bia' ? 'Diretora de Tráfego e IA' : 'Super funcionária'
-        const squadTarget: PixelAgentSquad = dirId === 'renato' ? 'bots' : dirId === 'bia' ? 'tráfego' : 'coordenação'
-        const itemDir: PixelAgent = {
-          id: dirId,
-          nome: dirId.charAt(0).toUpperCase() + dirId.slice(1),
-          papel,
-          squad: squadTarget,
-          área: 'Diretoria',
-          abreviação: dirId.slice(0, 2).toUpperCase(),
-          cor: donoCor,
-        }
-        mapa.get(squadTarget)?.push(itemDir)
-      }
-    })
-
     return mapa
   }, [catalogoVisual])
 
-  // Métricas do Estado por Squad
-  const metricasSquad = useMemo(() => {
-    const res = new Map<
-      PixelAgentSquad,
-      { m1: string; m2: string; doing: number; next: number; done: number; aguardando_d2?: boolean }
-    >()
-
-    DEPARTAMENTOS_CONFIG.forEach((dept) => {
-      const ags = agentesPorSquad.get(dept.id) ?? []
-      const doingCount = ags.filter((a) => ativos.has(a.id)).length
-
-      let m1 = 'sem dado'
-      let m2 = 'sem dado'
-      let doing = doingCount
-      let next = 0
-      let done = 0
-      let aguardando_d2 = false
-
-      if (dept.id === 'conteúdo') {
-        const pecasTotal = estado?.pecas?.total != null ? `${estado.pecas.total}` : 'sem dado'
-        const postado = estado?.pecas?.analitica?.por_status?.postado != null ? `${estado.pecas.analitica.por_status.postado}` : 'sem dado'
-        m1 = `PEÇAS TOTAL ${pecasTotal}`
-        m2 = `POSTADO ${postado}`
-      } else if (dept.id === 'comercial') {
-        const passa = estado?.comercial?.total_passa != null ? `${estado.comercial.total_passa}` : 'sem dado'
-        const bloqueia = estado?.comercial?.total_bloqueia != null ? `${estado.comercial.total_bloqueia}` : 'sem dado'
-        m1 = `PASSA ${passa}`
-        m2 = `BLOQUEIA ${bloqueia}`
-      } else if (dept.id === 'coordenação') {
-        const totAprov = estado?.aprovacoes?.total != null ? `${estado.aprovacoes.total}` : 'sem dado'
-        const totalCron = estado?.cron?.total != null ? `${estado.cron.total}` : 'sem dado'
-        m1 = `APROVAÇÕES ${totAprov}`
-        m2 = `DISPAROS CRON ${totalCron}`
-      } else if (dept.id === 'bots') {
-        m1 = `HEITOR (REGENTE)`
-        m2 = `VITOR (FISCAL)`
-        doing = estado?.squad_bots?.fazendo ?? doingCount
-        next = estado?.squad_bots?.proxima ?? 0
-        done = estado?.squad_bots?.done ?? 0
-      } else if (dept.id === 'tráfego') {
-        m1 = `TEREZA (REGENTE)`
-        m2 = `JADE (FISCAL)`
-        doing = estado?.squad_trafego?.fazendo ?? doingCount
-        next = estado?.squad_trafego?.proxima ?? 0
-        done = estado?.squad_trafego?.done ?? 0
-        aguardando_d2 = estado?.squad_trafego?.aguardando_dono_d2 === true
-      }
-
-      res.set(dept.id, { m1, m2, doing, next, done, aguardando_d2 })
+  // Mapa de execuções ativas
+  const mapaExecucoes = useMemo(() => {
+    const mapa = new Map<string, AgenteVivo>()
+    agentes.forEach((a) => {
+      const chave = a.dono ? `${a.dono}:${a.id}` : a.id
+      mapa.set(chave, a)
+      mapa.set(a.id, a)
     })
+    return mapa
+  }, [agentes])
 
-    return res
-  }, [agentesPorSquad, ativos, estado])
+  // Cálculo das ilhas e posições dinâmicas de mesas (sem limite rígido de 6 mesas)
+  const { ilhasCalculadas, todasMesas } = useMemo(() => {
+    const ilhas: IlhaSquadCalculada[] = []
+    const mesas: MesaCalculada[] = []
 
-  // RESOLUÇÃO DE DADOS PARA O INSPETOR (RODADA 20)
-  const agenteSelecionadoDados = useMemo(() => {
-    if (!foco) return null
+    CLUSTERS_CONFIG.forEach((cfg) => {
+      const ags = agentesPorSquad.get(cfg.id) ?? []
+      const nAgentes = ags.length
+      const colunas = nAgentes > 8 ? 4 : 3
+      const linhas = Math.max(2, Math.ceil(nAgentes / colunas))
 
-    const focoNorm = foco.toLowerCase().trim()
-    const noCat = catalogoVisual.find((ag) => ag.id === foco || ag.aliases?.includes(foco))
+      // Dimensões dinâmicas do piso do cluster
+      const largura = Math.max(cfg.largura, colunas * 72 + 50)
+      const altura = Math.max(cfg.altura, linhas * 56 + 60)
 
-    // Tenta encontrar o AgenteVivo exato no array de agentes ao vivo (/api/agentes-vivos)
-    const noVivo = agentes.find((ag) => {
-      if (!ag) return false
-      const idAg = (ag.id || '').toLowerCase()
-      const idenAg = (ag.identidade || '').toLowerCase()
-      const papelAg = (ag.papel || '').toLowerCase()
-
-      if (idAg === focoNorm || idenAg === focoNorm) return true
-      if (noCat) {
-        if (idAg === noCat.id || idenAg === noCat.id) return true
-        if (noCat.aliases?.some((alias) => idAg.includes(alias.toLowerCase()) || idenAg.includes(alias.toLowerCase()))) return true
-      }
-      return idAg.includes(focoNorm) || idenAg.includes(focoNorm) || papelAg.includes(focoNorm)
-    })
-
-    const ehDiretor = foco === 'luana' || foco === 'renato' || foco === 'bia'
-
-    if (ehDiretor) {
-      const subagentesDoDiretor = agentes.filter((ag) => {
-        const donoNorm = normalizarDonoId(ag.dono)
-        return donoNorm === foco || (ag.dono === undefined && foco === 'luana')
+      ilhas.push({
+        squad: cfg.id,
+        nome: cfg.nome,
+        cor: cfg.cor,
+        gx: cfg.gx,
+        gy: cfg.gy,
+        largura,
+        altura,
       })
 
-      const sessaoRaiz = agentes.find((ag) => {
-        const donoNorm = normalizarDonoId(ag.dono)
-        return (donoNorm === foco || ag.id === foco) && (ag.identidade === 'sessao-claude' || ag.tipo === 'sessao_claude' || ag.id === foco)
-      }) || noVivo
+      // Distribuição das mesas dentro da área do squad
+      const meioW = largura / 2
+      const meioH = altura / 2
+      const espacoX = (largura - 40) / colunas
+      const espacoY = (altura - 50) / linhas
 
-      const temSubAtivo = subagentesDoDiretor.some((s) => s.estado === 'trabalhando')
-      const sessaoAtiva = sessaoRaiz?.estado === 'trabalhando' || sessaoRaiz?.estado === 'silencioso' || temSubAtivo || subagentesDoDiretor.length > 0
+      ags.forEach((ag, idx) => {
+        const col = idx % colunas
+        const row = Math.floor(idx / colunas)
+        const mx = cfg.gx - meioW + 28 + col * espacoX + espacoX / 2
+        const my = cfg.gy - meioH + 34 + row * espacoY + espacoY / 2
+        const chave = chaveAgente(undefined, ag.id)
+        const execucao = mapaExecucoes.get(chave) || mapaExecucoes.get(ag.id)
 
-      const estadoFinal = temSubAtivo || sessaoRaiz?.estado === 'trabalhando' ? 'trabalhando' : sessaoAtiva ? 'silencioso' : 'parado'
-      const statusRotulo = estadoFinal === 'trabalhando' ? 'TRABALHANDO' : estadoFinal === 'silencioso' ? 'OCIOSO' : 'PARADO'
-
-      const modelo = sessaoRaiz?.modelo_legivel || sessaoRaiz?.modelo || subagentesDoDiretor.find((s) => s.modelo)?.modelo_legivel || 'sem dado'
-      const esforco = sessaoRaiz?.esforco || 'sem dado'
-      const dono = foco.charAt(0).toUpperCase() + foco.slice(1)
-      const rodandoHa = sessaoRaiz?.rodando_ha || (sessaoRaiz?.inicio ? `desde ${sessaoRaiz.inicio}` : 'sem dado')
-      const ultimaAtiv = sessaoRaiz?.silencio_s === 0 ? 'agora' : sessaoRaiz?.silencio_s != null ? `${sessaoRaiz.silencio_s}s atrás` : (sessaoRaiz?.ultima_atividade || 'sem dado')
-      const ferramentasUsadas = subagentesDoDiretor.reduce((acc, s) => acc + (s.ferramentas_usadas ?? 0), sessaoRaiz?.ferramentas_usadas ?? 0)
-      const ferramentas = sessaoRaiz?.ferramentas_usadas != null || subagentesDoDiretor.some((s) => s.ferramentas_usadas != null) ? `${ferramentasUsadas} usadas` : 'sem dado'
-      const tokens = sessaoRaiz?.tokens_formatado || (sessaoRaiz?.tokens_total != null ? sessaoRaiz.tokens_total.toLocaleString('pt-BR') : 'sem dado')
-      const tarefa = sessaoRaiz?.tarefa || subagentesDoDiretor.find((s) => s.tarefa)?.tarefa || sessaoRaiz?.descricao || sessaoRaiz?.etapa || 'sem dado'
-      const quemMandou = sessaoRaiz?.quem_mandou || sessaoRaiz?.pai || 'sem dado'
-
-      return {
-        id: foco,
-        nome: dono,
-        papel: `Diretor(a) / Orquestrador(a)`,
-        squad: foco === 'renato' ? 'bots' : foco === 'bia' ? 'tráfego' : 'coordenação',
-        estado: estadoFinal,
-        statusRotulo,
-        modelo,
-        esforco,
-        dono,
-        rodandoHa,
-        ultimaAtiv,
-        ferramentas: `${ferramentas} usadas`,
-        tokens,
-        tarefa,
-        quemMandou,
-        subagentes: subagentesDoDiretor,
-        isDirector: true
-      }
-    }
-
-    // Se for um agente/subagente comum
-    const estadoAg = noVivo?.estado || (ativos.has(foco) ? 'trabalhando' : 'silencioso')
-    const statusRotulo = estadoAg === 'trabalhando' ? 'TRABALHANDO' : estadoAg === 'silencioso' ? 'OCIOSO' : 'PARADO'
-
-    const donoNorm = normalizarDonoId(noVivo?.dono)
-    const donoFormatted = donoNorm ? donoNorm.charAt(0).toUpperCase() + donoNorm.slice(1) : noCat?.área || 'sem dado'
-
-    return {
-      id: foco,
-      nome: noCat?.nome || noVivo?.papel || noVivo?.identidade || foco,
-      papel: noCat?.papel || noVivo?.papel || 'Especialista',
-      squad: noCat?.squad || 'globais',
-      estado: estadoAg,
-      statusRotulo,
-      modelo: noVivo?.modelo_legivel || noVivo?.modelo || 'sem dado',
-      esforco: noVivo?.esforco || 'sem dado',
-      dono: donoFormatted,
-      rodandoHa: noVivo?.rodando_ha || (noVivo?.inicio ? `desde ${noVivo.inicio}` : 'sem dado'),
-      ultimaAtiv: noVivo?.silencio_s === 0 ? 'agora' : noVivo?.silencio_s != null ? `${noVivo.silencio_s}s atrás` : (noVivo?.ultima_atividade || 'sem dado'),
-      ferramentas: noVivo?.ferramentas_usadas != null ? `${noVivo.ferramentas_usadas} usadas` : 'sem dado',
-      tokens: noVivo?.tokens_formatado || (noVivo?.tokens_total != null ? noVivo.tokens_total.toLocaleString('pt-BR') : 'sem dado'),
-      tarefa: noVivo?.tarefa || noVivo?.etapa || noVivo?.descricao || noCat?.descricao || noCat?.papel || 'sem dado',
-      quemMandou: noVivo?.quem_mandou || noVivo?.pai || 'sem dado',
-      subagentes: [],
-      isDirector: false
-    }
-  }, [foco, catalogoVisual, agentes, ativos])
-
-  const localizarAgenteNoMapa = (agenteId: string) => {
-    const larguraCanvas = containerRef.current?.clientWidth ?? 800
-    const departamentos = departamentosParaLargura(larguraCanvas)
-
-    for (const dept of departamentos) {
-      const ags = agentesPorSquad.get(dept.id) ?? []
-      const pw = dept.largura / 2
-      const ph = dept.altura / 2
-      const maxDisplay = Math.min(ags.length, 6)
-
-      for (let idx = 0; idx < maxDisplay; idx++) {
-        const ag = ags[idx]
-        if (ag.id !== agenteId && !ag.aliases?.includes(agenteId)) continue
-        const col = idx % 3
-        const row = Math.floor(idx / 3)
-        return {
-          x: dept.gx - pw + 42 + col * 65,
-          y: dept.gy - ph + 40 + row * 52,
-        }
-      }
-    }
-
-    return null
-  }
-
-  const focarMesaNoMapa = (agenteId: string) => {
-    const container = containerRef.current
-    const posicao = localizarAgenteNoMapa(agenteId)
-    if (!container || !posicao) return
-    vistaManualRef.current = true
-    const deslocamentoY = container.clientWidth < 640 ? -container.clientHeight * 0.14 : 0
-    setPan({
-      x: -posicao.x * zoom,
-      y: -posicao.y * zoom + deslocamentoY,
+        mesas.push({
+          id: ag.id,
+          chave,
+          agente: ag,
+          squad: cfg.id,
+          x: mx,
+          y: my,
+          largura: 54,
+          altura: 42,
+          execucao,
+        })
+      })
     })
-  }
 
-  const selecionarAgenteVivo = (agente: AgenteVivo) => {
-    const resumo = montarResumoAgenteVivo(agente, catalogoVisual)
-    setFoco(resumo.focoId)
-    aoSelecionarAgente?.(resumo.focoId)
-    focarMesaNoMapa(resumo.focoId)
-  }
+    return { ilhasCalculadas: ilhas, todasMesas: mesas }
+  }, [agentesPorSquad, mapaExecucoes])
 
-  // Desenho Canvas Isometric 2.5D Cyberpunk HUD (Opção 1)
+  // Posição de descanso/lounge dos agentes inativos
+  const posicaoDescanso: Posicao2D = useMemo(() => ({ x: 0, y: 380 }), [])
+
+  // Enquadramento automático na câmera (Auto-frame)
+  useEffect(() => {
+    if (vistaManualRef.current) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const largura = canvas.clientWidth || 800
+    const altura = canvas.clientHeight || 500
+
+    if (soAtivos) {
+      const mesasAtivas = todasMesas.filter((m) => m.execucao && m.execucao.estado === 'trabalhando')
+      if (mesasAtivas.length > 0) {
+        let minX = Infinity
+        let maxX = -Infinity
+        let minY = Infinity
+        let maxY = -Infinity
+        mesasAtivas.forEach((m) => {
+          minX = Math.min(minX, m.x - 40)
+          maxX = Math.max(maxX, m.x + 40)
+          minY = Math.min(minY, m.y - 40)
+          maxY = Math.max(maxY, m.y + 40)
+        })
+        const boundingW = Math.max(220, maxX - minX)
+        const boundingH = Math.max(180, maxY - minY)
+        const centroX = (minX + maxX) / 2
+        const centroY = (minY + maxY) / 2
+
+        const zoomDesejado = Math.min(
+          ZOOM_MAX,
+          Math.max(ZOOM_MIN, Math.min((largura * 0.75) / boundingW, (altura * 0.75) / boundingH))
+        )
+        setZoom(zoomDesejado)
+        setPan({ x: -centroX * zoomDesejado, y: -centroY * zoomDesejado })
+        return
+      }
+    }
+
+    // Visão Geral Padrão
+    const zoomPadrao = largura < 640 ? 0.65 : largura < 1024 ? 0.85 : 1.0
+    setZoom(zoomPadrao)
+    setPan({ x: 0, y: 20 })
+  }, [soAtivos, todasMesas])
+
+  // Total de agentes trabalhando no momento
+  const totalTrabalhando = useMemo(() => {
+    return agentes.filter((a) => a.estado === 'trabalhando').length
+  }, [agentes])
+
+  // Loop de Renderização e Animação no Canvas
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let frame = 0
-    let tick = 0
+    let rodando = true
 
-    const render = () => {
-      const container = containerRef.current
-      const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
-      const larguraCss = container ? container.clientWidth : 800
-      const alturaCss = container ? container.clientHeight : 540
-      const departamentos = departamentosParaLargura(larguraCss)
+    const desenhar = (timestamp: number) => {
+      if (!rodando) return
+      ultimoTimestampRef.current = timestamp
 
-      if (canvas.width !== Math.round(larguraCss * dpr) || canvas.height !== Math.round(alturaCss * dpr)) {
-        canvas.width = Math.round(larguraCss * dpr)
-        canvas.height = Math.round(alturaCss * dpr)
-      }
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.imageSmoothingEnabled = true
-      ctx.clearRect(0, 0, larguraCss, alturaCss)
-
-      // 1. FUNDO DARK SCI-FI CYBERPUNK (OPÇÃO 1)
-      const bgGrad = ctx.createRadialGradient(
-        larguraCss / 2,
-        alturaCss / 2,
-        60,
-        larguraCss / 2,
-        alturaCss / 2,
-        Math.max(larguraCss, alturaCss) * 0.95
-      )
-      bgGrad.addColorStop(0, '#0a1024')
-      bgGrad.addColorStop(1, '#050711')
-      ctx.fillStyle = bgGrad
-      ctx.fillRect(0, 0, larguraCss, alturaCss)
-
-      // Estrelas e partículas cósmicas cintilantes
-      ctx.save()
-      for (let i = 0; i < 55; i++) {
-        const sx = (i * 157.3 + tick * 0.03) % larguraCss
-        const sy = (i * 281.7) % alturaCss
-        const size = i % 4 === 0 ? 1.8 : 1
-        const alpha = 0.2 + Math.sin(tick * 0.04 + i) * 0.25
-        ctx.fillStyle = i % 3 === 0 ? '#38bdf8' : '#ffffff'
-        ctx.globalAlpha = Math.max(0.05, alpha)
-        ctx.beginPath()
-        ctx.arc(sx, sy, size, 0, Math.PI * 2)
-        ctx.fill()
-      }
-      ctx.restore()
-
-      // Grid Isométrico Cyberpunk sutil em Cyan
-      ctx.strokeStyle = 'rgba(6, 182, 212, 0.06)'
-      ctx.lineWidth = 1
-      const step = 45
-      for (let x = -larguraCss; x < larguraCss * 2; x += step) {
-        ctx.beginPath()
-        ctx.moveTo(x, 0)
-        ctx.lineTo(x + alturaCss, alturaCss)
-        ctx.stroke()
-
-        ctx.beginPath()
-        ctx.moveTo(x, alturaCss)
-        ctx.lineTo(x + alturaCss, 0)
-        ctx.stroke()
+      // Ajusta resolução do canvas
+      const dpr = window.devicePixelRatio || 1
+      const w = canvas.clientWidth
+      const h = canvas.clientHeight
+      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+        canvas.width = w * dpr
+        canvas.height = h * dpr
       }
 
       ctx.save()
-      ctx.translate(larguraCss / 2 + pan.x, alturaCss / 2 + pan.y)
+      ctx.scale(dpr, dpr)
+      ctx.clearRect(0, 0, w, h)
+
+      // Fundo Escuro Voxel/Isométrico
+      ctx.fillStyle = '#05070e'
+      ctx.fillRect(0, 0, w, h)
+
+      // Aplica Câmera (Pan & Zoom a partir do centro do canvas)
+      ctx.save()
+      ctx.translate(w / 2 + pan.x, h / 2 + pan.y)
       ctx.scale(zoom, zoom)
 
-      // 2. CONDUTOS MULTI-VIAS DE ENERGIA & DADOS (OPÇÃO 1)
-      const hubX = 0
-      const hubY = 0
-      const nosCount = estado?.cofre?.nos?.length
-      const textoHubNotas = nosCount != null ? `${nosCount} NOTAS` : 'sem dado'
-
-      departamentos.forEach((dept, deptIdx) => {
-        // Três cabos paralelos curvados por squad
-        const offsets = [-4, 0, 4]
-        offsets.forEach((offset, idx) => {
-          ctx.save()
-          ctx.strokeStyle = dept.cor
-          ctx.lineWidth = idx === 1 ? 2 : 1
-          ctx.shadowColor = dept.cor
-          ctx.shadowBlur = 6
-          ctx.beginPath()
-          ctx.moveTo(hubX + offset, hubY)
-          ctx.bezierCurveTo(
-            hubX + (dept.gx - hubX) * 0.35 + offset * 2,
-            hubY + (dept.gy - hubY) * 0.1,
-            hubX + (dept.gx - hubX) * 0.65,
-            dept.gy - offset * 2,
-            dept.gx,
-            dept.gy
-          )
-          ctx.stroke()
-          ctx.restore()
-        })
-
-        // Pulso de energia viajando no conduto central (animação viva)
-        if (!reduzirMovimento) {
-          const t = (tick * 0.012 + deptIdx * 0.18) % 1
-          const p0 = { x: hubX, y: hubY }
-          const p1 = { x: hubX + (dept.gx - hubX) * 0.35, y: hubY + (dept.gy - hubY) * 0.1 }
-          const p2 = { x: hubX + (dept.gx - hubX) * 0.65, y: dept.gy }
-          const p3 = { x: dept.gx, y: dept.gy }
-
-          const px =
-            Math.pow(1 - t, 3) * p0.x +
-            3 * Math.pow(1 - t, 2) * t * p1.x +
-            3 * (1 - t) * Math.pow(t, 2) * p2.x +
-            Math.pow(t, 3) * p3.x
-          const py =
-            Math.pow(1 - t, 3) * p0.y +
-            3 * Math.pow(1 - t, 2) * t * p1.y +
-            3 * (1 - t) * Math.pow(t, 2) * p2.y +
-            Math.pow(t, 3) * p3.y
-
-          ctx.save()
-          ctx.shadowColor = dept.cor
-          ctx.shadowBlur = 10
-          ctx.fillStyle = '#ffffff'
-          ctx.beginPath()
-          ctx.arc(px, py, 2.5, 0, Math.PI * 2)
-          ctx.fill()
-          ctx.restore()
-        }
-      })
-
-      // 3. HUB CENTRAL: CUBO HOLOGRÁFICO 3D ("O CÉREBRO" - OPÇÃO 1)
-      ctx.save()
-      ctx.translate(hubX, hubY)
-
-      // Pedestal Hexagonal Dark com iluminação neon cyan
-      ctx.fillStyle = '#080d1a'
-      ctx.strokeStyle = '#06b6d4'
-      ctx.lineWidth = 2
-      ctx.shadowColor = '#06b6d4'
-      ctx.shadowBlur = 14
-      ctx.beginPath()
-      ctx.ellipse(0, 8, 48, 22, 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.stroke()
-      ctx.shadowBlur = 0
-
-      // Coluna / Feixe de luz holográfica vertical ascendente
-      const beamGrad = ctx.createLinearGradient(0, 8, 0, -55)
-      beamGrad.addColorStop(0, 'rgba(6, 182, 212, 0.4)')
-      beamGrad.addColorStop(1, 'rgba(6, 182, 212, 0)')
-      ctx.fillStyle = beamGrad
-      ctx.beginPath()
-      ctx.moveTo(-32, 8)
-      ctx.lineTo(32, 8)
-      ctx.lineTo(24, -55)
-      ctx.lineTo(-24, -55)
-      ctx.closePath()
-      ctx.fill()
-
-      // CUBO HOLOGRÁFICO 3D ISOMÉTRICO (Cérebro Central)
-      const cubeSize = 22
-      const pulsoCubo = !reduzirMovimento ? Math.sin(tick * 0.08) * 3 : 0
-      const cy = -26 + pulsoCubo
-
-      // Face Superior do Cubo (Losango)
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.35)'
-      ctx.strokeStyle = '#38bdf8'
-      ctx.lineWidth = 1.8
-      ctx.shadowColor = '#00f5ff'
-      ctx.shadowBlur = 12
-      ctx.beginPath()
-      ctx.moveTo(0, cy - cubeSize)
-      ctx.lineTo(cubeSize * 1.1, cy - cubeSize * 0.5)
-      ctx.lineTo(0, cy)
-      ctx.lineTo(-cubeSize * 1.1, cy - cubeSize * 0.5)
-      ctx.closePath()
-      ctx.fill()
-      ctx.stroke()
-
-      // Face Esquerda do Cubo
-      ctx.fillStyle = 'rgba(2, 132, 199, 0.4)'
-      ctx.strokeStyle = '#0284c7'
-      ctx.beginPath()
-      ctx.moveTo(-cubeSize * 1.1, cy - cubeSize * 0.5)
-      ctx.lineTo(0, cy)
-      ctx.lineTo(0, cy + cubeSize)
-      ctx.lineTo(-cubeSize * 1.1, cy + cubeSize * 0.5)
-      ctx.closePath()
-      ctx.fill()
-      ctx.stroke()
-
-      // Face Direita do Cubo
-      ctx.fillStyle = 'rgba(14, 165, 233, 0.3)'
-      ctx.strokeStyle = '#38bdf8'
-      ctx.beginPath()
-      ctx.moveTo(0, cy)
-      ctx.lineTo(cubeSize * 1.1, cy - cubeSize * 0.5)
-      ctx.lineTo(cubeSize * 1.1, cy + cubeSize * 0.5)
-      ctx.lineTo(0, cy + cubeSize)
-      ctx.closePath()
-      ctx.fill()
-      ctx.stroke()
-
-      // Núcleo brilhante no interior do cubo
-      ctx.fillStyle = '#ffffff'
-      ctx.shadowColor = '#00f5ff'
-      ctx.shadowBlur = 16
-      ctx.beginPath()
-      ctx.arc(0, cy, 4, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.shadowBlur = 0
-
-      // Etiqueta Holográfica "O CÉREBRO"
-      ctx.font = 'bold 11px sans-serif'
-      ctx.fillStyle = '#38bdf8'
-      ctx.textAlign = 'center'
-      ctx.fillText(`● O CÉREBRO  ${textoHubNotas}`, 0, cy - cubeSize - 8)
-
-      ctx.font = 'bold 8.5px sans-serif'
-      ctx.fillStyle = '#94a3b8'
-      ctx.fillText('BASE DE CONHECIMENTO', 0, cy - cubeSize + 4)
-
-      ctx.restore()
-
-      // 4. DESENHO DAS PLATAFORMAS 3D FLUTUANTES (ISLANDS - OPÇÃO 1)
-      departamentos.forEach((dept) => {
-        const ags = agentesPorSquad.get(dept.id) ?? []
-        const metric = metricasSquad.get(dept.id) ?? { m1: 'sem dado', m2: 'sem dado', doing: 0, next: 0, done: 0, aguardando_d2: false }
-
-        ctx.save()
-        ctx.translate(dept.gx, dept.gy)
-
-        const pw = dept.largura / 2
-        const ph = dept.altura / 2
-
-        // A. Brilho Neon Inferior no Vazio (Levitation Underglow)
-        ctx.save()
-        ctx.shadowColor = dept.cor
-        ctx.shadowBlur = 24
-        ctx.fillStyle = dept.cor
-        ctx.globalAlpha = 0.22
+      // 1. Grade Isométrica Sutil no Fundo
+      ctx.strokeStyle = '#0f172a'
+      ctx.lineWidth = 1
+      const gradeTam = 40
+      for (let x = -500; x <= 500; x += gradeTam) {
         ctx.beginPath()
-        ctx.ellipse(0, 32, pw * 0.95, ph * 0.95, 0, 0, Math.PI * 2)
-        ctx.fill()
-        ctx.restore()
-
-        // B. Extrusão 3D Inferior da Plataforma (Chassis Metálico / Rocha Espacial)
-        const altura3D = 22
-        // Face lateral esquerda
-        ctx.fillStyle = '#080d19'
-        ctx.beginPath()
-        ctx.moveTo(-pw, 0)
-        ctx.lineTo(0, ph)
-        ctx.lineTo(0, ph + altura3D)
-        ctx.lineTo(-pw, altura3D)
-        ctx.closePath()
-        ctx.fill()
-        ctx.strokeStyle = '#1e293b'
-        ctx.lineWidth = 1
+        ctx.moveTo(x, -400)
+        ctx.lineTo(x, 450)
         ctx.stroke()
-
-        // Face lateral direita
-        ctx.fillStyle = '#0f172a'
-        ctx.beginPath()
-        ctx.moveTo(0, ph)
-        ctx.lineTo(pw, 0)
-        ctx.lineTo(pw, altura3D)
-        ctx.lineTo(0, ph + altura3D)
-        ctx.closePath()
-        ctx.fill()
-        ctx.strokeStyle = '#1e293b'
-        ctx.stroke()
-
-        // C. Tampo Superior Isométrico (Titanium Dark Slab)
-        ctx.fillStyle = '#0f172a'
-        ctx.beginPath()
-        ctx.moveTo(0, -ph)
-        ctx.lineTo(pw, 0)
-        ctx.lineTo(0, ph)
-        ctx.lineTo(-pw, 0)
-        ctx.closePath()
-        ctx.fill()
-
-        // D. Borda Neon Vibrante da Plataforma (Opção 1)
-        ctx.save()
-        ctx.shadowColor = dept.cor
-        ctx.shadowBlur = 12
-        ctx.strokeStyle = dept.cor
-        ctx.lineWidth = 2.5
-        ctx.stroke()
-        ctx.restore()
-
-        // E. Painéis de circuito internos da plataforma
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'
-        ctx.lineWidth = 1
-        for (let i = -pw + 30; i < pw; i += 34) {
-          ctx.beginPath()
-          ctx.moveTo(i, -ph / 2)
-          ctx.lineTo(i + 22, ph / 2)
-          ctx.stroke()
-        }
-
-        // F. Desenho dos Agentes nas Mesas
-        const maxDisplay = Math.min(ags.length, 6)
-        ags.slice(0, maxDisplay).forEach((ag, idx) => {
-          const col = idx % 3
-          const row = Math.floor(idx / 3)
-          const ax = -pw + 42 + col * 65
-          const ay = -ph + 40 + row * 52
-
-          const selecionado = foco === ag.id
-
-          const estadoAgente: 'TRABALHANDO' | 'OCIOSO' | 'PARADO' =
-            ag.id === 'luana' || ag.id === 'renato' || ag.id === 'bia'
-              ? diretoresEstado.get(ag.id) ?? 'PARADO'
-              : ativos.has(ag.id)
-                ? 'TRABALHANDO'
-                : 'OCIOSO'
-
-          desenharMesaEAgente(ctx, ax, ay, ag, estadoAgente, selecionado, tick, reduzirMovimento)
-        })
-
-        // G. CARTÃO FLUTUANTE HUD GLASSMORPHISM (OPÇÃO 1)
-        const cardX = -pw - 6
-        const cardY = -ph - 74
-        const cardW = 168
-        const cardH = 68
-
-        // Sombra do cartão
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-        ctx.fillRect(cardX + 4, cardY + 4, cardW, cardH)
-
-        // Fundo Dark Glassmorphism
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.90)'
-        ctx.fillRect(cardX, cardY, cardW, cardH)
-
-        // Borda neon do cartão com glow
-        ctx.save()
-        ctx.shadowColor = dept.cor
-        ctx.shadowBlur = 6
-        ctx.strokeStyle = dept.cor
-        ctx.lineWidth = 1.5
-        ctx.strokeRect(cardX, cardY, cardW, cardH)
-        ctx.restore()
-
-        // Header: Dot Neon + Squad Name + Active Pill (Estilo Opção 1: "22 Active | Lime")
-        const executandoCount = ags.filter((a) => ativos.has(a.id)).length
-
-        ctx.fillStyle = dept.cor
-        ctx.beginPath()
-        ctx.arc(cardX + 12, cardY + 14, 3.5, 0, Math.PI * 2)
-        ctx.fill()
-
-        ctx.font = 'bold 10px sans-serif'
-        ctx.fillStyle = '#f8fafc'
-        ctx.textAlign = 'left'
-        ctx.fillText(dept.nome.toUpperCase(), cardX + 22, cardY + 17)
-
-        // Pill Ativos no topo à direita
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'
-        ctx.fillRect(cardX + cardW - 58, cardY + 6, 52, 14)
-        ctx.font = 'bold 8px sans-serif'
-        ctx.fillStyle = executandoCount > 0 ? dept.cor : '#94a3b8'
-        ctx.textAlign = 'center'
-        ctx.fillText(`${executandoCount} Ativo${executandoCount !== 1 ? 's' : ''}`, cardX + cardW - 32, cardY + 16.5)
-
-        // Contagem Total e Métricas
-        ctx.font = 'bold 14px sans-serif'
-        ctx.fillStyle = '#f8fafc'
-        ctx.textAlign = 'left'
-        ctx.fillText(`${ags.length}`, cardX + 12, cardY + 37)
-
-        ctx.font = 'bold 8px sans-serif'
-        ctx.fillStyle = '#64748b'
-        ctx.fillText('agentes', cardX + 28, cardY + 37)
-
-        // Métricas
-        ctx.font = '8px sans-serif'
-        ctx.fillStyle = '#94a3b8'
-        ctx.fillText(metric.m1, cardX + 68, cardY + 28)
-        ctx.fillText(metric.m2, cardX + 68, cardY + 38)
-
-        // Rodapé do Card: FAZENDO / PRÓXIMA / FEITAS
-        ctx.fillStyle = metric.aguardando_d2 ? 'rgba(234, 88, 12, 0.25)' : 'rgba(30, 41, 59, 0.7)'
-        ctx.fillRect(cardX, cardY + 48, cardW, 20)
-
-        ctx.strokeStyle = metric.aguardando_d2 ? '#f97316' : 'rgba(51, 65, 85, 0.5)'
-        ctx.strokeRect(cardX, cardY + 48, cardW, 20)
-
-        const txtRodape = metric.aguardando_d2
-          ? 'aguardando o dono (D2)'
-          : `FAZENDO ${metric.doing} · PRÓXIMA ${metric.next} · FEITAS ${metric.done}`
-
-        ctx.font = 'bold 8.5px sans-serif'
-        ctx.fillStyle = metric.aguardando_d2 ? '#fb923c' : '#e2e8f0'
-        ctx.fillText(txtRodape, cardX + (metric.aguardando_d2 ? 14 : 8), cardY + 62)
-
-        ctx.restore()
-      })
-
-      ctx.restore()
-
-      tick += 1
-      if (!reduzirMovimento) {
-        frame = requestAnimationFrame(render)
       }
+      for (let y = -400; y <= 450; y += gradeTam) {
+        ctx.beginPath()
+        ctx.moveTo(-500, y)
+        ctx.lineTo(500, y)
+        ctx.stroke()
+      }
+
+      // 2. Corredores e Caminhos Conectando os Squads
+      ctx.fillStyle = '#0a1020'
+      ctx.fillRect(-320, -10, 640, 30) // Corredor horizontal principal
+      ctx.fillRect(-15, -240, 30, 490) // Corredor vertical principal
+
+      // 3. Marca Voxel na Parede: G4ST40VIB3 / casaldotrafego.com
+      ctx.fillStyle = '#0f172a'
+      ctx.fillRect(-190, -325, 380, 48)
+      ctx.strokeStyle = '#facc15'
+      ctx.lineWidth = 2
+      ctx.strokeRect(-190, -325, 380, 48)
+
+      ctx.fillStyle = '#facc15'
+      ctx.font = 'bold 15px monospace'
+      ctx.textAlign = 'center'
+      ctx.fillText('G4ST40VIB3', 0, -305)
+
+      ctx.fillStyle = '#38bdf8'
+      ctx.font = 'bold 11px monospace'
+      ctx.fillText('casaldotrafego.com', 0, -289)
+
+      // 4. Pisos dos Squads
+      ilhasCalculadas.forEach((ilha) => {
+        const x = ilha.gx - ilha.largura / 2
+        const y = ilha.gy - ilha.altura / 2
+
+        // Piso do departamento
+        ctx.fillStyle = '#0d1322'
+        ctx.fillRect(x, y, ilha.largura, ilha.altura)
+
+        // Borda superior colorida do squad
+        ctx.fillStyle = ilha.cor
+        ctx.fillRect(x, y, ilha.largura, 4)
+
+        // Contorno fino
+        ctx.strokeStyle = '#1e293b'
+        ctx.lineWidth = 1
+        ctx.strokeRect(x, y, ilha.largura, ilha.altura)
+
+        // Nome do Squad
+        ctx.fillStyle = ilha.cor
+        ctx.font = 'bold 10px monospace'
+        ctx.textAlign = 'left'
+        ctx.fillText(ilha.nome, x + 10, y + 18)
+      })
+
+      // 5. Mesas, Computadores e Cadeiras
+      todasMesas.forEach((mesa) => {
+        const mx = mesa.x
+        const my = mesa.y
+        const ehSelecionado = agenteSelecionadoId === mesa.chave || agenteSelecionadoId === mesa.id
+        const ehAtivo = mesa.execucao?.estado === 'trabalhando'
+
+        // Sombra da Mesa
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
+        ctx.fillRect(mx - 22, my - 14, 44, 28)
+
+        // Tampo da Mesa Voxel
+        ctx.fillStyle = ehSelecionado ? '#1e3a8a' : '#1e293b'
+        ctx.fillRect(mx - 20, my - 16, 40, 24)
+        ctx.strokeStyle = ehSelecionado ? '#38bdf8' : ehAtivo ? '#a3e635' : '#334155'
+        ctx.lineWidth = ehSelecionado ? 2 : 1
+        ctx.strokeRect(mx - 20, my - 16, 40, 24)
+
+        // Monitor do Computador
+        ctx.fillStyle = '#0f172a'
+        ctx.fillRect(mx - 9, my - 13, 18, 10)
+        // Tela acesa se trabalhando
+        ctx.fillStyle = ehAtivo ? '#38bdf8' : '#334155'
+        ctx.fillRect(mx - 7, my - 11, 14, 6)
+
+        // Teclado
+        ctx.fillStyle = '#475569'
+        ctx.fillRect(mx - 7, my - 1, 14, 4)
+
+        // Cadeira
+        ctx.fillStyle = '#090d16'
+        ctx.fillRect(mx - 8, my + 6, 16, 7)
+        ctx.strokeStyle = '#1e293b'
+        ctx.strokeRect(mx - 8, my + 6, 16, 7)
+
+        // Nome Curto do Agente sob a mesa
+        ctx.fillStyle = ehSelecionado ? '#38bdf8' : ehAtivo ? '#a3e635' : '#94a3b8'
+        ctx.font = 'bold 9px monospace'
+        ctx.textAlign = 'center'
+        const rotuloCurto = formatarRotulo(mesa.agente.nome || mesa.agente.id, '', 12)
+        ctx.fillText(rotuloCurto, mx, my + 23)
+      })
+
+      // 6. Atualização e Desenho dos Personagens (State Machine RAF)
+      todasMesas.forEach((mesa) => {
+        const chave = mesa.chave
+        const estadoApi = mesa.execucao?.estado ?? 'parado'
+        const ferramenta = mesa.execucao?.ferramenta ?? null
+        const posicaoMesa: Posicao2D = { x: mesa.x, y: mesa.y + 4 }
+
+        let boneco = estadosBonecosRef.current.get(chave)
+        if (!boneco) {
+          boneco = criarEstadoInicialBoneco(chave, estadoApi, posicaoMesa, posicaoDescanso, timestamp, ferramenta)
+          estadosBonecosRef.current.set(chave, boneco)
+        }
+
+        // Avança a máquina de estados determinística
+        boneco = avancarEstadoAnimacao(
+          boneco,
+          estadoApi,
+          posicaoMesa,
+          posicaoDescanso,
+          timestamp,
+          reduzirMovimento,
+          ferramenta
+        )
+        estadosBonecosRef.current.set(chave, boneco)
+
+        // Se o modo for "Só Ativos" e o agente estiver completamente no descanso/inativo, omite do desenho
+        if (soAtivos && estadoApi === 'parado' && boneco.fase === 'descanso') {
+          return
+        }
+
+        // Desenho do Boneco Voxel
+        const bx = boneco.x
+        const by = boneco.y
+        const postura = boneco.fase === 'caminhando_para_mesa' || boneco.fase === 'caminhando_para_descanso'
+          ? 'andando'
+          : boneco.posturaTrabalho
+        const ehTrabalhando = estadoApi === 'trabalhando'
+        const ehSelecionado = agenteSelecionadoId === mesa.chave || agenteSelecionadoId === mesa.id
+
+        ctx.save()
+        ctx.translate(bx, by)
+
+        // Destaque se selecionado
+        if (ehSelecionado) {
+          ctx.strokeStyle = '#38bdf8'
+          ctx.lineWidth = 1.5
+          ctx.beginPath()
+          ctx.arc(0, 0, 15, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+
+        // Cabeça
+        ctx.fillStyle = '#fde047' // tom de pele/amarelo pixel
+        ctx.fillRect(-4, -13, 8, 8)
+        ctx.strokeStyle = '#000000'
+        ctx.lineWidth = 1
+        ctx.strokeRect(-4, -13, 8, 8)
+
+        // Cabelo / Boné
+        ctx.fillStyle = mesa.squad === 'coordenação' ? '#38bdf8' : mesa.squad === 'bots' ? '#ea580c' : '#7c3aed'
+        ctx.fillRect(-5, -15, 10, 4)
+
+        // Corpo / Camiseta
+        const corRoupa = mesa.execucao?.dono === 'luana' ? '#0284c7' : mesa.execucao?.dono === 'renato' ? '#f97316' : '#a855f7'
+        ctx.fillStyle = corRoupa
+        ctx.fillRect(-5, -5, 10, 8)
+        ctx.strokeRect(-5, -5, 10, 8)
+
+        // Posturas dos Braços
+        if (postura === 'digitando') {
+          // Braços esticados para o teclado com animação sutil
+          const animOffset = Math.sin(timestamp * 0.018) * 1.5
+          ctx.fillStyle = '#fde047'
+          ctx.fillRect(-6, -3 + animOffset, 3, 5)
+          ctx.fillRect(3, -3 - animOffset, 3, 5)
+        } else if (postura === 'lendo') {
+          // Braços erguidos na altura do monitor
+          ctx.fillStyle = '#fde047'
+          ctx.fillRect(-6, -6, 3, 5)
+          ctx.fillRect(3, -6, 3, 5)
+        } else if (postura === 'andando') {
+          // Balanço ao caminhar
+          const passo = Math.sin(timestamp * 0.012) * 3
+          ctx.fillStyle = corRoupa
+          ctx.fillRect(-7, -4 + passo, 3, 7)
+          ctx.fillRect(4, -4 - passo, 3, 7)
+          // Pernas
+          ctx.fillStyle = '#1e293b'
+          ctx.fillRect(-4, 3 + passo, 3, 5)
+          ctx.fillRect(1, 3 - passo, 3, 5)
+        } else {
+          // Silencioso ou Descanso (mãos no colo)
+          ctx.fillStyle = corRoupa
+          ctx.fillRect(-6, -2, 3, 5)
+          ctx.fillRect(3, -2, 3, 5)
+        }
+
+        // Balãozinho de status para ativos
+        if (ehTrabalhando) {
+          ctx.fillStyle = '#a3e635'
+          ctx.beginPath()
+          ctx.arc(6, -16, 3, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        ctx.restore()
+      })
+
+      ctx.restore()
+      ctx.restore()
+
+      animFrameRef.current = requestAnimationFrame(desenhar)
     }
 
-    render()
-    return () => cancelAnimationFrame(frame)
-  }, [agentesPorSquad, ativos, diretoresEstado, estado, foco, metricasSquad, pan, reduzirMovimento, zoom])
+    animFrameRef.current = requestAnimationFrame(desenhar)
 
-  // SELEÇÃO PRECISA DE MESA DE SUBAGENTE VS CARTÃO DE DEPARTAMENTO (RODADA 20)
-  const selecionarNoCanvas = (evento: React.MouseEvent<HTMLCanvasElement>) => {
+    return () => {
+      rodando = false
+      if (animFrameRef.current !== null) {
+        cancelAnimationFrame(animFrameRef.current)
+      }
+    }
+  }, [
+    ilhasCalculadas,
+    todasMesas,
+    pan,
+    zoom,
+    soAtivos,
+    agenteSelecionadoId,
+    reduzirMovimento,
+    posicaoDescanso,
+  ])
+
+  // Tratamento de clique no canvas para selecionar agente
+  const tratarCliqueCanvas = (evento: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
-    const larguraCss = rect.width
-    const alturaCss = rect.height
-    const departamentos = departamentosParaLargura(larguraCss)
+    const clientX = evento.clientX - rect.left
+    const clientY = evento.clientY - rect.top
 
-    const mundoX = (evento.clientX - rect.left - larguraCss / 2 - pan.x) / zoom
-    const mundoY = (evento.clientY - rect.top - alturaCss / 2 - pan.y) / zoom
+    const w = canvas.clientWidth
+    const h = canvas.clientHeight
 
-    // 1. CHECAGEM DIRETA NAS MESAS DE AGENTES (Raio amplo de toque ~35px)
-    let agenteEncontrado: string | null = null
+    // Converte coordenada da tela para coordenadas do mundo
+    const mundoX = (clientX - (w / 2 + pan.x)) / zoom
+    const mundoY = (clientY - (h / 2 + pan.y)) / zoom
 
-    for (const dept of departamentos) {
-      const ags = agentesPorSquad.get(dept.id) ?? []
-      const pw = dept.largura / 2
-      const ph = dept.altura / 2
-      const maxDisplay = Math.min(ags.length, 6)
-
-      for (let idx = 0; idx < maxDisplay; idx++) {
-        const ag = ags[idx]
-        const col = idx % 3
-        const row = Math.floor(idx / 3)
-        const ax = dept.gx - pw + 42 + col * 65
-        const ay = dept.gy - ph + 40 + row * 52
-
-        // Distância euclidiana para área de toque confortável na mesa
-        const dist = Math.hypot(ax - mundoX, ay - mundoY)
-        if (dist < 36) {
-          agenteEncontrado = ag.id
-          break
-        }
-      }
-
-      if (agenteEncontrado) break
-    }
-
-    if (agenteEncontrado) {
-      setFoco(agenteEncontrado)
-      aoSelecionarAgente?.(agenteEncontrado)
-      return
-    }
-
-    // 2. CHECAGEM EXCLUSIVA NO CARTÃO FLUTUANTE DE CABEÇALHO DO SQUAD (Não no piso inteiro!)
-    let deptEncontrado: string | null = null
-    for (const dept of departamentos) {
-      const pw = dept.largura / 2
-      const ph = dept.altura / 2
-      const cardX = dept.gx - pw - 6
-      const cardY = dept.gy - ph - 74
-      const cardW = 168
-      const cardH = 68
-
-      if (mundoX >= cardX && mundoX <= cardX + cardW && mundoY >= cardY && mundoY <= cardY + cardH) {
-        deptEncontrado = dept.id
+    // Busca a mesa mais próxima clicada
+    let mesaEncontrada: MesaCalculada | null = null
+    for (const mesa of todasMesas) {
+      const dist = Math.hypot(mesa.x - mundoX, mesa.y - mundoY)
+      if (dist < 32) {
+        mesaEncontrada = mesa
         break
       }
     }
 
-    if (deptEncontrado) {
-      const ags = agentesPorSquad.get(deptEncontrado as PixelAgentSquad) ?? []
-      if (ags.length > 0) {
-        setFoco(ags[0].id)
-        aoSelecionarAgente?.(ags[0].id)
-      }
-    } else {
-      setFoco(null)
+    if (mesaEncontrada) {
+      aoSelecionarAgente?.(mesaEncontrada.chave)
     }
   }
 
+  // Interações de Pan com Ponteiro
   const iniciarArrasto = (evento: React.PointerEvent<HTMLCanvasElement>) => {
     if (evento.button !== 0) return
     vistaManualRef.current = true
@@ -1334,7 +552,10 @@ export function PixelOffice({
 
   const arrastar = (evento: React.PointerEvent<HTMLCanvasElement>) => {
     if (!arrastando || !pontoArrasto) return
-    setPan({ x: pontoArrasto.panX + evento.clientX - pontoArrasto.x, y: pontoArrasto.panY + evento.clientY - pontoArrasto.y })
+    setPan({
+      x: pontoArrasto.panX + evento.clientX - pontoArrasto.x,
+      y: pontoArrasto.panY + evento.clientY - pontoArrasto.y,
+    })
   }
 
   const finalizarArrasto = (evento: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1343,458 +564,143 @@ export function PixelOffice({
     evento.currentTarget.releasePointerCapture?.(evento.pointerId)
   }
 
-  const resetView = () => {
-    const container = containerRef.current
-    vistaManualRef.current = false
-    if (!container) {
-      setPan({ x: 0, y: 0 })
-      setZoom(typeof window !== 'undefined' && window.innerWidth < 640 ? 0.72 : 1.0)
-      return
-    }
-    const vista = vistaInicialMapa(container.clientWidth, container.clientHeight)
-    setZoom(vista.zoom)
-    setPan(vista.pan)
-  }
-
-  // Filtragem de Tarefas para o Painel Lateral
-  const tarefasFiltradas = useMemo(() => {
-    return tarefas.filter((t) => {
-      if (filtroStatus === 'Todas') return true
-      if (filtroStatus === 'Na fila') return t.estado === 'aguardando'
-      if (filtroStatus === 'Fazendo') return t.estado === 'em_andamento'
-      if (filtroStatus === 'Esperando') return t.estado === 'aguardando'
-      if (filtroStatus === 'Feitas') return t.estado === 'feito'
-      return true
-    })
-  }, [filtroStatus, tarefas])
-
-  const nomeDiretorPorDept = (dept: string) => {
-    const d = dept.toLowerCase()
-    if (d === 'luana' || d === 'coordenação' || d === 'coordenacao') return 'a Luana'
-    if (d === 'renato' || d === 'bots') return 'o Renato'
-    if (d === 'bia' || d === 'tráfego' || d === 'trafego') return 'a Bia'
-    if (d === 'conteúdo' || d === 'conteudo') return 'o conteúdo'
-    if (d === 'comercial') return 'o comercial'
-    return 'a Luana'
-  }
-
-  const nosCountRight = estado?.cofre?.nos?.length
-  const textoBrainNotasRight = nosCountRight != null ? `${nosCountRight} NOTAS` : 'sem dado'
-
   return (
-    <div className="flex flex-col gap-4 font-sans text-slate-100">
-      <section className="rounded-xl border border-slate-800 bg-[#0f172a]/95 p-3 shadow-xl backdrop-blur-md font-mono">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-[11px] font-black uppercase tracking-wider text-[#facc15]">
-              AGENTES TRABALHANDO AGORA
-            </h2>
-            <p className="mt-0.5 text-[10px] text-slate-400">
-              {agentesTrabalhando.length} agente(s) em execução visível
-            </p>
-          </div>
-          <span className="shrink-0 border border-black bg-[#1e293b] px-2 py-1 text-[10px] font-black uppercase text-[#a3e635] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            /api/agentes-vivos
-          </span>
-        </div>
+    <div className="flex flex-col gap-3 font-mono">
+      {/* Barra de Controles Superiores do Escritório */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded border-2 border-black bg-[#0f172a] p-2.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Botão de Filtro Só Ativos */}
+          <button
+            type="button"
+            onClick={() => aoAlternarSoAtivos?.(!soAtivos)}
+            aria-pressed={soAtivos}
+            className={`flex items-center gap-2 border-2 border-black px-3 py-1 text-xs font-black uppercase transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+              soAtivos
+                ? 'bg-[#a3e635] text-black hover:bg-[#bef264]'
+                : 'bg-[#1e293b] text-slate-300 hover:bg-[#334155]'
+            }`}
+          >
+            <span
+              className={`size-2.5 rounded-full ${
+                soAtivos ? 'bg-black animate-ping' : 'bg-[#a3e635]'
+              }`}
+            />
+            <span>{soAtivos ? 'SÓ ATIVOS (LIGADO)' : 'FILTRAR: SÓ ATIVOS'}</span>
+            <span className="rounded bg-black/20 px-1 text-[10px]">
+              {totalTrabalhando}
+            </span>
+          </button>
 
-        {agentesTrabalhando.length === 0 ? (
-          <div className="border-2 border-dashed border-slate-700 bg-[#0f172a]/60 p-4 text-center text-xs text-slate-400">
-            Nenhum agente trabalhando neste instante.
-          </div>
-        ) : (
-          <div className="-mx-3 overflow-x-auto px-3 pb-1">
-            <div className="flex w-max min-w-full gap-3">
-              {agentesTrabalhando.map((agente) => {
-                const resumo = montarResumoAgenteVivo(agente, catalogoVisual)
-                return (
-                  <AgenteVivoCard
-                    key={resumo.chave}
-                    agente={agente}
-                    catalogo={catalogoVisual}
-                    selecionado={foco === resumo.focoId}
-                    onClick={() => selecionarAgenteVivo(agente)}
-                    modo="faixa"
-                    className="min-h-[172px] w-[286px] shrink-0 sm:w-[318px] lg:w-[336px]"
-                  />
-                )
-              })}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* ÁREA PRINCIPAL: CANVAS ISOMÉTRICO (ESQUERDA) + PAINEL LATERAL DIREITO */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* CANVAS INTERATIVO 2.5D DARK HUD (ESQUERDA - 8 colunas) */}
-        <div
-          ref={containerRef}
-          tabIndex={0}
-          role="region"
-          aria-label="Escritório virtual dos agentes em 2.5D HUD"
-          className="relative min-h-[390px] w-full overflow-hidden rounded-xl border border-slate-800 bg-[#070a12] shadow-xl sm:min-h-[520px] lg:col-span-8 lg:min-h-[620px]"
-        >
-          <canvas
-            ref={canvasRef}
-            onClick={selecionarNoCanvas}
-            onPointerDown={iniciarArrasto}
-            onPointerMove={arrastar}
-            onPointerUp={finalizarArrasto}
-            onPointerCancel={finalizarArrasto}
-            onWheel={(e) => {
-              e.preventDefault()
-              vistaManualRef.current = true
-              setZoom((valor) => arredondarZoom(valor * (e.deltaY < 0 ? 1.12 : 0.9)))
-            }}
-            className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
-          />
-
-          {/* INSPETOR FLUTUANTE EM MODAL/DRAWER DIREITO QUANDO UM AGENTE É SELECIONADO */}
-          {agenteSelecionadoDados && (
-            <div className="absolute top-3 right-3 max-w-sm w-full z-20 rounded-xl border-2 border-slate-700 bg-[#0f172a]/95 p-4 text-white shadow-2xl backdrop-blur-md space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-700/80 pb-2">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`size-2.5 rounded-full ${
-                      agenteSelecionadoDados.estado === 'trabalhando' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
-                    }`}
-                  />
-                  <div>
-                    <h3 className="font-black text-xs uppercase text-[#facc15] tracking-wider">
-                      INSPECTOR: {agenteSelecionadoDados.nome}
-                    </h3>
-                    <p className="text-[10px] text-slate-400 font-mono">
-                      {agenteSelecionadoDados.papel} · ({agenteSelecionadoDados.id})
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFoco(null)}
-                  className="rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-300 hover:bg-slate-700"
-                >
-                  ✕ FECHAR
-                </button>
-              </div>
-
-              {/* Grid de Métricas Ricas do Agente Selecionado */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
-                  <div className="text-[9px] uppercase font-bold text-slate-400">Modelo</div>
-                  <div className="font-bold text-sky-400 truncate mt-0.5" title={agenteSelecionadoDados.modelo}>
-                    {agenteSelecionadoDados.modelo}
-                  </div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
-                  <div className="text-[9px] uppercase font-bold text-slate-400">Esforço</div>
-                  <div className="font-bold text-slate-200 mt-0.5">{agenteSelecionadoDados.esforco}</div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
-                  <div className="text-[9px] uppercase font-bold text-slate-400">Dono / Squad</div>
-                  <div className="font-bold text-amber-400 mt-0.5">{agenteSelecionadoDados.dono}</div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
-                  <div className="text-[9px] uppercase font-bold text-slate-400">Rodando há</div>
-                  <div className="font-bold text-slate-200 mt-0.5">{agenteSelecionadoDados.rodandoHa}</div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
-                  <div className="text-[9px] uppercase font-bold text-slate-400">Última atividade</div>
-                  <div className="font-bold text-emerald-400 mt-0.5">{agenteSelecionadoDados.ultimaAtiv}</div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
-                  <div className="text-[9px] uppercase font-bold text-slate-400">Ferramentas</div>
-                  <div className="font-bold text-slate-200 mt-0.5">{agenteSelecionadoDados.ferramentas}</div>
-                </div>
-              </div>
-
-              {/* Tokens & Quem Mandou */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
-                  <div className="text-[9px] uppercase font-bold text-slate-400">Tokens Usados</div>
-                  <div className="font-bold text-amber-300 mt-0.5">{agenteSelecionadoDados.tokens}</div>
-                </div>
-
-                <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
-                  <div className="text-[9px] uppercase font-bold text-slate-400">Quem Mandou</div>
-                  <div className="font-bold text-slate-200 truncate mt-0.5">{agenteSelecionadoDados.quemMandou}</div>
-                </div>
-              </div>
-
-              {/* Tarefa e Etapa */}
-              <div className="rounded border border-slate-800 bg-slate-900/80 p-2">
-                <div className="text-[9px] uppercase font-bold text-slate-400">Tarefa / Etapa Atual</div>
-                <p className="mt-1 text-xs text-slate-200 leading-relaxed break-words">
-                  {agenteSelecionadoDados.tarefa}
-                </p>
-              </div>
-
-              {/* Subagentes Ativos Clicáveis se for Diretor */}
-              {agenteSelecionadoDados.isDirector && (
-                <div className="rounded border border-slate-800 bg-slate-900/80 p-2 space-y-1.5">
-                  <div className="text-[9.5px] font-extrabold uppercase text-amber-400 tracking-wider">
-                    ⚡ Subagentes do Setor ({agenteSelecionadoDados.subagentes.length})
-                  </div>
-                  {agenteSelecionadoDados.subagentes.length === 0 ? (
-                    <div className="text-[10px] text-slate-400 italic">Nenhum subagente ativo no momento.</div>
-                  ) : (
-                    <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
-                      {agenteSelecionadoDados.subagentes.map((sub) => {
-                        const targetId = sub.id || sub.identidade || sub.papel || 'subagente'
-                        return (
-                          <button
-                            type="button"
-                            key={sub.id}
-                            onClick={() => {
-                              setFoco(targetId)
-                              aoSelecionarAgente?.(targetId)
-                            }}
-                            className="w-full text-left flex items-center justify-between text-[10px] border-b border-slate-800 pb-1 hover:bg-slate-800/60 p-1 rounded transition-colors"
-                          >
-                            <span className="font-bold text-sky-400 truncate max-w-[140px]">
-                              ● {sub.papel || sub.identidade || sub.id}
-                            </span>
-                            <span className="font-mono text-emerald-400">{sub.etapa || sub.fase || 'trabalhando'} ↗</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+          {/* Botão para abrir o Cérebro */}
+          {aoAbrirCerebro && (
+            <button
+              type="button"
+              onClick={aoAbrirCerebro}
+              className="flex items-center gap-1.5 border-2 border-black bg-[#0284c7] px-3 py-1 text-xs font-black uppercase text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#0369a1]"
+            >
+              <span>🧠 CÉREBRO</span>
+            </button>
           )}
-
-          {/* CONTROLES DE CANVAS (CANTO INFERIOR DIREITO: +, -, RESET) */}
-          <div className="pointer-events-auto absolute bottom-3 right-3 flex flex-col gap-1 rounded-lg border border-slate-800 bg-[#0f172a] p-1 shadow-xl">
-            <button
-              type="button"
-              onClick={() => {
-                vistaManualRef.current = true
-                setZoom((v) => arredondarZoom(v + 0.15))
-              }}
-              className="flex size-7 items-center justify-center rounded border border-slate-700 bg-slate-900 text-xs font-bold text-white hover:bg-slate-800 active:scale-95"
-              title="Aumentar Zoom"
-            >
-              +
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                vistaManualRef.current = true
-                setZoom((v) => arredondarZoom(v - 0.15))
-              }}
-              className="flex size-7 items-center justify-center rounded border border-slate-700 bg-slate-900 text-xs font-bold text-white hover:bg-slate-800 active:scale-95"
-              title="Diminuir Zoom"
-            >
-              −
-            </button>
-            <button
-              type="button"
-              onClick={resetView}
-              className="flex size-7 items-center justify-center rounded border border-slate-700 bg-slate-900 text-[12px] font-bold text-white hover:bg-slate-800 active:scale-95"
-              title="Resetar Visão"
-            >
-              ⌂
-            </button>
-          </div>
         </div>
 
-        <div className="flex flex-col gap-4 lg:col-span-4">
-          <section className="rounded-xl border border-slate-800 bg-[#0f172a]/95 p-3 shadow-xl backdrop-blur-md font-mono">
-            <div className="mb-2 flex items-center justify-between gap-3 border-b border-slate-800 pb-2">
-              <span className="flex min-w-0 items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-400">
-                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="truncate">ATIVIDADE EM TEMPO REAL</span>
-              </span>
-              <span className="shrink-0 text-[10px] font-bold text-slate-400">
-                {agentesTrabalhando.length} executando
-              </span>
-            </div>
-
-            <div className="flex max-h-[220px] flex-col gap-1.5 overflow-y-auto pr-1 text-[10px] text-slate-300">
-              {agentesTrabalhando.length === 0 ? (
-                <div className="py-1 text-slate-400 italic">
-                  Nenhum agente em execução ativa neste instante.
-                </div>
-              ) : (
-                agentesTrabalhando.slice(0, 8).map((agente) => {
-                  const resumo = montarResumoAgenteVivo(agente, catalogoVisual)
-                  return (
-                    <button
-                      type="button"
-                      key={resumo.chave}
-                      onClick={() => selecionarAgenteVivo(agente)}
-                      className={`grid grid-cols-[minmax(72px,0.75fr)_minmax(0,1.35fr)_auto] items-center gap-2 rounded border border-slate-800 bg-slate-900/70 px-2 py-1.5 text-left hover:border-slate-600 ${
-                        foco === resumo.focoId ? 'ring-1 ring-[#a3e635]' : ''
-                      }`}
-                    >
-                      <span className="truncate font-bold text-sky-400" title={resumo.nome}>
-                        {resumo.nome}
-                      </span>
-                      <span className="truncate text-slate-300" title={resumo.tarefa}>
-                        {resumo.tarefa}
-                      </span>
-                      <span className="shrink-0 font-mono text-emerald-400">
-                        {resumo.ultimaAtividade}
-                      </span>
-                    </button>
-                  )
-                })
-              )}
-            </div>
-          </section>
-
-        {/* PAINEL LATERAL DIREITO (STATUS DE TAREFAS & BARRA DE BUSCA - 4 colunas) */}
-        <aside className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-[#0f172a]/90 p-4 shadow-xl backdrop-blur-md">
-          {/* BARRA DE TAREFAS (TASK SEARCH / INPUT BAR) */}
-          <form onSubmit={adicionarTarefa} className="flex flex-col gap-2">
-            <div className="flex items-center rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-inner">
-              <select
-                value={departamentoTarefa}
-                onChange={(e) => setDepartamentoTarefa(e.target.value)}
-                className="cursor-pointer bg-transparent px-2 text-xs font-bold text-amber-400 focus:outline-none"
-              >
-                <option value="luana" className="bg-slate-900 text-white">● LUANA</option>
-                <option value="conteúdo" className="bg-slate-900 text-white">● CONTEÚDO</option>
-                <option value="comercial" className="bg-slate-900 text-white">● COMERCIAL</option>
-                <option value="bots" className="bg-slate-900 text-white">● BOTS</option>
-                <option value="tráfego" className="bg-slate-900 text-white">● TRÁFEGO</option>
-                <option value="globais" className="bg-slate-900 text-white">● GLOBAIS</option>
-              </select>
-              <input
-                type="text"
-                value={textoNovaTarefa}
-                onChange={(e) => setTextoNovaTarefa(e.target.value)}
-                placeholder={`Digite uma tarefa para ${departamentoTarefa}...`}
-                className="w-full min-w-0 bg-transparent px-2 text-xs text-white placeholder:text-slate-500 focus:outline-none"
-              />
-              <button
-                type="submit"
-                disabled={enviandoTarefa || !textoNovaTarefa.trim()}
-                className="rounded-md bg-amber-500 px-3 py-1 text-xs font-bold text-slate-950 transition-opacity hover:opacity-90 disabled:opacity-40"
-              >
-                {enviandoTarefa ? '...' : 'Enviar'}
-              </button>
-            </div>
-          </form>
-
-          {/* CARTÃO DE DESTAQUE DO HUB CENTRAL (O CÉREBRO) */}
-          <div className="rounded-lg border border-sky-500/30 bg-sky-950/40 p-3 backdrop-blur-sm">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-sky-400">
-                O CÉREBRO <span className="font-normal text-slate-400">{textoBrainNotasRight}</span>
-              </span>
-            </div>
-            <a
-              href="#cofre"
-              className="mt-2 inline-block font-bold text-xs text-sky-400 hover:underline"
-            >
-              Abrir o Cérebro →
-            </a>
-          </div>
-
-          {/* TASK STATUS SELECTION & PILL FILTERS */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-xs tracking-wider text-white uppercase">
-                  Tarefas
-                </span>
-              </div>
-              <span className="text-[11px] font-bold text-slate-400">Todo o escritório</span>
-            </div>
-
-            {/* FILTROS EM PÍLULA */}
-            <div className="flex flex-wrap gap-1">
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('Todas')}
-                className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Todas' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                Todas {tarefas.length}
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('Na fila')}
-                className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Na fila' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                Na fila {tarefas.filter((t) => t.estado === 'aguardando').length}
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('Fazendo')}
-                className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Fazendo' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                Fazendo {tarefas.filter((t) => t.estado === 'em_andamento').length}
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('Esperando')}
-                className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Esperando' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                Esperando 0
-              </button>
-              <button
-                type="button"
-                onClick={() => setFiltroStatus('Feitas')}
-                className={`rounded-full px-2.5 py-0.5 font-bold text-[10px] ${
-                  filtroStatus === 'Feitas' ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
-              >
-                Feitas {tarefas.filter((t) => t.estado === 'feito').length}
-              </button>
-            </div>
-          </div>
-
-          {/* LISTA VERTICAL DE TAREFAS */}
-          <div className="flex max-h-[380px] flex-col gap-2 overflow-y-auto pr-1">
-            {tarefasFiltradas.length === 0 ? (
-              <div className="p-4 text-center text-xs text-slate-400">
-                Nenhuma tarefa na fila ainda
-              </div>
-            ) : (
-              tarefasFiltradas.map((item) => {
-                const alvo = nomeDiretorPorDept(item.departamento)
-                return (
-                  <div
-                    key={item.id}
-                    className="flex flex-col gap-1.5 rounded-lg border border-slate-800 bg-slate-900/80 p-3 shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-400">
-                          NA FILA
-                        </span>
-                        <span className="font-semibold text-xs text-slate-200 leading-snug">
-                          {item.texto}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] font-medium text-slate-400">
-                      <span>aguardando {alvo}</span>
-                      <span className="uppercase">TAREFA · {item.departamento}</span>
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
-        </aside>
+        {/* Controles de Câmera (Zoom e Reset) */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              vistaManualRef.current = true
+              setZoom((z) => Math.min(ZOOM_MAX, z + 0.2))
+            }}
+            title="Aproximar Câmera"
+            className="border-2 border-black bg-[#1e293b] px-2.5 py-1 text-xs font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#334155]"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              vistaManualRef.current = true
+              setZoom((z) => Math.max(ZOOM_MIN, z - 0.2))
+            }}
+            title="Afastar Câmera"
+            className="border-2 border-black bg-[#1e293b] px-2.5 py-1 text-xs font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#334155]"
+          >
+            -
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              vistaManualRef.current = false
+              setZoom(1.0)
+              setPan({ x: 0, y: 20 })
+            }}
+            title="Resetar Enquadramento"
+            className="border-2 border-black bg-[#1e293b] px-2.5 py-1 text-xs font-bold text-slate-300 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#334155]"
+          >
+            ↺ RESET
+          </button>
         </div>
+      </div>
+
+      {/* Estado da Sonda no Topo da Cena */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[10.5px] text-slate-400">
+        <div>
+          {statusLeitura === 'confirmado' && recebidoEm && (
+            <span className="text-[#a3e635]">
+              ✓ Leitura confirmada · resposta recebida há {Math.max(0, Math.round((Date.now() - recebidoEm.getTime()) / 1000))}s
+            </span>
+          )}
+          {statusLeitura === 'consultando' && (
+            <span className="text-[#38bdf8] animate-pulse">
+              ⏳ Consultando sonda de agentes ao vivo...
+            </span>
+          )}
+          {statusLeitura === 'leitura_vencida' && (
+            <span className="text-[#facc15]">
+              ⚠️ Leitura vencida (última resposta há {falhouHaSegundos ?? 25}s)
+            </span>
+          )}
+          {statusLeitura === 'indisponivel' && (
+            <span className="text-[#ef4444]">
+              ❌ Não foi possível confirmar os agentes ativos ({erroSonda || 'sonda indisponível'})
+            </span>
+          )}
+        </div>
+        <div className="text-[10px] text-slate-500">
+          Clique em qualquer agente/mesa para inspecionar
+        </div>
+      </div>
+
+      {/* Aviso de Nenhum Agente Trabalhando em 'Só Ativos' */}
+      {soAtivos && totalTrabalhando === 0 && statusLeitura !== 'indisponivel' && (
+        <div className="rounded border-2 border-black bg-[#1e293b] p-3 text-center text-xs text-slate-300 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+          <span>Nenhum agente trabalhando agora</span>
+          {recebidoEm && (
+            <span className="ml-1.5 text-slate-400 font-mono text-[10.5px]">
+              (última leitura: {recebidoEm.toLocaleTimeString('pt-BR')})
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => aoAlternarSoAtivos?.(false)}
+            className="ml-3 border border-black bg-[#0f172a] px-2 py-0.5 text-[11px] font-bold text-[#38bdf8] hover:bg-slate-800"
+          >
+            Ver sala completa ↗
+          </button>
+        </div>
+      )}
+
+      {/* Canvas da Cena Voxel Interativa */}
+      <div className="relative h-[min(70vh,560px)] min-h-[380px] w-full overflow-hidden rounded-lg border-4 border-black bg-[#03050a] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <canvas
+          ref={canvasRef}
+          onClick={tratarCliqueCanvas}
+          onPointerDown={iniciarArrasto}
+          onPointerMove={arrastar}
+          onPointerUp={finalizarArrasto}
+          onPointerCancel={finalizarArrasto}
+          className="h-full w-full cursor-grab active:cursor-grabbing touch-none select-none"
+        />
       </div>
     </div>
   )

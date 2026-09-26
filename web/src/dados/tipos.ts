@@ -268,6 +268,7 @@ export type Pecas = {
 
 export type AgenteVivo = {
   id: string
+  nome?: string
   /** Qual sessão da casa gerou este agente: luana, renato ou bia. */
   dono?: 'luana' | 'renato' | 'bia' | string
   /** Identidade operacional allowlisted, ou sessao-codex para desconhecidos. */
@@ -288,7 +289,7 @@ export type AgenteVivo = {
   /** Indica que a etapa veio da descrição de uma tool, não é texto de UI. */
   etapa_e_description?: boolean | null
   ferramenta?: string | null
-  silencio_s: number
+  silencio_s?: number | null
   estado: 'trabalhando' | 'silencioso' | 'parado'
   arquivo?: string
   problema?: string | null

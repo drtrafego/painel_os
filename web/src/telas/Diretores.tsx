@@ -160,7 +160,7 @@ export function Diretores({
   const ativosAgora = (vivos?.contagem?.trabalhando ?? 0)
 
   return (
-    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
+    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 min-w-0">
       {origem === 'coletor-falhou' && <AvisoColetor erro={erro} medidoEm={medidoEm} agora={agora} />}
       <TituloDaTela
         titulo="Rede de agentes."
@@ -171,9 +171,13 @@ export function Diretores({
           <>
             <Marcador origem={origem} medidoEm={medidoEm} ms={estado.calculo_ms} />
             {vivos?.ok && ativosAgora > 0 && (
-              <span className="rotulo !text-verde font-bold animate-pulse">
-                ● {ativosAgora} ao vivo
-              </span>
+              <a
+                href="#/tarefas?visao=ativos"
+                className="rotulo !text-verde font-bold animate-pulse hover:underline cursor-pointer"
+                title="Ver agentes ativos no Escritório Voxel"
+              >
+                ● {ativosAgora} ao vivo ↗
+              </a>
             )}
             <span className="rotulo">{dadosJanela.total.toLocaleString('pt-BR')} convocações ({dadosJanela.rotulo})</span>
             <span className="rotulo">{estado.resumo.agentes_casa} agentes</span>

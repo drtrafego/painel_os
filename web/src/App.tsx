@@ -267,9 +267,20 @@ export default function App() {
           />
           <aside
             data-gaveta
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu principal de navegação"
             className="relative flex w-[268px] max-w-[86vw] flex-col overflow-y-auto border-r border-linha bg-fundo-2"
           >
-            <Sidebar hora={hora} estado={estado} atual={rota.vista} aoIr={ir} />
+            <Sidebar
+              hora={hora}
+              estado={estado}
+              atual={rota.vista}
+              aoIr={(v) => {
+                setMenuAberto(false)
+                ir(v)
+              }}
+            />
           </aside>
         </div>
       )}

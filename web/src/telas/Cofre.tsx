@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  arestasDoCaminho, caminhoMaisCurto, corDaArea, corDaAreaEscuro, diagnosticarLayout, encurtar, escolherRotulos,
+  arestasDoCaminho, caminhoMaisCurto, corDaArea, corDaAreaEscuro, encurtar, escolherRotulos,
   posicionarCofre, raioDeToque, CAIXA_CELULAR, CAIXA_MESA, FONTE_ROTULO, type Caixa, type Posto,
 } from '../dados/cofre'
-import type { ArestaCofre, NoMemoria } from '../dados/tipos'
+import type { ArestaCofre, Estado, NoMemoria } from '../dados/tipos'
 import { Parcial } from '../ui/SemDado'
 import { Cabecalho, TituloDaTela } from '../ui/primitivos'
 import type { PropsTela } from './Vazias'
 import { Grafo3DCofre } from '../ui/Grafo3DCofre'
 import { PainelInstrumentoCofre } from '../ui/PainelInstrumentoCofre'
+import { useRota } from '../nav/useRota'
+import { useAgentesVivos } from '../dados/useAgentesVivos'
+import { PIXEL_AGENT_SQUADS } from '../dados/pixel-agents'
 
-/**
- * Hook para medir quadros por segundo (FPS) ao vivo via requestAnimationFrame.
- * Faz o painel parecer um instrumento de comando vivo em tempo real.
- */
 function useFps(): number {
   const [fps, setFps] = useState(60)
   const quadrosRef = useRef(0)
@@ -38,85 +37,6 @@ function useFps(): number {
   return fps
 }
 
-/**
- * Fundo de Partículas / Rede de Sinapses (Canvas 2D).
- * Inspirado nas referências 21st.dev e Kimi (InteractiveSynapseNetwork).
- * Desenha pontos flutuantes conectando-se por linhas de proximidade sob o grafo.
- */
-function SynapseCanvas({ modoComando }: { modoComando: boolean }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    let animId: number
-    const largura = (canvas.width = canvas.parentElement?.clientWidth ?? 1000)
-    const altura = (canvas.height = canvas.parentElement?.clientHeight ?? 600)
-
-    const qtdParticulas = 45
-    const particulas = Array.from({ length: qtdParticulas }, () => ({
-      x: Math.random() * largura,
-      y: Math.random() * altura,
-      vx: (Math.random() - 0.5) * 0.4,
-      vy: (Math.random() - 0.5) * 0.4,
-      raio: Math.random() * 1.8 + 1,
-      brilho: Math.random() * 0.5 + 0.3,
-    }))
-
-    const render = () => {
-      ctx.clearRect(0, 0, largura, altura)
-
-      // Atualiza e desenha partículas
-      ctx.fillStyle = modoComando ? '#38BDF8' : '#7A4A0F'
-      for (let i = 0; i < qtdParticulas; i++) {
-        const p = particulas[i]
-        p.x += p.vx
-        p.y += p.vy
-
-        if (p.x < 0 || p.x > largura) p.vx *= -1
-        if (p.y < 0 || p.y > altura) p.vy *= -1
-
-        ctx.globalAlpha = p.brilho * (modoComando ? 0.7 : 0.25)
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.raio, 0, Math.PI * 2)
-        ctx.fill()
-
-        // Desenha arestas de proximidade entre partículas
-        for (let j = i + 1; j < qtdParticulas; j++) {
-          const p2 = particulas[j]
-          const dx = p2.x - p.x
-          const dy = p2.y - p.y
-          const dist = Math.hypot(dx, dy)
-          if (dist < 85) {
-            ctx.strokeStyle = modoComando ? '#A3E635' : '#3E6E8E'
-            ctx.globalAlpha = (1 - dist / 85) * (modoComando ? 0.15 : 0.08)
-            ctx.lineWidth = 0.6
-            ctx.beginPath()
-            ctx.moveTo(p.x, p.y)
-            ctx.lineTo(p2.x, p2.y)
-            ctx.stroke()
-          }
-        }
-      }
-      ctx.globalAlpha = 1
-      animId = requestAnimationFrame(render)
-    }
-
-    render()
-    return () => cancelAnimationFrame(animId)
-  }, [modoComando])
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="pointer-events-none absolute inset-0 z-0 h-full w-full opacity-60"
-    />
-  )
-}
-
 function usarEstreito(): boolean {
   const [estreito, setEstreito] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches,
@@ -130,13 +50,11 @@ function usarEstreito(): boolean {
   return estreito
 }
 
-const RAIO_COTO = 4.5
-
 export type ModoLayout = 'multi-anel' | 'orbita' | 'hierarquia'
 
 function Mapa({
   nos, arestas, caixa, ordemAreas, escolhido, alvo, areaFoco, sempreVisiveis, caminho,
-  modoLayout, animarSinal, modoComando,
+  modoComando,
   aoEscolher, aoLigar,
 }: {
   nos: NoMemoria[]
@@ -148,527 +66,420 @@ function Mapa({
   areaFoco: string | null
   sempreVisiveis: string[]
   caminho: string[] | null
-  modoLayout: ModoLayout
-  animarSinal: boolean
-  modoComando: boolean
+  modoLayout?: ModoLayout
+  animarSinal?: boolean
+  modoComando?: boolean
   aoEscolher: (id: string) => void
   aoLigar: (id: string) => void
 }) {
-  // Posição base vinda do algoritmo de layout calibrado
-  const postosBase = useMemo(
-    () => posicionarCofre(nos, caixa, ordemAreas),
-    [nos, caixa, ordemAreas],
+  const nosFiltrados = useMemo(
+    () => (areaFoco === null ? nos : nos.filter((n) => n.area === areaFoco || sempreVisiveis.includes(n.area))),
+    [nos, areaFoco, sempreVisiveis],
+  )
+  const mapaPostos = useMemo(
+    () => posicionarCofre(nosFiltrados, caixa, ordemAreas),
+    [nosFiltrados, caixa, ordemAreas],
+  )
+  const postos = useMemo(() => Array.from(mapaPostos.values()), [mapaPostos])
+
+  const { arestasVisiveis } = useMemo(() => {
+    const vis: Array<{ de: Posto; para: Posto; a: ArestaCofre }> = []
+    for (const a of arestas) {
+      const pDe = mapaPostos.get(a.de)
+      const pPara = mapaPostos.get(a.para)
+      if (pDe && pPara) {
+        vis.push({ de: pDe, para: pPara, a })
+      }
+    }
+    return { arestasVisiveis: vis }
+  }, [arestas, mapaPostos])
+
+  const arestasDoSalto = useMemo(
+    () => (caminho ? arestasDoCaminho(caminho) : new Set<string>()),
+    [caminho],
   )
 
-  // Adaptação opcional de layout conforme seleção no HUD (Orbita / Hierarquia)
-  const postos = useMemo(() => {
-    if (modoLayout === 'multi-anel') return postosBase
-
-    const cx = caixa.largura / 2
-    const cy = caixa.altura / 2
-    const mapaAlt = new Map<string, Posto>()
-
-    if (modoLayout === 'orbita') {
-      // Distribuição em múltiplos anéis concêntricos equilibrados a partir do centro
-      const ordenados = [...nos].sort((a, b) => b.grau - a.grau || b.peso - a.peso)
-      const total = ordenados.length
-      const rMin = Math.min(caixa.largura, caixa.altura) * 0.16
-      const rMax = Math.min(caixa.largura, caixa.altura) * 0.44
-      
-      const numAneis = total > 50 ? 4 : total > 25 ? 3 : 2
-      const porAnel = Math.ceil(total / numAneis)
-
-      ordenados.forEach((n, i) => {
-        const pBase = postosBase.get(n.id)
-        if (!pBase) return
-        const anelIdx = Math.floor(i / porAnel)
-        const posNoAnel = i % porAnel
-        const totalNoAnel = Math.min(porAnel, total - anelIdx * porAnel)
-        
-        const rOrbita = rMin + (anelIdx / Math.max(1, numAneis - 1)) * (rMax - rMin)
-        const offset = (anelIdx % 2) * (Math.PI / totalNoAnel)
-        const angulo = (posNoAnel / totalNoAnel) * 2 * Math.PI - Math.PI / 2 + offset
-        
-        mapaAlt.set(n.id, {
-          ...pBase,
-          x: Math.round((cx + Math.cos(angulo) * rOrbita) * 10) / 10,
-          y: Math.round((cy + Math.sin(angulo) * rOrbita) * 10) / 10,
-          angulo,
-        })
-      })
-      return mapaAlt
-    }
-
-    if (modoLayout === 'hierarquia') {
-      // Camadas (Tiered Grid): Agrupamento balanceado ocupando o espaço central por área ou espécie
-      const grupos = new Map<string, NoMemoria[]>()
-      nos.forEach((n) => {
-        const chave = n.area || 'operacao'
-        const l = grupos.get(chave) ?? []
-        l.push(n)
-        grupos.set(chave, l)
-      })
-
-      const chaves = Array.from(grupos.keys())
-      const nGrupos = chaves.length
-      const paddingX = Math.max(40, caixa.largura * 0.08)
-      const paddingY = Math.max(45, caixa.altura * 0.10)
-      const larguraUtil = caixa.largura - paddingX * 2
-      const alturaUtil = caixa.altura - paddingY * 2
-
-      chaves.forEach((grp, grpIdx) => {
-        const lista = grupos.get(grp) ?? []
-        const yCamada = paddingY + (grpIdx / Math.max(1, nGrupos - 1)) * alturaUtil
-        const totalItens = lista.length
-        
-        lista.forEach((n, itemIdx) => {
-          const pBase = postosBase.get(n.id)
-          if (!pBase) return
-          const xPos = paddingX + (totalItens === 1 ? larguraUtil / 2 : (itemIdx / (totalItens - 1)) * larguraUtil)
-          // Pequena variação vertical alternada para evitar colisão horizontal de nós próximos
-          const offsetRow = (itemIdx % 2 === 1 ? 14 : -14)
-          mapaAlt.set(n.id, {
-            ...pBase,
-            x: Math.round(xPos * 10) / 10,
-            y: Math.round((yCamada + (totalItens > 8 ? offsetRow : 0)) * 10) / 10,
-          })
-        })
-      })
-      return mapaAlt
-    }
-
-    return postosBase
-  }, [modoLayout, nos, caixa, postosBase])
-
-  const noCaminho = useMemo(() => new Set(caminho ?? []), [caminho])
-  const arestasMarcadas = useMemo(() => arestasDoCaminho(caminho), [caminho])
-  const area = useMemo(() => new Map(nos.map((n) => [n.id, n.area])), [nos])
-
-  const visivel = (id: string) =>
-    areaFoco === null
-    || area.get(id) === areaFoco
-    || sempreVisiveis.includes(area.get(id) ?? '')
-    || noCaminho.has(id)
-
-  const ligados = new Set(
-    arestas.filter((a) => a.de === escolhido || a.para === escolhido).flatMap((a) => [a.de, a.para]),
+  const rotulos = useMemo(
+    () => {
+      const getNome = (id: string) => nos.find((n) => n.id === id)?.rotulo ?? id
+      const getPrioridade = (id: string) => nos.find((n) => n.id === id)?.grau ?? 1
+      return escolherRotulos(mapaPostos, getNome, getPrioridade, caixa)
+    },
+    [mapaPostos, nos, caixa],
   )
 
-  const arestasVisiveis = arestas.filter((a) => {
-    const de = visivel(a.de)
-    const para = visivel(a.para)
-    if (de && para) return true
-    if (arestasMarcadas.has(`${a.de}|${a.para}`)) return true
-    return a.ponte && (area.get(a.de) === areaFoco || area.get(a.para) === areaFoco)
-  })
-
-  const cotos = new Set(
-    arestasVisiveis.flatMap((a) => [a.de, a.para]).filter((id) => !visivel(id)),
-  )
-
-  const rotulos = useMemo(() => {
-    const nome = new Map(nos.map((n) => [n.id, n.rotulo]))
-    const grau = new Map(nos.map((n) => [n.id, n.grau]))
-    const so = new Map([...postos].filter(([id]) => visivel(id)))
-    const obstaculos = [...cotos].map((id) => {
-      const q = postos.get(id)
-      return q ? { x: q.x - RAIO_COTO, y: q.y - RAIO_COTO, largura: RAIO_COTO * 2, altura: RAIO_COTO * 2 } : null
-    }).filter((x): x is { x: number; y: number; largura: number; altura: number } => x !== null)
-
-    return escolherRotulos(
-      so,
-      (id) => nome.get(id) ?? id,
-      (id) => {
-        if (id === escolhido) return 10_000
-        if (id === alvo) return 9_000
-        if (noCaminho.has(id)) return 8_000
-        if (ligados.has(id)) return 1_000 + (grau.get(id) ?? 0)
-        return grau.get(id) ?? 0
-      },
-      caixa,
-      obstaculos,
-    )
-  }, [postos, nos, escolhido, alvo, caminho, areaFoco, caixa])
-
-  const posicao = (id: string) => postos.get(id)
-  const visiveis = nos.filter((n) => visivel(n.id)).length
-  const comoCoube = diagnosticarLayout(postos, caixa)
-
-  // Zoom e Pan
-  const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [arrastando, setArrastando] = useState(false)
-  const [pontoInicial, setPontoInicial] = useState<{ x: number; y: number; panX: number; panY: number } | null>(null)
-  const [moveu, setMoveu] = useState(false)
-
-  const resetarNavegacao = () => {
-    setZoom(1)
-    setPan({ x: 0, y: 0 })
+  const clique = (e: React.MouseEvent, id: string) => {
+    if (e.shiftKey) aoLigar(id)
+    else aoEscolher(id)
   }
-
-  const aoRolar = (e: React.WheelEvent<SVGSVGElement>) => {
-    e.preventDefault()
-    const delta = e.deltaY < 0 ? 1.15 : 0.87
-    setZoom((z) => Math.min(3.5, Math.max(0.7, Number((z * delta).toFixed(2)))))
-  }
-
-  const aoIniciarArrasto = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (e.button !== 0) return
-    setArrastando(true)
-    setMoveu(false)
-    setPontoInicial({ x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y })
-    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
-  }
-
-  const aoArrastar = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!arrastando || !pontoInicial) return
-    const dx = e.clientX - pontoInicial.x
-    const dy = e.clientY - pontoInicial.y
-    if (Math.hypot(dx, dy) > 4) setMoveu(true)
-    setPan({ x: pontoInicial.panX + dx, y: pontoInicial.panY + dy })
-  }
-
-  const aoFinalizarArrasto = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!arrastando) return
-    setArrastando(false)
-    setPontoInicial(null)
-    try {
-      ;(e.currentTarget as Element).releasePointerCapture?.(e.pointerId)
-    } catch {
-      // noop
-    }
-  }
-
-  // Pulso de feixe de luz ao longo do tempo para arestas ativas
-  const [fasePulso, setFasePulso] = useState(0)
-  useEffect(() => {
-    if (!animarSinal) return
-    const interval = setInterval(() => {
-      setFasePulso((f) => (f + 0.04) % 1)
-    }, 30)
-    return () => clearInterval(interval)
-  }, [animarSinal])
 
   return (
     <>
-      <div className={`relative overflow-hidden rounded border transition-colors duration-300 ${
-        modoComando ? 'border-sky-500/30 bg-[#0B0F17]' : 'border-linha bg-carta'
-      }`}>
-        {/* Canvas 2D de partículas e sinapses */}
-        <SynapseCanvas modoComando={modoComando} />
-
-        {/* Controles de Zoom Flutuantes */}
-        <div className={`absolute bottom-3 right-3 z-10 flex items-center gap-1 rounded border p-1 shadow-md backdrop-blur-md transition-colors ${
-          modoComando ? 'border-sky-500/30 bg-[#0B0F17]/90 text-sky-400' : 'border-linha bg-carta/90 text-tinta'
-        }`}>
-          <button
-            type="button"
-            title="Aumentar zoom"
-            aria-label="Aumentar zoom"
-            onClick={() => setZoom((z) => Math.min(3.5, Number((z + 0.25).toFixed(2))))}
-            className="flex h-7 w-7 items-center justify-center rounded border border-linha/50 text-xs font-bold hover:bg-white/10 active:scale-95"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            title="Diminuir zoom"
-            aria-label="Diminuir zoom"
-            onClick={() => setZoom((z) => Math.max(0.7, Number((z - 0.25).toFixed(2))))}
-            className="flex h-7 w-7 items-center justify-center rounded border border-linha/50 text-xs font-bold hover:bg-white/10 active:scale-95"
-          >
-            −
-          </button>
-          {(zoom !== 1 || pan.x !== 0 || pan.y !== 0) && (
-            <button
-              type="button"
-              title="Restaurar visualização original (100%)"
-              aria-label="Restaurar visualização original"
-              onClick={resetarNavegacao}
-              className="rounded border border-linha/50 px-2 py-1 font-mono text-[10px] hover:bg-white/10 active:scale-95"
-            >
-              {Math.round(zoom * 100)}% · Reset
-            </button>
-          )}
-        </div>
-
+      <div className={`poco relative mx-auto overflow-hidden rounded-xl border transition-all ${
+        modoComando ? 'border-sky-500/40 bg-[#070b14] shadow-[0_0_30px_rgba(56,189,248,0.1)]' : 'border-linha bg-fundo'
+      }`} style={{ maxWidth: caixa.largura }}>
         <svg
-          data-grafo-cofre
-          role="group"
-          aria-label="Mapa dos aprendizados da operação e das ligações declaradas entre eles"
           viewBox={`0 0 ${caixa.largura} ${caixa.altura}`}
-          className="relative z-10 h-auto w-full touch-none select-none cursor-grab active:cursor-grabbing"
-          onWheel={aoRolar}
-          onPointerDown={aoIniciarArrasto}
-          onPointerMove={aoArrastar}
-          onPointerUp={aoFinalizarArrasto}
-          onPointerCancel={aoFinalizarArrasto}
+          className="block h-auto w-full"
+          role="img"
+          aria-label="Grafo do Cofre de conhecimento"
         >
-          <defs>
-            <marker id="seta-cofre" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={modoComando ? '#38BDF8' : 'var(--color-linha-forte)'} />
-            </marker>
-            <radialGradient id="brilho-cofre">
-              <stop offset="0" stopColor={modoComando ? '#A3E635' : 'var(--color-lima)'} stopOpacity={modoComando ? '0.22' : '0.13'} />
-              <stop offset="1" stopColor={modoComando ? '#38BDF8' : 'var(--color-lima)'} stopOpacity="0" />
-            </radialGradient>
-            <filter id="glow-neon" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-              <feMerge>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
-            </filter>
-          </defs>
-
-          <g transform={zoom !== 1 || pan.x !== 0 || pan.y !== 0
-            ? `translate(${caixa.largura / 2 + pan.x}, ${caixa.altura / 2 + pan.y}) scale(${zoom}) translate(${-caixa.largura / 2}, ${-caixa.altura / 2})`
-            : undefined}
-          >
-            <circle cx={caixa.largura / 2} cy={caixa.altura / 2} r={Math.min(caixa.largura, caixa.altura) * 0.36} fill="url(#brilho-cofre)" />
-
-            {/* Renderização das Arestas com Iluminação & Sinal Neon */}
-            {arestasVisiveis.map((a) => {
-              const de = posicao(a.de)
-              const para = posicao(a.para)
-              if (!de || !para) return null
-              const emCaminho = arestasMarcadas.has(`${a.de}|${a.para}`)
-              const ativa = a.de === escolhido || a.para === escolhido
-              const cortada = !visivel(a.de) || !visivel(a.para)
-
-              // Posição calculada do feixe itinerante de luz
-              const pulseX = de.x + (para.x - de.x) * fasePulso
-              const pulseY = de.y + (para.y - de.y) * fasePulso
-
+          <g className="arestas" strokeLinecap="round">
+            {arestasVisiveis.map(({ de, para, a }) => {
+              const chave = `${a.de}->${a.para}`
+              const noSalto = arestasDoSalto.has(chave)
+              const tocaEscolhido = a.de === escolhido || a.para === escolhido
+              const tocaAlvo = alvo !== null && (a.de === alvo || a.para === alvo)
+              const destaque = noSalto || tocaEscolhido || tocaAlvo
+              const cor = noSalto
+                ? '#F59E0B'
+                : destaque
+                ? (modoComando ? '#38BDF8' : 'var(--color-tinta)')
+                : a.ponte
+                ? (modoComando ? 'rgba(56,189,248,0.2)' : 'color-mix(in srgb, var(--color-linha-forte) 75%, transparent)')
+                : (modoComando ? 'rgba(56,189,248,0.1)' : 'var(--color-linha)')
               return (
-                <g key={`${a.de}:${a.para}`}>
-                  <line
-                    data-aresta-cofre
-                    data-de={a.de}
-                    data-para={a.para}
-                    data-ponte={String(a.ponte)}
-                    data-de-area={area.get(a.de)}
-                    data-para-area={area.get(a.para)}
-                    data-no-caminho={String(emCaminho)}
-                    x1={de.x} y1={de.y} x2={para.x} y2={para.y}
-                    stroke={
-                      emCaminho
-                        ? (modoComando ? '#EF4444' : 'var(--color-vermelho)')
-                        : ativa
-                        ? (modoComando ? '#A3E635' : 'var(--color-lima)')
-                        : (modoComando ? '#38BDF8' : 'var(--color-linha-forte)')
-                    }
-                    strokeOpacity={emCaminho ? 0.95 : ativa ? 0.85 : cortada ? 0.22 : (modoComando ? 0.45 : 0.3)}
-                    strokeWidth={emCaminho ? 2.8 : ativa ? 2.0 : 1}
-                    strokeDasharray={cortada ? '5 3' : undefined}
-                    className={ativa || emCaminho ? 'glow-aresta' : undefined}
-                    markerEnd={emCaminho ? undefined : 'url(#seta-cofre)'}
-                  >
-                    <title>{`${a.porque}${a.ponte ? ' (ponte entre áreas)' : ''}`}</title>
-                  </line>
-
-                  {/* Feixe de Luz / Pulso Neon Itinerante quando ativo ou no caminho */}
-                  {animarSinal && (ativa || emCaminho) && !cortada && (
-                    <circle
-                      cx={pulseX}
-                      cy={pulseY}
-                      r={3}
-                      fill={emCaminho ? '#EF4444' : '#A3E635'}
-                      className="glow-no"
-                    />
-                  )}
-                </g>
-              )
-            })}
-
-            {/* Cotos de Ponte */}
-            {[...cotos].map((id) => {
-              const q = posicao(id)
-              if (!q) return null
-              return (
-                <circle
-                  data-ponte-coto key={`coto-${id}`} data-area={area.get(id)}
-                  cx={q.x} cy={q.y} r={RAIO_COTO} fill={modoComando ? '#0B0F17' : 'var(--color-carta)'} opacity={0.8}
-                  stroke={(modoComando ? corDaAreaEscuro : corDaArea)(area.get(id) ?? '')} strokeWidth={1.3} strokeDasharray="3 2"
-                >
-                  <title>{`ponte para a área ${area.get(id)}, escondida pelo filtro`}</title>
-                </circle>
-              )
-            })}
-
-            {/* Renderização dos Nós com Halo & Brilho Neon */}
-            {nos.filter((n) => visivel(n.id)).map((no) => {
-              const q = posicao(no.id)
-              if (!q) return null
-              const ativo = no.id === escolhido
-              const ehAlvo = no.id === alvo
-              const cor = (modoComando ? corDaAreaEscuro : corDaArea)(no.area)
-
-              return (
-                <g
-                  data-no-cofre data-id={no.id} data-area={no.area}
-                  key={no.id} role="button" tabIndex={0}
-                  aria-label={`${no.rotulo}, ${no.especie} de ${no.autor}`}
-                  onClick={(e) => {
-                    if (moveu) return
-                    if (e.shiftKey) aoLigar(no.id)
-                    else aoEscolher(no.id)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter' && e.key !== ' ') return
-                    e.preventDefault()
-                    if (e.shiftKey) aoLigar(no.id)
-                    else aoEscolher(no.id)
-                  }}
-                  className="cursor-pointer"
-                >
-                  <title>{`${no.rotulo} · ${no.especie} · ${no.autor}, ${no.quando} · ${no.grau} ligações`}</title>
-
-                  {/* Alvo de Toque WCAG 2.5.8 (invisível de até 24x24px / 12px raio) */}
-                  <circle
-                    data-alvo-toque cx={q.x} cy={q.y}
-                    r={Number(raioDeToque(q.raio, comoCoube.menorDistancia).toFixed(2))}
-                    fill="transparent"
-                  />
-
-                  {/* Halo Pulsante Neon quando selecionado ou alvo */}
-                  {(ativo || ehAlvo || noCaminho.has(no.id)) && (
-                    <circle
-                      cx={q.x} cy={q.y} r={q.raio + 9}
-                      fill={ehAlvo || noCaminho.has(no.id) ? '#EF4444' : cor}
-                      opacity={modoComando ? 0.35 : 0.18}
-                      className="glow-no animate-pulse"
-                    />
-                  )}
-
-                  {/* Anel Externo de Destaque */}
-                  {ativo && (
-                    <circle
-                      cx={q.x} cy={q.y} r={q.raio + 4}
-                      fill="none"
-                      stroke={modoComando ? '#A3E635' : 'var(--color-tinta)'}
-                      strokeWidth={1.5}
-                      strokeDasharray="4 2"
-                    />
-                  )}
-
-                  {/* Círculo do Nó Desenhado (preserva o piso RAIO_MINIMO_CLICAVEL = 3.5) */}
-                  <circle
-                    data-corpo-no data-area={no.area} data-grau={no.grau}
-                    cx={q.x} cy={q.y} r={Number(q.raio.toFixed(2))} fill={cor}
-                    opacity={no.vencido ? 0.35 : ativo ? 1 : (modoComando ? 0.95 : 0.85)}
-                    stroke={ativo ? (modoComando ? '#FFFFFF' : 'var(--color-tinta)') : (modoComando ? '#0B0F17' : 'var(--color-carta)')}
-                    strokeWidth={ativo ? 2.2 : 1}
-                    strokeDasharray={no.vencido ? '3 2' : undefined}
-                    filter={ativo || modoComando ? 'url(#glow-neon)' : undefined}
-                  />
-                </g>
-              )
-            })}
-
-            {/* Rótulos de Texto */}
-            {rotulos.map((r) => {
-              const ativo = r.id === escolhido || r.id === alvo || noCaminho.has(r.id)
-              return (
-                <text
-                  data-rotulo-cofre data-id={r.id} key={`rotulo-${r.id}`}
-                  x={r.x} y={r.y} textAnchor={r.ancora}
-                  fill={
-                    ativo
-                      ? (modoComando ? '#FACC15' : 'var(--color-tinta)')
-                      : (modoComando ? '#94A3B8' : 'var(--color-tinta-2)')
-                  }
-                  fontSize={caixa.fonteRotulo ?? FONTE_ROTULO} fontFamily="var(--font-mono)"
-                  fontWeight={ativo ? '600' : '400'}
-                  className="pointer-events-none select-none"
-                >
-                  {r.texto}
-                </text>
+                <line
+                  key={chave}
+                  x1={de.x} y1={de.y} x2={para.x} y2={para.y}
+                  stroke={cor}
+                  strokeWidth={noSalto ? 2.5 : destaque ? 1.8 : 1}
+                  strokeDasharray={a.ponte && !destaque ? '3 3' : undefined}
+                />
               )
             })}
           </g>
+
+          <g className="nos">
+            {postos.map((p) => {
+              const ehEscolhido = p.id === escolhido
+              const ehAlvo = p.id === alvo
+              const noSalto = caminho ? caminho.includes(p.id) : false
+              const cor = (modoComando ? corDaAreaEscuro : corDaArea)(p.area)
+              return (
+                <g key={p.id} onClick={(e) => clique(e, p.id)} className="cursor-pointer">
+                  <circle cx={p.x} cy={p.y} r={raioDeToque(p.raio, 24)} fill="transparent" />
+                  <circle
+                    cx={p.x} cy={p.y} r={p.raio}
+                    fill={ehEscolhido ? (modoComando ? '#38BDF8' : 'var(--color-tinta)') : cor}
+                    stroke={ehAlvo || noSalto ? '#F59E0B' : ehEscolhido ? '#FFFFFF' : 'rgba(0,0,0,0.4)'}
+                    strokeWidth={ehAlvo || noSalto ? 2.5 : ehEscolhido ? 2 : 1}
+                  />
+                </g>
+              )
+            })}
+          </g>
+
+          <g className="rotulos pointer-events-none">
+            {rotulos.map((r) => (
+              <text
+                key={r.id}
+                x={r.x} y={r.y}
+                textAnchor="middle"
+                fill={r.id === escolhido ? '#38BDF8' : modoComando ? '#94A3B8' : 'var(--color-tinta-2)'}
+                fontSize={caixa.fonteRotulo ?? FONTE_ROTULO}
+                fontFamily="var(--font-mono)"
+                fontWeight={r.id === escolhido ? '700' : '400'}
+              >
+                {r.texto}
+              </text>
+            ))}
+          </g>
         </svg>
       </div>
-
-      {/* Alerta de Ajuste Automático Residual */}
-      <p className={`mt-1.5 font-mono text-[9px] leading-relaxed ${modoComando ? 'text-slate-400' : 'text-tinta-3'}`}>
-        Tamanho do círculo = {areaFoco === null
-          ? 'ligações declaradas'
-          : 'TODAS as ligações declaradas, inclusive as que o filtro tirou do desenho'} · cor = área ·{' '}
-        <kbd className={`rounded border px-1 ${modoComando ? 'border-slate-700 bg-slate-900 text-slate-300' : 'border-linha text-tinta'}`}>Shift</kbd>+clique num segundo nó mostra o caminho entre os dois.
-        {' '}<span className={modoComando ? 'text-sky-300 font-semibold' : 'text-tinta-2'}>{rotulos.length} de {visiveis} nomes cabem neste tamanho</span>; o resto fica no título do nó e na ficha ao lado.
-        {areaFoco !== null && (
-          <> Com o filtro ligado, a ponte que <span className={modoComando ? 'text-sky-300 font-semibold' : 'text-tinta-2'}>sai desta área</span> continua desenhada e a ponta de fora vira anel vazado{cotos.size > 0 ? `: ${cotos.size} aprendizado(s) de outras áreas aparecem assim` : ''}. Ponte entre duas áreas que saíram volta quando o filtro sai.
-            {' '}A ficha ao lado continua listando todas.</>
-        )}
-        {(comoCoube.colados > 0 || comoCoube.fora > 0) && (
-          <span data-mapa-apertado className="mt-1 block text-ambar font-semibold">
-            Este tamanho de tela não comporta {visiveis} aprendizados: {comoCoube.colados > 0 ? `${comoCoube.colados} par(es) de círculos se encostam` : `${comoCoube.fora} círculo(s) passam da borda`}. O desenho parou de encolher no menor círculo que este mapa aceita, e daqui pra baixo a leitura confiável é a lista ao lado e a ficha, não o desenho.
-          </span>
-        )}
-      </p>
     </>
   )
 }
 
+/** Aba Principal: Cérebro Operacional Vivo */
+function VisaoOperacao({
+  estado,
+  aoIrAtivos,
+  aoIrConhecimento,
+  aoIrAprovacoes,
+}: {
+  estado: Estado
+  aoIrAtivos: (chave?: string) => void
+  aoIrConhecimento: () => void
+  aoIrAprovacoes: () => void
+}) {
+  const { dados: vivos, statusLeitura, recebidoEm, erro: erroSonda } = useAgentesVivos()
+  const listaVivos = vivos?.agentes ?? []
+  const ativosTrabalhando = listaVivos.filter((a) => a.estado === 'trabalhando')
+  const aprovacoesItens = estado.aprovacoes?.itens ?? []
+  const aprovacoesPendentes = aprovacoesItens.filter((i) => i.estado === 'aguardando' || i.estado === 'pendente')
+
+  // Console de Mudanças Detectadas entre Snapshots
+  const [logMudancas, setLogMudancas] = useState<Array<{ hora: string; texto: string; tipo: 'ativo' | 'alerta' | 'info' }>>([])
+  const agentesAnterioresRef = useRef<Map<string, string>>(new Map())
+
+  useEffect(() => {
+    if (!vivos?.ok) return
+    const agora = new Date().toLocaleTimeString('pt-BR')
+    const novoMapa = new Map<string, string>()
+    const logsNovos: typeof logMudancas = []
+
+    for (const ag of listaVivos) {
+      const chave = ag.dono ? `${ag.dono}:${ag.id}` : ag.id
+      novoMapa.set(chave, ag.estado)
+      const anterior = agentesAnterioresRef.current.get(chave)
+      if (anterior === undefined && ag.estado === 'trabalhando') {
+        logsNovos.push({
+          hora: agora,
+          texto: `Execução detectada: ${ag.nome || ag.id} (${ag.dono || 'global'}) · ${ag.ferramenta ? `ferramenta ${ag.ferramenta}` : 'trabalhando'}`,
+          tipo: 'ativo',
+        })
+      } else if (anterior && anterior !== ag.estado) {
+        logsNovos.push({
+          hora: agora,
+          texto: `Transição de estado: ${ag.nome || ag.id} agora está ${ag.estado}`,
+          tipo: 'info',
+        })
+      }
+    }
+
+    // Detecta agentes que saíram
+    for (const [chave, estadoAnt] of agentesAnterioresRef.current.entries()) {
+      if (!novoMapa.has(chave) && estadoAnt === 'trabalhando') {
+        logsNovos.push({
+          hora: agora,
+          texto: `Execução finalizada ou fora da leitura: ${chave}`,
+          tipo: 'info',
+        })
+      }
+    }
+
+    if (logsNovos.length > 0) {
+      setLogMudancas((prev) => [...logsNovos, ...prev].slice(0, 8))
+    }
+    agentesAnterioresRef.current = novoMapa
+  }, [vivos, listaVivos])
+
+  return (
+    <div className="space-y-4 font-mono">
+      {/* Botões de Ação no Topo do Cérebro */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-black bg-[#0f172a] p-3 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="size-3 rounded-full bg-[#a3e635] shadow-[0_0_8px_#a3e635] animate-pulse" />
+          <span className="text-xs sm:text-sm font-black uppercase text-[#facc15] truncate">
+            CENTRO DA OPERAÇÃO · SISTEMA NERVOSO G4ST40VIB3
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => aoIrAtivos()}
+            className="flex items-center gap-1.5 border-2 border-black bg-[#a3e635] px-3 py-1 text-xs font-black uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#bef264]"
+          >
+            <span>🎮 VER ATIVOS NO ESCRITÓRIO ({ativosTrabalhando.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={aoIrConhecimento}
+            className="flex items-center gap-1.5 border-2 border-black bg-[#38bdf8] px-3 py-1 text-xs font-black uppercase text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#7dd3fc]"
+          >
+            <span>📚 EXPLORAR CONHECIMENTO</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Alerta Âmbar de Decisões Humanas */}
+      {aprovacoesPendentes.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-amber-500/60 bg-[#451a03]/80 p-3 text-amber-200 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center gap-2">
+            <span className="size-2.5 rounded-full bg-[#facc15] animate-ping" />
+            <span className="text-xs font-bold uppercase">
+              ⚠️ {aprovacoesPendentes.length} decisão(ões) aguardando liberação na fila
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={aoIrAprovacoes}
+            className="border border-amber-400 bg-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-200 hover:bg-amber-500/30 rounded"
+          >
+            Abrir fila de aprovações ↗
+          </button>
+        </div>
+      )}
+
+      {/* Mapa Sinóptico Operacional (Núcleo + Squads + Execuções Vivas) */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Hub Central e Squads */}
+        <div className="lg:col-span-2 rounded-lg border-2 border-black bg-[#070b14] p-4 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="size-2 bg-[#38bdf8] rounded-full" />
+              <h3 className="text-xs font-black uppercase text-[#38bdf8]">
+                MAPA SINÓPTICO DA OPERAÇÃO
+              </h3>
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {statusLeitura === 'confirmado' && recebidoEm
+                ? `Sonda viva há ${Math.max(0, Math.round((Date.now() - recebidoEm.getTime()) / 1000))}s`
+                : statusLeitura === 'indisponivel'
+                ? `Sonda indisponível (${erroSonda || 'falha'})`
+                : 'Consultando presença...'}
+            </span>
+          </div>
+
+          {/* Nós dos Squads com Conexão ao Core */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {/* Núcleo Central */}
+            <div className="col-span-2 sm:col-span-3 border-2 border-[#84cc16] bg-[#84cc16]/10 p-3 rounded text-center">
+              <div className="text-[10px] uppercase font-black text-[#84cc16]">NÚCLEO CENTRAL DE COORDENAÇÃO</div>
+              <div className="text-sm font-black text-white mt-0.5">LUANA · COORDENADORA GERAL</div>
+              <div className="text-[10.5px] text-slate-300 mt-1">Supervisão autônoma, triagem de eventos e despacho</div>
+            </div>
+
+            {/* Squads Catalogados */}
+            {PIXEL_AGENT_SQUADS.filter((s) => s.id !== 'coordenação').map((squad) => {
+              const ativosDoDepto = listaVivos.filter((a) => {
+                if (squad.id === 'bots' && a.dono === 'renato') return true
+                if (squad.id === 'tráfego' && a.dono === 'bia') return true
+                if (squad.id === 'comercial' && (a.dono === 'elza' || a.id.includes('comercial'))) return true
+                if (squad.id === 'conteúdo' && a.dono === 'iris') return true
+                return false
+              })
+
+              return (
+                <div
+                  key={squad.id}
+                  className="border border-slate-800 bg-[#0f172a] p-2.5 rounded flex flex-col justify-between"
+                  style={{ borderTopColor: squad.cor, borderTopWidth: 3 }}
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase truncate" style={{ color: squad.cor }}>
+                        {squad.nome}
+                      </span>
+                      {ativosDoDepto.length > 0 && (
+                        <span className="size-2 bg-[#a3e635] rounded-full animate-ping" />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-1.5 text-[10px]">
+                    <span className="text-slate-400">Ativos:</span>
+                    <span className={`font-bold font-mono ${ativosDoDepto.length > 0 ? 'text-[#a3e635]' : 'text-slate-400'}`}>
+                      {ativosDoDepto.length}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Execuções Ativas & Console de Mudanças */}
+        <div className="space-y-4">
+          {/* Card de Execuções Ativas ao Vivo */}
+          <div className="rounded-lg border-2 border-black bg-[#070b14] p-4 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2.5">
+              <span className="text-xs font-black uppercase text-[#a3e635] flex items-center gap-1.5">
+                <span className="size-2 bg-[#a3e635] rounded-full" />
+                EXECUÇÕES EM ANDAMENTO ({ativosTrabalhando.length})
+              </span>
+            </div>
+
+            {ativosTrabalhando.length > 0 ? (
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {ativosTrabalhando.map((ag) => {
+                  const chave = ag.dono ? `${ag.dono}:${ag.id}` : ag.id
+                  return (
+                    <button
+                      key={chave}
+                      type="button"
+                      onClick={() => aoIrAtivos(chave)}
+                      className="w-full text-left border border-slate-800 bg-[#0f172a] hover:border-[#a3e635] p-2.5 rounded transition-all"
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-bold text-white truncate">{ag.nome || ag.id}</span>
+                        <span className="text-[9px] font-bold text-[#a3e635] border border-[#a3e635]/40 px-1 rounded">
+                          EXEC ↗
+                        </span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-300 truncate">
+                        {ag.tarefa || ag.etapa || 'Trabalhando'}
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[9.5px] text-slate-400 font-mono">
+                        <span>{ag.ferramenta ? `tool: ${ag.ferramenta}` : ag.modelo || 'IA'}</span>
+                        <span className="text-[#a3e635]">{ag.rodando_ha || ''}</span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="p-4 text-center text-xs text-slate-400 border border-dashed border-slate-800 rounded">
+                Nenhum agente executando tarefas neste instante.
+              </div>
+            )}
+          </div>
+
+          {/* Console de Mudanças Detectadas */}
+          <div className="rounded-lg border-2 border-black bg-[#070b14] p-3.5 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="text-[10.5px] font-black uppercase text-slate-400 border-b border-slate-800 pb-1.5 mb-2">
+              📟 CONSOLE DE EVENTOS OPERACIONAIS
+            </div>
+            {logMudancas.length > 0 ? (
+              <ul className="space-y-1 text-[10.5px] font-mono max-h-40 overflow-y-auto">
+                {logMudancas.map((item, idx) => (
+                  <li key={idx} className="flex items-baseline gap-1.5 text-slate-300">
+                    <span className="text-slate-500">[{item.hora}]</span>
+                    <span className={item.tipo === 'ativo' ? 'text-[#a3e635]' : 'text-slate-200'}>
+                      {item.texto}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-[10px] text-slate-500 font-mono">
+                Aguardando próximas medições da sonda...
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Cofre({ estado, medidoEm, vista }: PropsTela) {
+  const { rota, ir } = useRota()
   const cofre = estado.cofre
   const estreito = usarEstreito()
   const fps = useFps()
+
+  // Aba ativa: 'operacao' (padrão) ou 'conhecimento'
+  const [visaoAtiva, setVisaoAtiva] = useState<'operacao' | 'conhecimento'>(() => {
+    return rota.visao === 'conhecimento' ? 'conhecimento' : 'operacao'
+  })
+
+  useEffect(() => {
+    if (rota.visao === 'conhecimento') {
+      setVisaoAtiva('conhecimento')
+    } else if (rota.visao === 'operacao') {
+      setVisaoAtiva('operacao')
+    }
+  }, [rota.visao])
+
+  const trocarAba = (novaAba: 'operacao' | 'conhecimento') => {
+    setVisaoAtiva(novaAba)
+    ir('cofre', null, { visao: novaAba })
+  }
 
   const [escolhido, setEscolhido] = useState('')
   const [alvo, setAlvo] = useState<string | null>(null)
   const [areaFoco, setAreaFoco] = useState<string | null>(null)
   const [termoBusca, setTermoBusca] = useState('')
-
-  // Modos de Visualização Futuristas (Estilo Kimi/JARVIS)
-  // ‼️ PADRÃO MUDOU PRA true EM 20/09/2026: o visual futurista (SynapseCanvas,
-  // HUD, glow neon) só aparecia depois de clicar num botão, escondido atrás
-  // de um toggle que nascia desligado. Ele nunca clicou, achou que "não tinha
-  // nada de futurista implementado" quando na verdade já estava tudo pronto,
-  // só nunca visível de cara. Agora é o padrão; quem quiser o modo sépia
-  // original desliga manual, e a preferência continua salva por navegador.
-  const [modoComando, setModoComando] = useState(() => {
-    try {
-      const salvo = localStorage.getItem('painel_os:cofre_modo_comando')
-      return salvo === null ? true : salvo === 'true'
-    } catch {
-      return true
-    }
-  })
+  const [modoComando, setModoComando] = useState(true)
   const [modoLayout, setModoLayout] = useState<ModoLayout>('multi-anel')
   const [animarSinal, setAnimarSinal] = useState(true)
+  const [areasAbertas, setAreasAbertas] = useState(false)
 
-  // ‼️ SIDEBAR DE ÁREAS RECOLHÍVEL POR PADRÃO (item 3 do briefing, 20/09/2026):
-  // o grafo é "a parte mais importante da tela" (cobrado pelo dono) e não pode
-  // competir em pé de igualdade com painel de texto. Recolhida por padrão libera
-  // ~140px pro grafo; expande com um clique e a preferência fica salva.
-  const [areasAbertas, setAreasAbertas] = useState(() => {
-    try {
-      return localStorage.getItem('painel_os:cofre_areas_abertas') === 'true'
-    } catch {
-      return false
-    }
-  })
-  const alternarAreasAbertas = () => {
-    setAreasAbertas((prev) => {
-      const prox = !prev
-      try {
-        localStorage.setItem('painel_os:cofre_areas_abertas', String(prox))
-      } catch {}
-      return prox
-    })
-  }
-
-  const alternarModoComando = () => {
-    setModoComando((prev) => {
-      const prox = !prev
-      try {
-        localStorage.setItem('painel_os:cofre_modo_comando', String(prox))
-      } catch {}
-      return prox
-    })
-  }
+  const alternarAreasAbertas = () => setAreasAbertas((prev) => !prev)
+  const alternarModoComando = () => setModoComando((prev) => !prev)
 
   const nos = cofre?.nos ?? []
   useEffect(() => {
@@ -685,7 +496,6 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
     [alvo, escolhido, cofre],
   )
 
-  // Filtro de busca por texto
   const nosFiltradosBusca = useMemo(() => {
     if (!termoBusca.trim()) return []
     const q = termoBusca.toLowerCase()
@@ -697,138 +507,159 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
     ).slice(0, 6)
   }, [nos, termoBusca])
 
-  if (!cofre || cofre.erro || cofre.conexoes === null || !nos.length) {
-    return (
-      <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
-        <TituloDaTela titulo="Cofre de conhecimento." pergunta={vista.pergunta} mostrarSeletorData={false} />
-        <div className="carta p-5 text-sm text-tinta-2">
-          Não consegui medir o Cofre. {cofre?.erro ?? 'O estado ainda não tem a fonte dos aprendizados.'}
-        </div>
-      </div>
-    )
-  }
-
   const atual = nos.find((n) => n.id === escolhido) ?? nos[0]
   const alvoNo = alvo ? nos.find((n) => n.id === alvo) ?? null : null
 
-  // Relações Dirigidas (PRE: de onde veio -> NEXT: o que destrava)
-  const entram = cofre.arestas.filter((a) => a.para === atual.id) // PRE
-  const saem = cofre.arestas.filter((a) => a.de === atual.id)   // NEXT
+  const entram = cofre?.arestas.filter((a) => a.para === atual?.id) ?? []
+  const saem = cofre?.arestas.filter((a) => a.de === atual?.id) ?? []
 
   const nome = (id: string) => nos.find((n) => n.id === id)?.rotulo ?? id
   const curto = (id: string) => encurtar(nome(id), 32)
-  const baixa = cofre.cobertura !== null && cofre.cobertura < 25
-  const familia = cofre.familias.find((f) => f.id === atual.familia)
-  const truncado = cofre.truncados.includes(atual.id)
-  const areaAtual = cofre.areas.find((a) => a.id === atual.area)
+  const baixa = cofre?.cobertura !== null && (cofre?.cobertura ?? 0) < 25
+  const familia = cofre?.familias.find((f) => f.id === atual?.familia)
+  const truncado = cofre?.truncados.includes(atual?.id) ?? false
+  const areaAtual = cofre?.areas.find((a) => a.id === atual?.area)
 
   const porqueDoSalto = (de: string, para: string) =>
-    cofre.arestas
+    cofre?.arestas
       .filter((a) => (a.de === de && a.para === para) || (a.de === para && a.para === de))
       .map((a) => `${nome(a.de)} → ${nome(a.para)}: ${a.porque}`)
-      .join(' · ')
+      .join(' · ') ?? ''
 
-  // ‼️ CORRIGIDO 21/09/2026: autores/sempreVisiveis/ordemAreas eram arrays
-  // NOVOS a cada render (mesmo problema já achado em Grafo3DCofre.graphData:
-  // o useFps sozinho já causa ~1 render/segundo). sempreVisiveis e ordemAreas
-  // alimentam o useMemo do graphData e do Mapa 2D — sem memoizar ESTAS aqui
-  // também, aquele useMemo recomputava do mesmo jeito (dependência sempre
-  // "nova" por referência), o que explica o "2D Multi-Anel ainda está
-  // piscando" mesmo depois do primeiro conserto.
   const autores = useMemo(
     () => [...nos.reduce((m, n) => m.set(n.autor, (m.get(n.autor) ?? 0) + 1), new Map<string, number>())]
       .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)),
     [nos],
   )
   const sempreVisiveis = useMemo(
-    () => cofre.areas.filter((a) => a.sempre_visivel === true || a.id === 'transversal').map((a) => a.id),
-    [cofre.areas],
+    () => cofre?.areas.filter((a) => a.sempre_visivel === true || a.id === 'transversal').map((a) => a.id) ?? [],
+    [cofre?.areas],
   )
-  const ordemAreas = useMemo(() => cofre.areas.map((a) => a.id), [cofre.areas])
+  const ordemAreas = useMemo(() => cofre?.areas.map((a) => a.id) ?? [], [cofre?.areas])
   const escolher = (id: string) => { setEscolhido(id); setAlvo(null) }
   const ligar = (id: string) => setAlvo((antigo) => (antigo === id || id === escolhido ? null : id))
 
   return (
-    <div className={`w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 transition-colors duration-300 ${
-      modoComando ? 'text-slate-100' : 'text-tinta'
-    }`}>
+    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 font-mono text-slate-100">
+      {/* Header com Seletor de Visão: Operação e Conhecimento */}
       <TituloDaTela
         mostrarSeletorData={false}
-        titulo="Cofre de conhecimento."
-        pergunta="O que a operação aprendeu, quem aprendeu, e o que se liga a quê pela ligação escrita na fonte."
+        titulo="Cérebro da Operação."
+        pergunta="Centro operacional e mapa de memória viva do ecossistema G4ST40VIB3."
         direita={
-          <span className="rotulo flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-verde animate-pulse" />
-            medido {new Date(medidoEm).toLocaleTimeString('pt-BR', { hour12: false, timeZone: 'UTC' })} utc
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center border-2 border-black bg-[#0f172a] p-0.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <button
+                type="button"
+                onClick={() => trocarAba('operacao')}
+                aria-pressed={visaoAtiva === 'operacao'}
+                className={`px-3 py-1 text-xs font-black uppercase transition-all ${
+                  visaoAtiva === 'operacao'
+                    ? 'bg-[#38bdf8] text-black shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🧠 OPERAÇÃO
+              </button>
+              <button
+                type="button"
+                onClick={() => trocarAba('conhecimento')}
+                aria-pressed={visaoAtiva === 'conhecimento'}
+                className={`px-3 py-1 text-xs font-black uppercase transition-all ${
+                  visaoAtiva === 'conhecimento'
+                    ? 'bg-[#a3e635] text-black shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                📚 CONHECIMENTO
+              </button>
+            </div>
+            <span className="rotulo flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-verde animate-pulse" />
+              medido {new Date(medidoEm).toLocaleTimeString('pt-BR', { hour12: false, timeZone: 'America/Sao_Paulo' })} BRT
+            </span>
+          </div>
         }
       />
 
-      <PainelInstrumentoCofre
-        fps={fps}
-        cofre={cofre}
-        nos={nos}
-        termoBusca={termoBusca}
-        setTermoBusca={setTermoBusca}
-        nosFiltradosBusca={nosFiltradosBusca}
-        escolher={escolher}
-        modoComando={modoComando}
-        modoLayout={modoLayout}
-        setModoLayout={setModoLayout}
-        animarSinal={animarSinal}
-        setAnimarSinal={setAnimarSinal}
-        alternarModoComando={alternarModoComando}
-        baixa={baixa}
-        areasAbertas={areasAbertas}
-        alternarAreasAbertas={alternarAreasAbertas}
-        areas={cofre.areas}
-        areaFoco={areaFoco}
-        setAreaFoco={setAreaFoco}
-        autores={autores}
-        atual={atual}
-        areaAtual={areaAtual}
-        familia={familia}
-        truncado={truncado}
-        caminho={caminho}
-        alvoNo={alvoNo}
-        entram={entram}
-        saem={saem}
-        nome={nome}
-        curto={curto}
-        porqueDoSalto={porqueDoSalto}
-        setAlvo={setAlvo}
-        grafo={
-          <>
-            <Cabecalho cor="var(--color-lima)" meta={`${cofre.conexoes} ligações · ${modoComando ? '3D Force Graph' : '2D SVG'}`}>
-              mapa dos aprendizados
-            </Cabecalho>
-            {modoComando ? (
-              <Grafo3DCofre
-                nos={nos}
-                arestas={cofre.arestas}
-                escolhido={atual.id}
-                alvo={alvo}
-                areaFoco={areaFoco}
-                sempreVisiveis={sempreVisiveis}
-                caminho={caminho}
-                modoLayout={modoLayout}
-                animarSinal={animarSinal}
-                modoComando={modoComando}
-                aoEscolher={escolher}
-                aoLigar={ligar}
-              />
-            ) : (
-              <Mapa
-                nos={nos} arestas={cofre.arestas} caixa={estreito ? CAIXA_CELULAR : CAIXA_MESA}
-                ordemAreas={ordemAreas}
-                escolhido={atual.id} alvo={alvo} areaFoco={areaFoco} sempreVisiveis={sempreVisiveis}
-                caminho={caminho} modoLayout={modoLayout} animarSinal={animarSinal} modoComando={modoComando}
-                aoEscolher={escolher} aoLigar={ligar}
-              />
-            )}
-          </>
-        }
-      />
+      {visaoAtiva === 'operacao' ? (
+        <VisaoOperacao
+          estado={estado}
+          aoIrAtivos={(chave) => ir('tarefas', null, { visao: 'ativos', execucao: chave })}
+          aoIrConhecimento={() => trocarAba('conhecimento')}
+          aoIrAprovacoes={() => ir('aprovacoes')}
+        />
+      ) : !cofre || cofre.erro || !nos.length ? (
+        <div className="carta p-5 text-sm text-tinta-2">
+          Não consegui medir o Cofre de conhecimento. {cofre?.erro ?? 'Fonte indisponível.'}
+        </div>
+      ) : (
+        <PainelInstrumentoCofre
+          fps={fps}
+          cofre={cofre}
+          nos={nos}
+          termoBusca={termoBusca}
+          setTermoBusca={setTermoBusca}
+          nosFiltradosBusca={nosFiltradosBusca}
+          escolher={escolher}
+          modoComando={modoComando}
+          modoLayout={modoLayout}
+          setModoLayout={setModoLayout}
+          animarSinal={animarSinal}
+          setAnimarSinal={setAnimarSinal}
+          alternarModoComando={alternarModoComando}
+          baixa={baixa}
+          areasAbertas={areasAbertas}
+          alternarAreasAbertas={alternarAreasAbertas}
+          areas={cofre.areas}
+          areaFoco={areaFoco}
+          setAreaFoco={setAreaFoco}
+          autores={autores}
+          atual={atual}
+          areaAtual={areaAtual}
+          familia={familia}
+          truncado={truncado}
+          caminho={caminho}
+          alvoNo={alvoNo}
+          entram={entram}
+          saem={saem}
+          nome={nome}
+          curto={curto}
+          porqueDoSalto={porqueDoSalto}
+          setAlvo={setAlvo}
+          grafo={
+            <>
+              <Cabecalho cor="var(--color-lima)" meta={`${cofre.conexoes} ligações · ${modoComando ? '3D Force Graph' : '2D SVG'}`}>
+                mapa dos aprendizados
+              </Cabecalho>
+              {modoComando ? (
+                <Grafo3DCofre
+                  nos={nos}
+                  arestas={cofre.arestas}
+                  escolhido={atual.id}
+                  alvo={alvo}
+                  areaFoco={areaFoco}
+                  sempreVisiveis={sempreVisiveis}
+                  caminho={caminho}
+                  modoLayout={modoLayout}
+                  animarSinal={animarSinal}
+                  modoComando={modoComando}
+                  aoEscolher={escolher}
+                  aoLigar={ligar}
+                />
+              ) : (
+                <Mapa
+                  nos={nos} arestas={cofre.arestas} caixa={estreito ? CAIXA_CELULAR : CAIXA_MESA}
+                  ordemAreas={ordemAreas}
+                  escolhido={atual.id} alvo={alvo} areaFoco={areaFoco} sempreVisiveis={sempreVisiveis}
+                  caminho={caminho} modoLayout={modoLayout} animarSinal={animarSinal} modoComando={modoComando}
+                  aoEscolher={escolher} aoLigar={ligar}
+                />
+              )}
+            </>
+          }
+        />
+      )}
 
       <Parcial dado={vista.dado} />
     </div>

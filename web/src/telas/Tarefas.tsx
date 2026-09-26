@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
-import { useAgentesVivos } from '../dados/useAgentesVivos'
+import { useMemo, useState, useEffect } from 'react'
+import { useAgentesVivos, montarResumoAgenteVivo, type ResumoAgenteVivo } from '../dados/useAgentesVivos'
 import { contarAgentesVivosNaContagem } from '../dados/agentes-vivos'
 import { montarCatalogoPixel } from '../dados/pixel-agents'
 import { AgenteVivoCard, classeDonoPixel } from '../ui/AgenteVivoCard'
 import { PixelOffice } from '../ui/PixelOffice'
 import { porSquad, squadsComAgentes } from '../dados/estado'
+import { useRota } from '../nav/useRota'
 import type { PropsTela } from './Vazias'
 import type { AgenteVivo } from '../dados/tipos'
 
@@ -28,7 +29,6 @@ function PixelJanela({
     <div
       className={`min-w-0 border-4 border-black bg-[#1e293b] text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all ${className}`}
     >
-      {/* Barra de Título da Janela Retrô */}
       <div className="flex items-center justify-between border-b-4 border-black bg-[#0f172a] px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="inline-block size-3 shrink-0 bg-[#a3e635] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]" />
@@ -37,182 +37,167 @@ function PixelJanela({
           </span>
           {subtitulo && <span className="hidden text-[11px] text-slate-400 sm:inline">· {subtitulo}</span>}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {badge && (
-            <span className={`border-2 border-black bg-[#1e293b] px-2 py-0.5 font-mono text-[10px] font-bold uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${corBadge}`}>
-              {badge}
-            </span>
-          )}
-          <div className="flex items-center gap-1 font-mono text-[10px] text-slate-400 select-none">
-            <span className="grid size-4 place-items-center border border-black bg-[#1e293b] text-[9px] hover:bg-slate-700">_</span>
-            <span className="grid size-4 place-items-center border border-black bg-[#1e293b] text-[9px] hover:bg-slate-700">□</span>
-            <span className="grid size-4 place-items-center border border-black bg-[#ef4444] text-white hover:bg-red-600">
-              <svg className="size-2.5 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </span>
-          </div>
-        </div>
+        {badge && (
+          <span className={`border-2 border-black bg-[#1e293b] px-2 py-0.5 font-mono text-[10px] font-bold uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${corBadge}`}>
+            {badge}
+          </span>
+        )}
       </div>
       <div className="p-4 sm:p-5">{children}</div>
     </div>
   )
 }
 
-function InspectorAgente({
-  agente,
+/** Inspetor Único e Acessível do Agente Selecionado */
+function InspectorUnificadoAgente({
+  resumo,
   aoFechar,
 }: {
-  agente: AgenteVivo
+  resumo: ResumoAgenteVivo
   aoFechar: () => void
 }) {
-  const donoFormatado = agente.dono
-    ? agente.dono.charAt(0).toUpperCase() + agente.dono.slice(1)
-    : null
-
-  const statusTexto =
-    agente.status ||
-    (agente.problema
-      ? `erro (${agente.problema})`
-      : agente.estado === 'trabalhando'
-      ? 'executando'
-      : agente.estado === 'silencioso'
-      ? 'ocioso'
-      : 'encerrado')
-
-  const ultimaAtividade =
-    agente.silencio_s !== null && agente.silencio_s !== undefined
-      ? agente.silencio_s === 0
-        ? 'agora'
-        : `${agente.silencio_s}s atrás`
-      : agente.ultima_atividade || 'sem dado'
+  const [expandido, setExpandido] = useState(false)
+  const [detalhesTecnicosAbertos, setDetalhesTecnicosAbertos] = useState(false)
 
   return (
-    <div className="border-4 border-black bg-[#0f172a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-3 min-w-0">
-      {/* Topo do Inspector */}
+    <div className="border-4 border-black bg-[#0f172a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-3.5 min-w-0">
+      {/* Barra de Título do Inspector */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           <span
             className={`size-3 shrink-0 ${
-              agente.estado === 'trabalhando' ? 'bg-[#a3e635] animate-ping' : 'bg-slate-500'
+              resumo.estado === 'trabalhando' ? 'bg-[#a3e635] animate-ping' : 'bg-slate-500'
             }`}
           />
           <div className="flex items-baseline gap-1.5 min-w-0">
-            <span className="text-sm font-black uppercase text-[#facc15] truncate">
-              INSPECTOR: {(agente.papel || agente.tipo || agente.identidade || agente.id).toUpperCase()}
+            <span className="text-sm sm:text-base font-black uppercase text-[#facc15] truncate">
+              INSPETOR: {resumo.nome.toUpperCase()}
             </span>
             <span className="text-[10px] text-slate-400 font-mono shrink-0">
-              ({agente.id})
+              ({resumo.id})
             </span>
           </div>
-          {donoFormatado && (
+          {resumo.donoFormatado && (
             <span
               className={`border border-black px-2 py-0.5 text-[10px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                classeDonoPixel(agente.dono)
+                classeDonoPixel(resumo.dono)
               }`}
             >
-              {donoFormatado}
+              {resumo.donoFormatado}
             </span>
           )}
           <span
             className={`border border-black px-2 py-0.5 text-[10px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-              agente.estado === 'trabalhando'
+              resumo.estado === 'trabalhando'
                 ? 'bg-[#a3e635] text-black'
-                : agente.estado === 'silencioso'
+                : resumo.estado === 'silencioso'
                 ? 'bg-[#facc15] text-black'
                 : 'bg-slate-600 text-white'
             }`}
           >
-            {statusTexto.toUpperCase()}
+            {resumo.statusTexto.toUpperCase()}
           </span>
         </div>
+
         <button
           type="button"
           onClick={aoFechar}
           className="self-start sm:self-auto shrink-0 border-2 border-black bg-[#1e293b] px-3 py-1 text-xs font-bold text-slate-300 hover:bg-slate-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5"
         >
-          <span>FECHAR INSPECTOR</span>
-          <svg className="size-3 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <span>✕ FECHAR INSPETOR</span>
         </button>
       </div>
 
-      {/* Descrição / Etapa em andamento */}
-      <div className="min-w-0">
-        <div className="text-[10px] uppercase font-bold text-slate-400">Tarefa / Etapa</div>
-        <p className="mt-0.5 text-xs text-slate-200 break-words break-all [overflow-wrap:anywhere] leading-relaxed">
-          {agente.tarefa || agente.descricao || agente.etapa || 'Sem descrição da tarefa atual'}
+      {/* Tarefa em 2 a 3 linhas com expansor acessível */}
+      <div className="min-w-0 bg-[#1e293b]/60 border border-slate-700/80 p-3 rounded">
+        <div className="flex items-center justify-between gap-2 text-[10.5px] uppercase font-bold text-slate-400">
+          <span>TAREFA EM ANDAMENTO</span>
+          {resumo.tarefa.length > 120 && (
+            <button
+              type="button"
+              onClick={() => setExpandido(!expandido)}
+              className="text-[#38bdf8] hover:underline font-mono text-[10px]"
+            >
+              {expandido ? '▲ RECOLHER' : '▼ VER TEXTO COMPLETO'}
+            </button>
+          )}
+        </div>
+        <p
+          className={`mt-1.5 text-xs sm:text-sm text-slate-100 break-words leading-relaxed font-sans ${
+            !expandido ? 'line-clamp-3' : ''
+          }`}
+        >
+          {resumo.tarefa}
         </p>
       </div>
 
-      {/* Grid de Métricas Ricas Pedidas pelo Gastão */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 min-w-0 pt-1">
-        <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
-          <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Modelo</div>
-          <div className="text-xs font-black text-[#38bdf8] truncate mt-0.5" title={agente.modelo_legivel || agente.modelo || 'sem dado'}>
-            {agente.modelo_legivel || agente.modelo || 'sem dado'}
+      {/* 4 Campos Principais: Ferramenta Atual, Tempo de Execução, Modelo e Dono */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 min-w-0 pt-1">
+        <div className="border border-slate-700 bg-[#1e293b]/80 p-2.5 min-w-0 rounded">
+          <div className="text-[10px] uppercase font-bold text-slate-400 truncate">Ferramenta Atual</div>
+          <div className="text-xs sm:text-sm font-black text-[#a3e635] truncate mt-0.5" title={resumo.ferramenta || 'Nenhuma ferramenta no instante'}>
+            {resumo.ferramenta ? `🔧 ${resumo.ferramenta}` : '— (trabalho direto)'}
           </div>
         </div>
 
-        <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
-          <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Esforço</div>
-          <div className="text-xs font-black text-slate-100 truncate mt-0.5">
-            {agente.esforco || 'sem dado'}
+        <div className="border border-slate-700 bg-[#1e293b]/80 p-2.5 min-w-0 rounded">
+          <div className="text-[10px] uppercase font-bold text-slate-400 truncate">Tempo de Execução</div>
+          <div className="text-xs sm:text-sm font-black text-slate-100 truncate mt-0.5">
+            ⏱ {resumo.tempoFormatado}
           </div>
         </div>
 
-        <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
-          <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Dono</div>
-          <div className="text-xs font-black text-slate-100 truncate mt-0.5">
-            {donoFormatado || 'sem dado'}
+        <div className="border border-slate-700 bg-[#1e293b]/80 p-2.5 min-w-0 rounded">
+          <div className="text-[10px] uppercase font-bold text-slate-400 truncate">Modelo de IA</div>
+          <div className="text-xs sm:text-sm font-black text-[#38bdf8] truncate mt-0.5" title={resumo.modelo}>
+            🤖 {resumo.modelo}
           </div>
         </div>
 
-        <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
-          <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Rodando há</div>
-          <div className="text-xs font-black text-slate-100 truncate mt-0.5">
-            {agente.rodando_ha || (agente.inicio ? `desde ${agente.inicio}` : 'sem dado')}
-          </div>
-        </div>
-
-        <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
-          <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Última atividade</div>
-          <div className="text-xs font-black text-[#a3e635] truncate mt-0.5">
-            {ultimaAtividade}
-          </div>
-        </div>
-
-        <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
-          <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Ferramentas usadas</div>
-          <div className="text-xs font-black text-slate-100 truncate mt-0.5" title={agente.ferramenta ? `Ativa: ${agente.ferramenta}` : undefined}>
-            {agente.ferramentas_usadas ?? 'sem dado'}
-            {agente.ferramenta ? ` (${agente.ferramenta})` : ''}
-          </div>
-        </div>
-
-        <div className="border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
-          <div className="text-[9.5px] uppercase font-bold text-slate-400 truncate">Tokens gastos</div>
-          <div className="text-xs font-black text-[#facc15] truncate mt-0.5" title={agente.tokens_total != null ? `${agente.tokens_total} tokens` : undefined}>
-            {agente.tokens_formatado || (agente.tokens_total != null ? `${agente.tokens_total}` : 'sem dado')}
-          </div>
-        </div>
-
-        <div className="col-span-2 sm:col-span-2 lg:col-span-2 border border-slate-700 bg-[#1e293b]/70 p-2 min-w-0">
-          <div className="text-[9.5px] uppercase font-bold text-slate-400">Quem mandou</div>
-          <div className="text-xs font-black text-slate-100 mt-0.5 break-words [overflow-wrap:anywhere] leading-snug" title={agente.quem_mandou || agente.pai || 'sem dado'}>
-            {agente.quem_mandou || agente.pai || 'sem dado'}
+        <div className="border border-slate-700 bg-[#1e293b]/80 p-2.5 min-w-0 rounded">
+          <div className="text-[10px] uppercase font-bold text-slate-400 truncate">Dono / Squad</div>
+          <div className="text-xs sm:text-sm font-black text-slate-100 truncate mt-0.5">
+            👤 {resumo.donoFormatado || 'Operação Global'}
           </div>
         </div>
       </div>
 
-      {/* Alerta de problema se houver */}
-      {agente.problema && (
-        <div className="border border-red-500/50 bg-red-950/40 p-2.5 text-xs text-red-200 break-words [overflow-wrap:anywhere]">
-          <span className="font-bold text-red-400">Problema anotado: </span>
-          {agente.problema}
+      {/* Detalhes Técnicos Recolhidos (Tokens, IDs, Quem mandou) */}
+      <div className="border-t border-slate-700/80 pt-2">
+        <button
+          type="button"
+          onClick={() => setDetalhesTecnicosAbertos(!detalhesTecnicosAbertos)}
+          className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 hover:text-white"
+        >
+          <span>{detalhesTecnicosAbertos ? '▼ Ocultar dados técnicos' : '▶ Ver dados técnicos (tokens, IDs e hierarquia)'}</span>
+        </button>
+
+        {detalhesTecnicosAbertos && (
+          <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2 border border-slate-800 bg-[#090d16] p-2.5 rounded text-[11px]">
+            <div>
+              <span className="text-slate-400">Tokens Gastos:</span>{' '}
+              <span className="text-[#facc15] font-bold font-mono">
+                {resumo.tokensFormatado ? `${resumo.tokensFormatado} tokens` : '—'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400">Esforço Anotado:</span>{' '}
+              <span className="text-slate-200 font-mono">{resumo.esforco || '—'}</span>
+            </div>
+            <div>
+              <span className="text-slate-400">Quem mandou:</span>{' '}
+              <span className="text-slate-200 font-mono truncate block" title={resumo.quemMandou || '—'}>
+                {resumo.quemMandou || '—'}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {resumo.problema && (
+        <div className="border border-red-500/50 bg-red-950/40 p-2.5 text-xs text-red-200 break-words rounded">
+          <span className="font-bold text-red-400">⚠️ Problema reportado: </span>
+          {resumo.problema}
         </div>
       )}
     </div>
@@ -220,47 +205,81 @@ function InspectorAgente({
 }
 
 export function Tarefas({ estado, vista }: PropsTela) {
+  const { rota, ir } = useRota()
   const { dados: vivos, carregando: carregandoVivos, erro: erroVivos, falhouHaSegundos } = useAgentesVivos()
+
   const ativos = vivos?.contagem?.trabalhando ?? 0
   const totalVivos = contarAgentesVivosNaContagem(vivos?.contagem)
-  // A sonda é a única fonte de presença; o catálogo do escritório completa o restante.
   const listaVivos = vivos?.agentes ?? []
   const catalogoPixel = useMemo(() => montarCatalogoPixel(estado.agentes, estado.sessao), [estado.agentes, estado.sessao])
   const squadIds = useMemo(() => squadsComAgentes(estado), [estado])
 
   const [modoExibicao, setModoExibicao] = useState<'office' | 'terminal' | 'squad'>('office')
-  const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(null)
+  const [soAtivos, setSoAtivos] = useState(() => rota.visao === 'ativos')
+  const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(() => rota.execucao ?? null)
+
+  // Sincroniza com parâmetros de URL
+  useEffect(() => {
+    if (rota.visao === 'ativos') {
+      setSoAtivos(true)
+      setModoExibicao('office')
+    }
+    if (rota.execucao) {
+      setAgenteInspecionado(rota.execucao)
+    }
+  }, [rota.visao, rota.execucao])
+
+  // Ação unificada para abrir agentes ativos
+  const abrirAgentesAtivos = (chaveExecucao?: string) => {
+    setModoExibicao('office')
+    setSoAtivos(true)
+    if (chaveExecucao) {
+      setAgenteInspecionado(chaveExecucao)
+    }
+    ir('tarefas', null, {
+      visao: 'ativos',
+      execucao: chaveExecucao ?? agenteInspecionado,
+    })
+  }
+
+  // Resolução da execução concreta ou catálogo
+  const agenteSelecionadoObj: AgenteVivo | undefined = useMemo(() => {
+    if (!agenteInspecionado) return undefined
+    const encontradoVivo = listaVivos.find((a) => {
+      const chave = a.dono ? `${a.dono}:${a.id}` : a.id
+      return chave === agenteInspecionado || a.id === agenteInspecionado
+    })
+    if (encontradoVivo) return encontradoVivo
+
+    // Fallback de catálogo (sem rebaixar viva para encerrada)
+    const ficha = catalogoPixel.find((ag) => ag.id === agenteInspecionado || ag.aliases?.includes(agenteInspecionado))
+    if (!ficha) return undefined
+    return {
+      id: ficha.id,
+      nome: ficha.nome,
+      dono: undefined,
+      estado: 'parado' as const,
+      fase: ficha.área,
+      etapa: ficha.descricao ?? ficha.papel,
+      etapa_e_description: false,
+      ferramenta: null,
+      silencio_s: null,
+      arquivo: 'catálogo operacional',
+    }
+  }, [agenteInspecionado, listaVivos, catalogoPixel])
+
+  const resumoSelecionado = useMemo(() => {
+    return montarResumoAgenteVivo(agenteSelecionadoObj)
+  }, [agenteSelecionadoObj])
 
   const aprovacoesItens = estado.aprovacoes?.itens ?? []
   const aprovacoesPendentes = aprovacoesItens.filter((i) => i.estado === 'aguardando' || i.estado === 'pendente')
   const totalRetornos = estado.agentes.reduce((s, a) => s + (a.retornos_registrados || 0), 0)
 
-  const agenteSelecionado: AgenteVivo | undefined =
-    listaVivos.find((a) =>
-      a.id === agenteInspecionado ||
-      `${a.dono}:${a.id}` === agenteInspecionado ||
-      (a.identidade && a.identidade === agenteInspecionado)
-    ) ??
-    (() => {
-      const ficha = catalogoPixel.find((agente) => agente.id === agenteInspecionado || agente.aliases?.includes(agenteInspecionado ?? ''))
-      if (!ficha) return undefined
-      return {
-        id: ficha.id,
-        dono: undefined,
-        estado: 'parado' as const,
-        fase: ficha.área,
-        etapa: ficha.descricao ?? ficha.papel,
-        etapa_e_description: false,
-        ferramenta: null,
-        silencio_s: 0,
-        arquivo: 'catálogo operacional',
-      }
-    })()
-
   return (
-    <div className="w-full max-w-none space-y-6 px-3 py-4 font-mono sm:px-6 lg:px-8 xl:px-10">
-      {/* Header Principal Retrô em Pixel Art */}
-      <div className="border-4 border-black bg-[#1e293b] p-4 sm:p-6 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+    <div className="w-full max-w-none space-y-5 px-3 py-4 font-mono sm:px-6 lg:px-8 xl:px-10">
+      {/* Header Retrô em Pixel Art */}
+      <div className="border-4 border-black bg-[#1e293b] p-4 sm:p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2.5">
@@ -273,8 +292,9 @@ export function Tarefas({ estado, vista }: PropsTela) {
               {vista.pergunta}
             </p>
           </div>
+
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {/* Alternador de Visualização: Virtual Office, Terminal Cards e mapa do squad */}
+            {/* Alternador de Visualização */}
             <div className="flex flex-wrap items-center border-2 border-black bg-[#0f172a] p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" aria-label="Visualização dos agentes">
               <button
                 type="button"
@@ -286,7 +306,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                🎮 VIRTUAL OFFICE
+                🎮 ESCRITÓRIO VOXEL
               </button>
               <button
                 type="button"
@@ -314,12 +334,63 @@ export function Tarefas({ estado, vista }: PropsTela) {
               </button>
             </div>
 
-            <div className="border-2 border-black bg-[#0f172a] px-3.5 py-2 text-xs font-bold text-[#38bdf8] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              {estado?.gerado_em ? `📡 SYNC: ${new Date(estado.gerado_em).toLocaleString('pt-BR')}` : 'OFFLINE'}
-            </div>
+            <button
+              type="button"
+              onClick={() => ir('cofre', null, { visao: 'operacao' })}
+              className="border-2 border-black bg-[#0284c7] px-3.5 py-2 text-xs font-bold text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-[#0369a1]"
+            >
+              🧠 CÉREBRO OPERACIONAL
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Faixa de Agentes Ativos (Trabalhando Agora) */}
+      {listaVivos.filter((a) => a.estado === 'trabalhando').length > 0 && (
+        <div className="border-2 border-black bg-[#0f172a] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-700/80 pb-2 mb-2">
+            <span className="text-[11px] font-bold text-[#a3e635] uppercase flex items-center gap-1.5">
+              <span className="size-2 bg-[#a3e635] rounded-full animate-ping" />
+              Agentes trabalhando agora ({listaVivos.filter((a) => a.estado === 'trabalhando').length}):
+            </span>
+            <button
+              type="button"
+              onClick={() => abrirAgentesAtivos()}
+              className="text-[10px] font-bold text-[#38bdf8] hover:underline"
+            >
+              Ver todos no escritório ↗
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {listaVivos
+              .filter((a) => a.estado === 'trabalhando')
+              .map((ag) => {
+                const chave = ag.dono ? `${ag.dono}:${ag.id}` : ag.id
+                return (
+                  <button
+                    key={chave}
+                    type="button"
+                    onClick={() => abrirAgentesAtivos(chave)}
+                    className="flex items-center gap-2 border border-slate-700 bg-[#1e293b] px-2.5 py-1.5 text-xs text-left hover:border-[#a3e635] hover:bg-[#0f172a] transition-all rounded shadow-sm"
+                  >
+                    <span className="size-2 bg-[#a3e635] rounded-full" />
+                    <span className="font-bold text-white">{ag.nome || ag.id}</span>
+                    {ag.dono && (
+                      <span className={`px-1 py-0.5 text-[9px] font-black uppercase rounded ${classeDonoPixel(ag.dono)}`}>
+                        {ag.dono}
+                      </span>
+                    )}
+                    {ag.ferramenta && (
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        · {ag.ferramenta}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+          </div>
+        </div>
+      )}
 
       {/* Alerta de Falha da Sonda Viva */}
       {(erroVivos || vivos?.ok === false) && (
@@ -333,46 +404,50 @@ export function Tarefas({ estado, vista }: PropsTela) {
             )}
           </div>
           <p className="mt-1 text-xs text-slate-200">
-            {erroVivos || vivos?.erro || vivos?.motivo || 'Erro ao comunicar com a sonda de agentes ao vivo.'}
+            {erroVivos || vivos?.erro || vivos?.motivo || 'Não foi possível confirmar os agentes ativos.'}
           </p>
         </div>
       )}
 
-      {/* Avisos Não-Fatais da Sonda Viva */}
-      {vivos?.avisos && vivos.avisos.length > 0 && (
-        <div className="border-3 border-black bg-[#451a03] p-3.5 text-xs text-[#fbbf24] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-          <div className="flex items-center gap-2 font-bold uppercase">
-            <span>⚠️ Avisos da sonda ({vivos.avisos.length}):</span>
-          </div>
-          <ul className="mt-1 list-disc pl-5 space-y-0.5 text-[11px] text-amber-200">
-            {vivos.avisos.map((aviso, idx) => (
-              <li key={idx} className="break-words">{aviso}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Seletor do Modo Virtual Office (Canvas Pixel Art Estilo pixel-agents-hq) */}
+      {/* Modo Escritório Voxel */}
       {modoExibicao === 'office' ? (
-        <section className="space-y-3">
+        <section className="space-y-4">
           <PixelOffice
             agentes={listaVivos}
             catalogo={catalogoPixel}
             estado={estado}
-            aoSelecionarAgente={(id) => setAgenteInspecionado(id)}
+            soAtivos={soAtivos}
+            aoAlternarSoAtivos={(novo) => {
+              setSoAtivos(novo)
+              ir('tarefas', null, {
+                visao: novo ? 'ativos' : null,
+                execucao: agenteInspecionado,
+              })
+            }}
+            aoSelecionarAgente={(chave) => {
+              setAgenteInspecionado(chave)
+              ir('tarefas', null, {
+                visao: soAtivos ? 'ativos' : null,
+                execucao: chave,
+              })
+            }}
             agenteSelecionadoId={agenteInspecionado}
+            aoAbrirCerebro={() => ir('cofre', null, { visao: 'operacao' })}
           />
 
-          {/* Ficha Inspector do Agente Clicado */}
-          {agenteSelecionado && (
-            <InspectorAgente
-              agente={agenteSelecionado}
-              aoFechar={() => setAgenteInspecionado(null)}
+          {/* Inspetor Único e Acessível */}
+          {resumoSelecionado && (
+            <InspectorUnificadoAgente
+              resumo={resumoSelecionado}
+              aoFechar={() => {
+                setAgenteInspecionado(null)
+                ir('tarefas', null, { visao: soAtivos ? 'ativos' : null, execucao: null })
+              }}
             />
           )}
         </section>
       ) : modoExibicao === 'terminal' ? (
-        /* Modo Terminal CRT Cards */
+        /* Modo Terminal CRT */
         <PixelJanela
           titulo="⚡ SONDA DE AGENTES AO VIVO NA TAREFA"
           subtitulo="Monitoramento em tempo real de transcripts e subprocessos ativos"
@@ -395,10 +470,10 @@ export function Tarefas({ estado, vista }: PropsTela) {
               : 'text-slate-400'
           }
         >
-          {agenteSelecionado && (
+          {resumoSelecionado && (
             <div className="mb-4">
-              <InspectorAgente
-                agente={agenteSelecionado}
+              <InspectorUnificadoAgente
+                resumo={resumoSelecionado}
                 aoFechar={() => setAgenteInspecionado(null)}
               />
             </div>
@@ -428,6 +503,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
           )}
         </PixelJanela>
       ) : (
+        /* Modo Mapa do Squad */
         <PixelJanela
           titulo="🗺️ ESTRUTURA DO SQUAD"
           subtitulo="Fluxo novo do conteúdo, com gates e destinos de distribuição"
@@ -461,13 +537,14 @@ export function Tarefas({ estado, vista }: PropsTela) {
         </PixelJanela>
       )}
 
-      {/* Grid de KPIs Pixel Art com Números Grandes */}
+      {/* Grid de KPIs Pixel Art */}
       <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <PixelKpi
           rotulo="AGENTES VIVOS"
           valor={totalVivos}
           cor="text-[#a3e635]"
           nota={`${ativos} executando agora`}
+          onClick={() => abrirAgentesAtivos()}
         />
         <PixelKpi
           rotulo="CATÁLOGO FROTA"
@@ -480,6 +557,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
           valor={aprovacoesPendentes.length}
           cor="text-[#facc15]"
           nota="aguardando decisão humana"
+          onClick={() => ir('aprovacoes')}
         />
         <PixelKpi
           rotulo="CONVOCAÇÕES TOTAIS"
@@ -568,16 +646,6 @@ export function Tarefas({ estado, vista }: PropsTela) {
             Mede o efetivo catalogado em cada departamento ativo do painel.
           </p>
         </PixelJanela>
-      </div>
-
-      {/* Nota de Governança de Arquitetura */}
-      <div className="border-2 border-black bg-[#0f172a] p-4 text-xs text-slate-300 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[#a3e635]">
-          <span>🛡️ ISOLAMENTO DE CARTEIRA PESSOAL</span>
-        </div>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-slate-300">
-          O Painel OS exibe exclusivamente a operação e o trabalho dos agentes autônomos. As tarefas pessoais e compromissos GTD foram isolados no sistema pessoal do Gastão, sem cruzamento com o painel público.
-        </p>
       </div>
     </div>
   )

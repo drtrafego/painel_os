@@ -289,25 +289,54 @@ export const POR_ID: Record<VistaId, Vista> = Object.fromEntries(
   VISTAS.map((v) => [v.id, v]),
 ) as Record<VistaId, Vista>
 
-/**
- * A rota. `diretores` com `quem` preenchido e a decima primeira vista, o
- * detalhe de um diretor. Ela nao esta no menu porque so existe depois de
- * alguem escolher um diretor, e menu com item que nao abre e o comeco de um
- * painel em que ninguem confia.
- */
-export type Rota = { vista: VistaId; quem: string | null }
+export type Rota = {
+  vista: VistaId
+  quem: string | null
+  visao?: string | null
+  execucao?: string | null
+}
 
-export const ROTA_PADRAO: Rota = { vista: 'comando', quem: null }
+export const ROTA_PADRAO: Rota = { vista: 'comando', quem: null, visao: null, execucao: null }
 
 /** Le a rota do hash. O que nao souber ler cai no padrao, nunca em tela branca. */
 export function lerHash(hash: string): Rota {
-  const limpo = hash.replace(/^#\/?/, '').split('?')[0]
-  if (limpo === '') return ROTA_PADRAO
-  const [vista, quem] = limpo.split('/').map((p) => decodeURIComponent(p))
-  if (!(vista in POR_ID)) return ROTA_PADRAO
-  return { vista: vista as VistaId, quem: quem ? quem : null }
+  const semHash = hash.replace(/^#\/?/, '')
+  if (!semHash) return ROTA_PADRAO
+  const [caminho, queryStr] = semHash.split('?')
+  const params = new URLSearchParams(queryStr || '')
+  const visao = params.get('visao')
+  const execucao = params.get('execucao')
+
+  if (!caminho) {
+    return {
+      ...ROTA_PADRAO,
+      visao: visao || null,
+      execucao: execucao || null,
+    }
+  }
+
+  const [vista, quem] = caminho.split('/').map((p) => decodeURIComponent(p))
+  if (!(vista in POR_ID)) {
+    return {
+      ...ROTA_PADRAO,
+      visao: visao || null,
+      execucao: execucao || null,
+    }
+  }
+
+  return {
+    vista: vista as VistaId,
+    quem: quem ? quem : null,
+    visao: visao || null,
+    execucao: execucao || null,
+  }
 }
 
 export function escreverHash(rota: Rota): string {
-  return rota.quem ? `#/${rota.vista}/${encodeURIComponent(rota.quem)}` : `#/${rota.vista}`
+  const base = rota.quem ? `#/${rota.vista}/${encodeURIComponent(rota.quem)}` : `#/${rota.vista}`
+  const params = new URLSearchParams()
+  if (rota.visao) params.set('visao', rota.visao)
+  if (rota.execucao) params.set('execucao', rota.execucao)
+  const qs = params.toString()
+  return qs ? `${base}?${qs}` : base
 }

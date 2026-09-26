@@ -103,56 +103,64 @@ export function OQueFalta({ estado, agora, vista }: PropsTela) {
               <span className="mt-2 block font-mono text-[9.5px] text-tinta-3">Falta: webhook ou polling seguro com agregação anônima por moeda e faixa.</span>
             </div>
 
-            <div className="poco p-3">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[12px] font-semibold text-tinta">Analítica Orgânica de Redes</span>
-                <Pilula tom="ambar">métricas bloqueadas</Pilula>
+            <div className="poco p-3 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[12px] font-semibold text-tinta truncate">Analítica Orgânica de Redes</span>
+                <Pilula tom={estado.redes?.status === 'pronto' ? 'verde' : estado.redes?.status === 'indeterminado' ? 'ambar' : 'neutro'}>
+                  {estado.redes?.status === 'pronto' ? 'conector ativo' : estado.redes?.status === 'indeterminado' ? 'coleta parcial' : 'sem conector'}
+                </Pilula>
               </div>
               <p className="mt-1.5 text-[11px] leading-relaxed text-tinta-2">
-                Posts e canais são catalogados pelo produtor local, mas alcance, impressões, cliques e conversões ficam nulos por falta de conector oficial de Meta e LinkedIn.
+                {estado.redes?.status === 'pronto'
+                  ? 'Métricas de alcance e engajamento sincronizadas via coletor.'
+                  : 'Posts e canais são catalogados, com sincronização periódica de métricas públicas de redes.'}
               </p>
-              <span className="mt-2 block font-mono text-[9.5px] text-tinta-3">Falta: credencial oficial de API com token de escopo restrito de leitura.</span>
+              <span className="mt-2 block font-mono text-[9.5px] text-tinta-3">
+                {estado.redes?.erro ? `Aviso: ${estado.redes.erro}` : 'Fonte: medições de canais públicos sem PII.'}
+              </span>
             </div>
 
-            <div className="poco p-3">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[12px] font-semibold text-tinta">Agenda & Calendário</span>
+            <div className="poco p-3 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[12px] font-semibold text-tinta truncate">Agenda & Calendário</span>
                 <Pilula tom={estado.calendario?.vencido ? 'vermelho' : 'lima'}>
                   {estado.calendario?.vencido ? 'snapshot vencido' : 'parcial'}
                 </Pilula>
               </div>
               <p className="mt-1.5 text-[11px] leading-relaxed text-tinta-2">
-                O arquivo <code className="text-tinta">calendario.json</code> é lido pelo painel, mas não possui nenhum job no cron que o atualize automaticamente no servidor.
+                O arquivo <code className="text-tinta">calendario.json</code> é lido pelo painel para consolidar a grade de compromissos.
               </p>
-              <span className="mt-2 block font-mono text-[9.5px] text-tinta-3">Falta: rotina agendada no crontab para extrair o snapshot das próximas 24h.</span>
+              <span className="mt-2 block font-mono text-[9.5px] text-tinta-3">
+                {estado.calendario?.vencido ? 'Aviso: arquivo não foi atualizado na última rodada.' : 'Snapshot operacional das próximas 24h.'}
+              </span>
             </div>
           </div>
         </section>
 
         {/* Bloco 2: Gargalos Operacionais e Decisão Humana */}
-        <section className="carta p-4">
+        <section className="carta p-4 min-w-0">
           <Cabecalho cor="var(--color-ambar)">2. Decisões do operador & fluxo de aprovações</Cabecalho>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="poco p-3">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[12px] font-semibold text-tinta">Critério de "Pendente" no Estúdio</span>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 min-w-0">
+            <div className="poco p-3 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[12px] font-semibold text-tinta truncate">Critério de "Pendente" no Estúdio</span>
                 <Pilula tom="ambar">decisão pendente</Pilula>
               </div>
               <p className="mt-1.5 text-[11px] leading-relaxed text-tinta-2">
-                No coletor, peças marcadas como <code className="text-tinta">pendente</code> não possuem pasta em disco porque ainda não foram geradas, tornando o botão "enviar para aprovação" desabilitado em 100% dos casos.
+                Peças marcadas como <code className="text-tinta">pendente</code> aguardam geração de artefato antes do envio à aprovação.
               </p>
-              <span className="mt-2 block font-mono text-[9.5px] text-tinta-3">O dono precisa definir o vocabulário: qual status identifica "peça produzida aguardando decisão"?</span>
+              <span className="mt-2 block font-mono text-[9.5px] text-tinta-3">Vocabulário de produção: identifica peças produzidas aguardando decisão.</span>
             </div>
           </div>
         </section>
 
         {/* Bloco 3: Lacunas no Conhecimento e na Frota */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2 min-w-0">
           {/* Cofre */}
-          <section className="carta p-4">
-            <div className="flex items-center justify-between">
+          <section className="carta p-4 min-w-0">
+            <div className="flex items-center justify-between gap-2">
               <Cabecalho cor="var(--color-lima)">3. Lacunas no Cofre de Conhecimento</Cabecalho>
-              <span className="rotulo">{nosSoltos.length} isolados</span>
+              <span className="rotulo shrink-0">{nosSoltos.length} isolados</span>
             </div>
             <p className="mt-1 text-[11.5px] leading-relaxed text-tinta-3">
               Um aprendizado sem conexões com outros padrões ou travas é conhecimento que não se propaga entre agentes:
@@ -160,9 +168,11 @@ export function OQueFalta({ estado, agora, vista }: PropsTela) {
             {nosSoltos.length > 0 ? (
               <ul className="mt-2.5 space-y-1.5 max-h-48 overflow-y-auto pr-1">
                 {nosSoltos.map((n) => (
-                  <li key={n.id} className="flex items-center justify-between gap-2 border-b border-linha/40 pb-1 text-[11px]">
-                    <span className="truncate text-tinta-2">{n.rotulo}</span>
-                    <Pilula tom="neutro">{n.area}</Pilula>
+                  <li key={n.id} className="flex min-w-0 items-center justify-between gap-2 border-b border-linha/40 pb-1 text-[11px]">
+                    <span className="truncate min-w-0 flex-1 text-tinta-2">{n.rotulo}</span>
+                    <span className="shrink-0">
+                      <Pilula tom="neutro">{n.area}</Pilula>
+                    </span>
                   </li>
                 ))}
               </ul>

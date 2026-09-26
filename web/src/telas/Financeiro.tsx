@@ -32,19 +32,20 @@ export function Financeiro({ estado, vista }: PropsTela) {
   }
 
   return (
-    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
+    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 min-w-0">
       <TituloDaTela
         titulo="Painel Financeiro."
         pergunta="Métricas agregadas do gerenciador financeiro (MRR, a receber, recebido e vencido), sem PII."
+        mostrarSeletorData={false}
         direita={
           <span className="rotulo">
-            medido em {new Date(dados.atualizado_em).toLocaleTimeString('pt-BR', { hour12: false, timeZone: 'UTC' })} utc
+            Snapshot do mês · medido em {new Date(dados.atualizado_em).toLocaleTimeString('pt-BR', { hour12: false, timeZone: 'America/Sao_Paulo' })} BRT
           </span>
         }
       />
 
       {/* 4 KPIs do Resumo Executivo no Topo */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 min-w-0">
         <Kpi
           rotulo="MRR Atual"
           valor={formatarMoeda(dados.mrr_atual, dados.moeda_exibicao ?? 'BRL')}
@@ -68,8 +69,8 @@ export function Financeiro({ estado, vista }: PropsTela) {
       </div>
 
       {/* Detalhes e Desempenho */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="carta p-4">
+      <div className="grid gap-4 lg:grid-cols-2 min-w-0">
+        <section className="carta p-4 min-w-0">
           <Cabecalho cor="var(--color-verde)">Clientes e Contratos</Cabecalho>
           <ul className="divide-y divide-linha">
             <li className="flex items-center justify-between py-2.5 text-sm">
@@ -78,17 +79,29 @@ export function Financeiro({ estado, vista }: PropsTela) {
             </li>
             <li className="flex items-center justify-between py-2.5 text-sm">
               <span className="text-tinta-2">Clientes em atraso</span>
-              <Pilula tom={dados.clientes_em_atraso ? 'ambar' : 'verde'}>
-                {dados.clientes_em_atraso ?? 0} {dados.clientes_em_atraso === 1 ? 'cliente' : 'clientes'}
-              </Pilula>
+              {dados.clientes_em_atraso !== null && dados.clientes_em_atraso !== undefined ? (
+                <Pilula tom={dados.clientes_em_atraso > 0 ? 'ambar' : 'verde'}>
+                  {dados.clientes_em_atraso} {dados.clientes_em_atraso === 1 ? 'cliente' : 'clientes'}
+                </Pilula>
+              ) : (
+                <Pilula tom="neutro">não medido</Pilula>
+              )}
             </li>
             <li className="flex items-center justify-between py-2.5 text-sm">
               <span className="text-tinta-2">Novos contratos no mês</span>
-              <span className="font-bold text-verde">+{dados.contratos_novos_mes ?? 0}</span>
+              {dados.contratos_novos_mes !== null && dados.contratos_novos_mes !== undefined ? (
+                <span className="font-bold text-verde">+{dados.contratos_novos_mes}</span>
+              ) : (
+                <span className="font-bold text-tinta-3">—</span>
+              )}
             </li>
             <li className="flex items-center justify-between py-2.5 text-sm">
               <span className="text-tinta-2">Contratos encerrados</span>
-              <span className="font-bold text-tinta-3">-{dados.contratos_encerrados_mes ?? 0}</span>
+              {dados.contratos_encerrados_mes !== null && dados.contratos_encerrados_mes !== undefined ? (
+                <span className="font-bold text-tinta-3">-{dados.contratos_encerrados_mes}</span>
+              ) : (
+                <span className="font-bold text-tinta-3">—</span>
+              )}
             </li>
           </ul>
         </section>

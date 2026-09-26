@@ -92,15 +92,16 @@ export function Estudio({ estado, vista }: PropsTela) {
   }
 
   return (
-    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
+    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 min-w-0">
       <TituloDaTela
         titulo="O que está pronto para sair."
         pergunta={vista.pergunta}
+        mostrarSeletorData={false}
         direita={
           <span className="rotulo">
             posts.json de{' '}
             {pecas.atualizado_em
-              ? new Date(pecas.atualizado_em).toLocaleString('pt-BR', { timeZone: 'UTC', hour12: false }) + ' utc'
+              ? new Date(pecas.atualizado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour12: false }) + ' BRT'
               : 'data não lida'}
           </span>
         }
@@ -109,7 +110,7 @@ export function Estudio({ estado, vista }: PropsTela) {
 
       {/* Quatro colunas IGUAIS, e nao uma grade que se adapta ao numero de
           digitos: medido, 4 cartoes de 155px com vao de 7px. */}
-      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4 min-w-0">
         <Kpi rotulo="na mesa" valor={naMesa.length} nota="é o número exato de itens na coluna A MESA" />
         <Kpi rotulo="prontas" valor={prontas.length} nota="é o número exato de miniaturas na parede" />
         <Kpi rotulo="com vídeo em disco" valor={pecas.com_video} nota="conferido arquivo a arquivo, não declarado" />
@@ -125,10 +126,8 @@ export function Estudio({ estado, vista }: PropsTela) {
         />
       </div>
 
-      {/* 5fr 8fr 5fr: derivado de 26,8 / 44,8 / 26,8, e a espec diz que e
-          DERIVADO e nao lido do CSS. Empilha no celular, onde tres colunas de
-          27% nao cabem em 390px. */}
-      <div className="mt-3 grid gap-3 lg:grid-cols-[5fr_8fr_5fr]">
+      {/* 5fr 8fr 5fr: minmax(0,...) evita vazamento no viewport de 390px */}
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,8fr)_minmax(0,5fr)] min-w-0">
         <Mesa lista={naMesa} escolhida={peca?.n ?? null} aoEscolher={setEscolhida} />
         <Visor peca={peca} />
         <Saida peca={peca} acoesHabilitadas={pecas.acoes_habilitadas} bloqueio={pecas.acoes_bloqueio} />

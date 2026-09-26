@@ -33,13 +33,21 @@ export function useRota() {
   const hash = useSyncExternalStore(assinar, lerAgora, lerNoServidor)
   const rota = lerHash(hash)
 
-  const ir = useCallback((vista: VistaId, quem: string | null = null) => {
-    const destino = escreverHash({ vista, quem })
+  const ir = useCallback((vista: VistaId, quem: string | null = null, opcoes?: { visao?: string | null; execucao?: string | null }) => {
+    const destino = escreverHash({
+      vista,
+      quem,
+      visao: opcoes?.visao ?? null,
+      execucao: opcoes?.execucao ?? null,
+    })
     if (window.location.hash !== destino) window.location.hash = destino
     // Trocar de vista tem que voltar ao topo: a referencia desenhou cada tela
     // pra caber numa dobra, e chegar numa tela nova ja rolada e desorientador.
     window.scrollTo({ top: 0 })
   }, [])
 
-  return { rota, ir } as { rota: Rota; ir: (vista: VistaId, quem?: string | null) => void }
+  return { rota, ir } as {
+    rota: Rota
+    ir: (vista: VistaId, quem?: string | null, opcoes?: { visao?: string | null; execucao?: string | null }) => void
+  }
 }

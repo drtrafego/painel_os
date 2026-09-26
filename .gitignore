@@ -16,6 +16,7 @@ __pycache__/
 
 # --- logs de runtime (não são código-fonte, e podem crescer com o tempo) ---
 *.log
+scratch/
 
 # --- estado de runtime do servidor local (não é código, é estado desta máquina) ---
 servidor/.https-ativo

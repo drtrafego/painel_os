@@ -112,7 +112,7 @@ export function TituloDaTela({
   titulo,
   pergunta,
   direita,
-  mostrarSeletorData = true,
+  mostrarSeletorData,
   faixa,
   aoMudarFaixa,
 }: {
@@ -123,14 +123,15 @@ export function TituloDaTela({
   faixa?: FaixaDeData
   aoMudarFaixa?: (f: FaixaDeData) => void
 }) {
+  const deveMostrarSeletor = mostrarSeletorData ?? Boolean(aoMudarFaixa)
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-x-5 gap-y-2">
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-x-5 gap-y-2 min-w-0">
       <div className="min-w-0 flex-1">
         <h1 className="titulo-pagina">{titulo}</h1>
         <p className="rotulo mt-1.5">{pergunta}</p>
       </div>
       <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:w-auto sm:shrink-0">
-        {mostrarSeletorData && <SeletorDeData faixa={faixa} aoMudarFaixa={aoMudarFaixa} />}
+        {deveMostrarSeletor && <SeletorDeData faixa={faixa} aoMudarFaixa={aoMudarFaixa} />}
         {direita}
       </div>
     </div>
