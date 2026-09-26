@@ -142,8 +142,21 @@ export function resolverAgenteNoCatalogo(
   }
 
   const chave = chaveAgente(agente.dono, agente.id)
+
+  // 1. Busca pela chave exata dono:id (isolamento estrito de homônimos)
+  const porChave = catalogoVisual.find((item) => item.id === chave)
+  if (porChave) return porChave
+
+  // 2. Se agente tem dono normalizado, prioriza item que pertença ao squad do dono
+  if (donoNorm) {
+    const squadDono = donoNorm === 'luana' ? 'coordenação' : donoNorm === 'renato' ? 'bots' : 'tráfego'
+    const porIdESquad = catalogoVisual.find((item) => (item.id === agente.id || item.aliases?.includes(agente.id)) && item.squad === squadDono)
+    if (porIdESquad) return porIdESquad
+  }
+
+  // 3. Fallback geral por ID ou aliases
   return (
-    catalogoVisual.find((item) => item.id === chave || item.aliases?.includes(chave)) ??
+    catalogoVisual.find((item) => item.aliases?.includes(chave)) ??
     catalogoVisual.find(
       (item) =>
         item.id === agente.id ||
@@ -214,10 +227,20 @@ export function mesclarRuntimesNoCatalogo(
     const ehSessaoDiretor = runtime.tipo === 'sessao_claude' || runtime.identidade === 'sessao-claude' || runtime.id === 'sessao-claude' || runtime.id.startsWith('sessao-')
     const donoNorm = normalizarDonoId(runtime.dono)
 
+    const squadDono: PixelAgentSquad | null =
+      donoNorm === 'luana'
+        ? 'coordenação'
+        : donoNorm === 'renato'
+          ? 'bots'
+          : donoNorm === 'bia'
+            ? 'tráfego'
+            : null
+
     const existente = resultado.find((agente) => {
       if (ehSessaoDiretor && donoNorm && agente.id === donoNorm) {
         return true
       }
+      if (agente.id === chave) return true
       const match =
         (identidade
           ? normalizarId(agente.id) === normalizarId(identidade) ||
@@ -226,6 +249,8 @@ export function mesclarRuntimesNoCatalogo(
         normalizarId(agente.id) === normalizarId(runtime.id) ||
         agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(runtime.id))
       if (!match) return false
+      // Se tiver dono diferente ou squad incompatível com o dono da execução, não compartilha a mesma mesa
+      if (squadDono && agente.squad !== squadDono) return false
       const donoExistente = donosAssociados.get(agente.id)
       return donoExistente === undefined || donoExistente === runtime.dono
     })
@@ -251,9 +276,13 @@ export function mesclarRuntimesNoCatalogo(
     if (baseOriginal) {
       const novoId = chave
       const tagDono = runtime.dono ? ` [${runtime.dono[0].toUpperCase()}]` : ''
+      const squadReal = squadDono ?? baseOriginal.squad
+      const donoCor = donoNorm ? corDaSessao(donoNorm) : runtime.dono ? corDaSessao(runtime.dono) : null
       resultado.push({
         ...baseOriginal,
         id: novoId,
+        squad: squadReal,
+        cor: donoCor ?? baseOriginal.cor,
         nome: `${baseOriginal.nome}${tagDono}`,
         descricao: runtime.descricao || runtime.tarefa || runtime.etapa || baseOriginal.descricao,
         aliases: [runtime.id],
@@ -262,14 +291,6 @@ export function mesclarRuntimesNoCatalogo(
       return
     }
 
-    const squadDono: PixelAgentSquad | null =
-      donoNorm === 'luana'
-        ? 'coordenação'
-        : donoNorm === 'renato'
-          ? 'bots'
-          : donoNorm === 'bia'
-            ? 'tráfego'
-            : null
 
     const nome = ehCodex
       ? `Sessão Codex · ${sufixo}`

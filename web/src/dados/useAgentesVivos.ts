@@ -138,6 +138,20 @@ function verificarStale() {
   }
 }
 
+export function validarPayloadAgentesVivos(json: unknown): json is AgentesVivos {
+  if (typeof json !== 'object' || json === null) return false
+  const obj = json as Record<string, unknown>
+  if (typeof obj.ok !== 'boolean') return false
+  if (obj.ok === true) {
+    if (!Array.isArray(obj.agentes)) return false
+    for (const ag of obj.agentes) {
+      if (typeof ag !== 'object' || ag === null) return false
+      if (typeof (ag as Record<string, unknown>).id !== 'string') return false
+    }
+  }
+  return true
+}
+
 async function buscarSonda() {
   if (requisicaoEmVoo) return
   requisicaoEmVoo = true
@@ -169,6 +183,10 @@ async function buscarSonda() {
 
     const json = await r.json()
     if (idTentativa !== sequenciaBusca) return
+
+    if (!validarPayloadAgentesVivos(json)) {
+      throw new Error('Payload da sonda inválido ou malformado')
+    }
 
     if (json.ok === false) {
       const motivo = json.erro || json.motivo || 'Sonda retornou falha'

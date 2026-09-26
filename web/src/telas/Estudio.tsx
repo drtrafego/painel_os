@@ -92,7 +92,7 @@ export function Estudio({ estado, vista }: PropsTela) {
   }
 
   return (
-    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 min-w-0">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       <TituloDaTela
         titulo="O que está pronto para sair."
         pergunta={vista.pergunta}
@@ -286,6 +286,17 @@ function Visor({ peca }: { peca: Peca | null }) {
             alt={`Capa da peça ${peca.n}`}
             width={180}
             height={320}
+            onError={(e) => {
+              const el = e.currentTarget
+              el.style.display = 'none'
+              const pai = el.parentElement
+              if (pai && !pai.querySelector('.fallback-capa')) {
+                const fb = document.createElement('div')
+                fb.className = 'fallback-capa flex flex-col items-center justify-center p-4 text-center'
+                fb.innerHTML = `<span class="rotulo text-slate-400">peça #${peca.n}</span><span class="text-[11px] text-slate-500 mt-1">prévia da capa indisponível</span>`
+                pai.appendChild(fb)
+              }
+            }}
             className="block h-[300px] w-auto rounded object-contain"
           />
         ) : (
@@ -479,6 +490,17 @@ function Prontos({
                 width={50}
                 height={83}
                 loading="lazy"
+                onError={(e) => {
+                  const el = e.currentTarget
+                  el.style.display = 'none'
+                  const pai = el.parentElement
+                  if (pai && !pai.querySelector('.fallback-miniatura')) {
+                    const fb = document.createElement('div')
+                    fb.className = 'fallback-miniatura flex items-center justify-center aspect-[3/5] w-full bg-[#1e293b] text-[9px] font-mono text-slate-400'
+                    fb.innerText = `#${p.n}`
+                    pai.appendChild(fb)
+                  }
+                }}
                 className="block aspect-[3/5] w-full object-cover"
               />
             </button>

@@ -160,7 +160,7 @@ export function Diretores({
   const ativosAgora = (vivos?.contagem?.trabalhando ?? 0)
 
   return (
-    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 min-w-0">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       {origem === 'coletor-falhou' && <AvisoColetor erro={erro} medidoEm={medidoEm} agora={agora} />}
       <TituloDaTela
         titulo="Rede de agentes."

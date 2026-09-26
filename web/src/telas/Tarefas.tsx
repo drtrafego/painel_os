@@ -242,12 +242,12 @@ export function Tarefas({ estado, vista }: PropsTela) {
     })
   }
 
-  // Resolução da execução concreta ou catálogo
+  // Resolução da execução concreta ou catálogo por chave compósita rigorosa (dono+id)
   const agenteSelecionadoObj: AgenteVivo | undefined = useMemo(() => {
     if (!agenteInspecionado) return undefined
     const encontradoVivo = listaVivos.find((a) => {
       const chave = a.dono ? `${a.dono}:${a.id}` : a.id
-      return chave === agenteInspecionado || a.id === agenteInspecionado
+      return chave === agenteInspecionado
     })
     if (encontradoVivo) return encontradoVivo
 
@@ -483,14 +483,14 @@ export function Tarefas({ estado, vista }: PropsTela) {
             <div className="grid grid-cols-1 min-w-0 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
               {listaVivos.map((ag) => {
                 const chave = ag.dono ? `${ag.dono}:${ag.id}` : ag.id
-                const isSelected = agenteInspecionado === chave || agenteInspecionado === ag.id
+                const isSelected = agenteInspecionado === chave
                 return (
                   <AgenteVivoCard
                     key={chave}
                     agente={ag}
                     catalogo={catalogoPixel}
                     selecionado={isSelected}
-                    onClick={() => setAgenteInspecionado(isSelected ? null : chave)}
+                    onClick={() => abrirAgentesAtivos(chave)}
                     modo="terminal"
                   />
                 )

@@ -44,7 +44,7 @@ export function PainelInstrumentoCofre({
 
   return (
     <div
-      className={`carta overflow-hidden transition-colors ${modoComando ? 'border-sky-500/30 text-slate-200' : 'text-tinta'}`}
+      className={`carta w-full max-w-full min-w-0 overflow-x-hidden transition-colors ${modoComando ? 'border-sky-500/30 text-slate-200' : 'text-tinta'}`}
       style={modoComando ? { background: '#0B0F17' } : undefined}
     >
       <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-3 py-2 ${divisoria}`}>

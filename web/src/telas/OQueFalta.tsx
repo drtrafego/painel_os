@@ -32,7 +32,7 @@ export function OQueFalta({ estado, agora, vista }: PropsTela) {
   const falhasRenato = verifRenato?.falhas ?? []
 
   return (
-    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
       <TituloDaTela
         titulo="O que falta."
         pergunta={vista.pergunta}

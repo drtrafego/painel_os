@@ -2,6 +2,8 @@
  * Máquina de estados determinística de movimento e posturas para o Escritório Voxel.
  *
  * Utiliza timestamp monotônico de requestAnimationFrame sem dependência de taxa de quadros (Hz).
+ * Utiliza rotas de waypoints por corredores para evitar travessia sobre mesas/móveis.
+ * Suporta interrupção e reversão no meio do trajeto sem teletransporte.
  * Suporta prefers-reduced-motion para posicionamento estático instantâneo.
  */
 
@@ -34,24 +36,122 @@ export interface EstadoAnimacaoBoneco {
   posturaTrabalho: 'digitando' | 'lendo' | 'gerico'
 }
 
-const DURACAO_CAMINHADA_MS = 2000
-const DURACAO_TRANSICAO_CADEIRA_MS = 320
+export const DURACAO_CAMINHADA_MS = 2000
+export const DURACAO_TRANSICAO_CADEIRA_MS = 320
 
-function lerPostura(ferramenta?: string | null): 'digitando' | 'lendo' | 'gerico' {
+export function lerPostura(ferramenta?: string | null): 'digitando' | 'lendo' | 'gerico' {
   if (!ferramenta) return 'digitando'
   const f = ferramenta.toLowerCase()
-  if (f.includes('write') || f.includes('edit') || f.includes('terminal') || f.includes('bash') || f.includes('command') || f.includes('run')) {
+  if (
+    f.includes('write') ||
+    f.includes('edit') ||
+    f.includes('terminal') ||
+    f.includes('bash') ||
+    f.includes('command') ||
+    f.includes('run')
+  ) {
     return 'digitando'
   }
-  if (f.includes('read') || f.includes('view') || f.includes('search') || f.includes('list') || f.includes('grep') || f.includes('scan')) {
+  if (
+    f.includes('read') ||
+    f.includes('view') ||
+    f.includes('search') ||
+    f.includes('list') ||
+    f.includes('grep') ||
+    f.includes('scan')
+  ) {
     return 'lendo'
   }
   return 'gerico'
 }
 
-function interpolarSuave(t: number): number {
+export function interpolarSuave(t: number): number {
   // Cubic ease-out: 1 - (1 - t)^3
   return 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3)
+}
+
+/**
+ * Calcula lista de waypoints conectando origem e destino através do corredor central (x = 0).
+ */
+export function calcularWaypoints(origem: Posicao2D, destino: Posicao2D): Posicao2D[] {
+  const pontos: Posicao2D[] = [{ x: origem.x, y: origem.y }]
+
+  const precisaSairHorizontalmente = Math.abs(origem.x) > 1
+  const precisaEntrarHorizontalmente = Math.abs(destino.x) > 1
+
+  if (precisaSairHorizontalmente && precisaEntrarHorizontalmente) {
+    if (Math.sign(origem.x) === Math.sign(destino.x) && Math.abs(origem.y - destino.y) < 10) {
+      // Mesma ilha e mesma linha
+      pontos.push({ x: destino.x, y: destino.y })
+    } else {
+      pontos.push({ x: 0, y: origem.y })
+      pontos.push({ x: 0, y: destino.y })
+      pontos.push({ x: destino.x, y: destino.y })
+    }
+  } else if (precisaSairHorizontalmente) {
+    pontos.push({ x: 0, y: origem.y })
+    pontos.push({ x: destino.x, y: destino.y })
+  } else if (precisaEntrarHorizontalmente) {
+    pontos.push({ x: 0, y: destino.y })
+    pontos.push({ x: destino.x, y: destino.y })
+  } else {
+    pontos.push({ x: destino.x, y: destino.y })
+  }
+
+  // Remove pontos colineares ou duplicados consecutivos
+  const limpos: Posicao2D[] = []
+  for (let i = 0; i < pontos.length; i++) {
+    const p = pontos[i]
+    if (i === 0) {
+      limpos.push(p)
+    } else {
+      const ant = limpos[limpos.length - 1]
+      if (Math.hypot(p.x - ant.x, p.y - ant.y) > 0.5) {
+        limpos.push(p)
+      }
+    }
+  }
+
+  return limpos.length > 0 ? limpos : [origem, destino]
+}
+
+/**
+ * Interpola posição ao longo de uma sequência de waypoints.
+ */
+export function interpolarWaypoints(waypoints: Posicao2D[], progresso: number): Posicao2D {
+  if (waypoints.length === 0) return { x: 0, y: 0 }
+  if (waypoints.length === 1) return waypoints[0]
+
+  const pClamped = Math.max(0, Math.min(1, progresso))
+
+  // Calcula comprimentos de cada segmento
+  const comprimentos: number[] = []
+  let comprimentoTotal = 0
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const d = Math.hypot(waypoints[i + 1].x - waypoints[i].x, waypoints[i + 1].y - waypoints[i].y)
+    comprimentos.push(d)
+    comprimentoTotal += d
+  }
+
+  if (comprimentoTotal === 0) return waypoints[0]
+
+  const distanciaAlvo = pClamped * comprimentoTotal
+  let distanciaAcumulada = 0
+
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const segLen = comprimentos[i]
+    if (distanciaAcumulada + segLen >= distanciaAlvo || i === waypoints.length - 2) {
+      const segT = segLen === 0 ? 0 : (distanciaAlvo - distanciaAcumulada) / segLen
+      const tClamped = Math.max(0, Math.min(1, segT))
+      return {
+        x: waypoints[i].x + (waypoints[i + 1].x - waypoints[i].x) * tClamped,
+        y: waypoints[i].y + (waypoints[i + 1].y - waypoints[i].y) * tClamped,
+      }
+    }
+    distanciaAcumulada += segLen
+  }
+
+  return waypoints[waypoints.length - 1]
 }
 
 export function criarEstadoInicialBoneco(
@@ -165,9 +265,13 @@ export function avancarEstadoAnimacao(
   const t = Math.min(1, tempoDecorrido / duracao)
   const progresso = interpolarSuave(t)
 
-  // 1. Transições disparadas por mudança no estado real da sonda
+  // 1. Transições disparadas por mudança no estado real da sonda (inclui suporte a interrupção no meio do caminho)
   if (estadoReal === 'trabalhando' || estadoReal === 'silencioso') {
-    if (anterior.fase === 'descanso' || anterior.fase === 'caminhando_para_descanso' || anterior.fase === 'levantando') {
+    if (
+      anterior.fase === 'descanso' ||
+      anterior.fase === 'caminhando_para_descanso' ||
+      anterior.fase === 'levantando'
+    ) {
       return {
         ...anterior,
         fase: 'caminhando_para_mesa',
@@ -212,7 +316,7 @@ export function avancarEstadoAnimacao(
     }
   }
 
-  // 2. Continuidade das fases em andamento
+  // 2. Continuidade das fases em andamento através de waypoints de corredores
   switch (anterior.fase) {
     case 'caminhando_para_mesa': {
       if (t >= 1) {
@@ -231,12 +335,15 @@ export function avancarEstadoAnimacao(
           posturaTrabalho: postura,
         }
       }
-      const posX = anterior.origemX + (posMesa.x - anterior.origemX) * progresso
-      const posY = anterior.origemY + (posMesa.y - anterior.origemY) * progresso
+      const waypoints = calcularWaypoints(
+        { x: anterior.origemX, y: anterior.origemY },
+        { x: posMesa.x, y: posMesa.y }
+      )
+      const posAtual = interpolarWaypoints(waypoints, progresso)
       return {
         ...anterior,
-        x: posX,
-        y: posY,
+        x: posAtual.x,
+        y: posAtual.y,
         progressoFase: t,
         posturaTrabalho: postura,
       }
@@ -311,12 +418,15 @@ export function avancarEstadoAnimacao(
           posturaTrabalho: postura,
         }
       }
-      const posX = anterior.origemX + (posDescanso.x - anterior.origemX) * progresso
-      const posY = anterior.origemY + (posDescanso.y - anterior.origemY) * progresso
+      const waypoints = calcularWaypoints(
+        { x: anterior.origemX, y: anterior.origemY },
+        { x: posDescanso.x, y: posDescanso.y }
+      )
+      const posAtual = interpolarWaypoints(waypoints, progresso)
       return {
         ...anterior,
-        x: posX,
-        y: posY,
+        x: posAtual.x,
+        y: posAtual.y,
         progressoFase: t,
         posturaTrabalho: postura,
       }

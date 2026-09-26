@@ -32,8 +32,8 @@ interface PixelOfficeProps {
   aoAbrirCerebro?: () => void
 }
 
-const ZOOM_MIN = 0.4
-const ZOOM_MAX = 2.2
+const ZOOM_MIN = 0.35
+const ZOOM_MAX = 2.4
 
 interface MesaCalculada {
   id: string
@@ -57,15 +57,9 @@ interface IlhaSquadCalculada {
   altura: number
 }
 
-// Configuração espacial dos clusters/departamentos no piso contínuo
-const CLUSTERS_CONFIG: Array<{ id: PixelAgentSquad; nome: string; cor: string; gx: number; gy: number; largura: number; altura: number }> = [
-  { id: 'coordenação', nome: 'COORDENAÇÃO · LUANA', cor: '#84cc16', gx: 0, gy: -210, largura: 300, altura: 170 },
-  { id: 'bots', nome: 'RENATO / BOTS', cor: '#f97316', gx: 280, gy: -100, largura: 280, altura: 170 },
-  { id: 'tráfego', nome: 'BIA / TRÁFEGO', cor: '#a855f7', gx: 280, gy: 140, largura: 280, altura: 170 },
-  { id: 'comercial', nome: 'SQUAD COMERCIAL', cor: '#10b981', gx: 0, gy: 240, largura: 300, altura: 170 },
-  { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4', gx: -280, gy: 140, largura: 280, altura: 170 },
-  { id: 'conteúdo', nome: 'SQUAD CONTEÚDO', cor: '#f59e0b', gx: -280, gy: -100, largura: 280, altura: 170 },
-]
+// Ordem dos squads nas colunas esquerda e direita ao redor do corredor central (x = 0)
+const SQUADS_ESQUERDA: PixelAgentSquad[] = ['conteúdo', 'globais', 'análise', 'radar']
+const SQUADS_DIREITA: PixelAgentSquad[] = ['bots', 'tráfego', 'comercial', 'destinos', 'pipeline Codex']
 
 export function PixelOffice({
   agentes,
@@ -80,6 +74,8 @@ export function PixelOffice({
   const animFrameRef = useRef<number | null>(null)
   const estadosBonecosRef = useRef<Map<string, EstadoAnimacaoBoneco>>(new Map())
   const ultimoTimestampRef = useRef<number>(performance.now())
+  const cenaModificadaRef = useRef<boolean>(true)
+  const visivelRef = useRef<boolean>(true)
 
   // Sonda de Agentes Vivos Compartilhada
   const { statusLeitura, recebidoEm, falhouHaSegundos, erro: erroSonda } = useAgentesVivos()
@@ -119,61 +115,109 @@ export function PixelOffice({
     return mapa
   }, [catalogoVisual])
 
-  // Mapa de execuções ativas
+  // Mapa de execuções ativas INDEXADO EXCLUSIVAMENTE POR CHAVE COMPÓSITA (dono+id) para evitar homônimos
   const mapaExecucoes = useMemo(() => {
     const mapa = new Map<string, AgenteVivo>()
     agentes.forEach((a) => {
-      const chave = a.dono ? `${a.dono}:${a.id}` : a.id
+      const chave = chaveAgente(a.dono, a.id)
       mapa.set(chave, a)
-      mapa.set(a.id, a)
     })
     return mapa
   }, [agentes])
 
-  // Cálculo das ilhas e posições dinâmicas de mesas (sem limite rígido de 6 mesas)
-  const { ilhasCalculadas, todasMesas } = useMemo(() => {
+  // Cálculo DINÂMICO dos extents de ilhas e mesas (evita sobreposição para 45+ agentes)
+  const { ilhasCalculadas, todasMesas, limitesCena } = useMemo(() => {
     const ilhas: IlhaSquadCalculada[] = []
     const mesas: MesaCalculada[] = []
 
-    CLUSTERS_CONFIG.forEach((cfg) => {
-      const ags = agentesPorSquad.get(cfg.id) ?? []
-      const nAgentes = ags.length
-      const colunas = nAgentes > 8 ? 4 : 3
-      const linhas = Math.max(2, Math.ceil(nAgentes / colunas))
+    let minX = -400
+    let maxX = 400
+    let minY = -350
+    let maxY = 450
 
-      // Dimensões dinâmicas do piso do cluster
-      const largura = Math.max(cfg.largura, colunas * 72 + 50)
-      const altura = Math.max(cfg.altura, linhas * 56 + 60)
+    // 1. Coordenação Geral (Topo Central)
+    const agsCoord = agentesPorSquad.get('coordenação') ?? []
+    const nCoord = agsCoord.length
+    const colCoord = nCoord > 8 ? 4 : Math.max(3, nCoord)
+    const linCoord = Math.max(2, Math.ceil(Math.max(1, nCoord) / colCoord))
+    const wCoord = Math.max(280, colCoord * 70 + 44)
+    const hCoord = Math.max(150, linCoord * 54 + 50)
+    const gyCoord = -220 - hCoord / 2
+
+    ilhas.push({
+      squad: 'coordenação',
+      nome: 'COORDENAÇÃO · LUANA',
+      cor: '#84cc16',
+      gx: 0,
+      gy: gyCoord,
+      largura: wCoord,
+      altura: hCoord,
+    })
+
+    // Mesas de Coordenação
+    const espacoXCoord = (wCoord - 36) / colCoord
+    const espacoYCoord = (hCoord - 44) / linCoord
+    agsCoord.forEach((ag, idx) => {
+      const c = idx % colCoord
+      const r = Math.floor(idx / colCoord)
+      const mx = -wCoord / 2 + 18 + c * espacoXCoord + espacoXCoord / 2
+      const my = gyCoord - hCoord / 2 + 28 + r * espacoYCoord + espacoYCoord / 2
+      const chave = chaveAgente(ag.squad === 'coordenação' ? 'luana' : undefined, ag.id)
+      const execucao = mapaExecucoes.get(chave) || mapaExecucoes.get(chaveAgente('luana', ag.id)) || mapaExecucoes.get(ag.id)
+
+      mesas.push({
+        id: ag.id,
+        chave,
+        agente: ag,
+        squad: 'coordenação',
+        x: mx,
+        y: my,
+        largura: 54,
+        altura: 42,
+        execucao,
+      })
+    })
+
+    // 2. Empilhamento Dinâmico na Coluna Esquerda (x < 0)
+    let yEsquerda = -120
+    SQUADS_ESQUERDA.forEach((sqId) => {
+      const ags = agentesPorSquad.get(sqId) ?? []
+      const sqInfo = PIXEL_AGENT_SQUADS.find((s) => s.id === sqId)
+      if (ags.length === 0 && sqId !== 'conteúdo' && sqId !== 'globais') return
+
+      const n = ags.length
+      const col = n > 9 ? 4 : n > 4 ? 3 : 2
+      const lin = Math.max(2, Math.ceil(Math.max(1, n) / col))
+      const w = Math.max(240, col * 68 + 40)
+      const h = Math.max(140, lin * 52 + 48)
+      const gx = -(w / 2 + 35)
+      const gy = yEsquerda + h / 2
 
       ilhas.push({
-        squad: cfg.id,
-        nome: cfg.nome,
-        cor: cfg.cor,
-        gx: cfg.gx,
-        gy: cfg.gy,
-        largura,
-        altura,
+        squad: sqId,
+        nome: sqInfo?.nome ?? sqId.toUpperCase(),
+        cor: sqInfo?.cor ?? '#f59e0b',
+        gx,
+        gy,
+        largura: w,
+        altura: h,
       })
 
-      // Distribuição das mesas dentro da área do squad
-      const meioW = largura / 2
-      const meioH = altura / 2
-      const espacoX = (largura - 40) / colunas
-      const espacoY = (altura - 50) / linhas
-
+      const espX = (w - 32) / col
+      const espY = (h - 40) / lin
       ags.forEach((ag, idx) => {
-        const col = idx % colunas
-        const row = Math.floor(idx / colunas)
-        const mx = cfg.gx - meioW + 28 + col * espacoX + espacoX / 2
-        const my = cfg.gy - meioH + 34 + row * espacoY + espacoY / 2
-        const chave = chaveAgente(undefined, ag.id)
+        const c = idx % col
+        const r = Math.floor(idx / col)
+        const mx = gx - w / 2 + 16 + c * espX + espX / 2
+        const my = gy - h / 2 + 24 + r * espY + espY / 2
+        const chave = chaveAgente(ag.id.includes(':') ? ag.id.split(':')[0] : undefined, ag.id.includes(':') ? ag.id.split(':')[1] : ag.id)
         const execucao = mapaExecucoes.get(chave) || mapaExecucoes.get(ag.id)
 
         mesas.push({
           id: ag.id,
           chave,
           agente: ag,
-          squad: cfg.id,
+          squad: sqId,
           x: mx,
           y: my,
           largura: 54,
@@ -181,13 +225,76 @@ export function PixelOffice({
           execucao,
         })
       })
+
+      yEsquerda += h + 30
+      minX = Math.min(minX, gx - w / 2 - 40)
+      maxY = Math.max(maxY, yEsquerda + 60)
     })
 
-    return { ilhasCalculadas: ilhas, todasMesas: mesas }
+    // 3. Empilhamento Dinâmico na Coluna Direita (x > 0)
+    let yDireita = -120
+    SQUADS_DIREITA.forEach((sqId) => {
+      const ags = agentesPorSquad.get(sqId) ?? []
+      const sqInfo = PIXEL_AGENT_SQUADS.find((s) => s.id === sqId)
+      if (ags.length === 0 && sqId !== 'bots' && sqId !== 'tráfego') return
+
+      const n = ags.length
+      const col = n > 9 ? 4 : n > 4 ? 3 : 2
+      const lin = Math.max(2, Math.ceil(Math.max(1, n) / col))
+      const w = Math.max(240, col * 68 + 40)
+      const h = Math.max(140, lin * 52 + 48)
+      const gx = w / 2 + 35
+      const gy = yDireita + h / 2
+
+      ilhas.push({
+        squad: sqId,
+        nome: sqInfo?.nome ?? sqId.toUpperCase(),
+        cor: sqInfo?.cor ?? '#38bdf8',
+        gx,
+        gy,
+        largura: w,
+        altura: h,
+      })
+
+      const espX = (w - 32) / col
+      const espY = (h - 40) / lin
+      ags.forEach((ag, idx) => {
+        const c = idx % col
+        const r = Math.floor(idx / col)
+        const mx = gx - w / 2 + 16 + c * espX + espX / 2
+        const my = gy - h / 2 + 24 + r * espY + espY / 2
+        const chave = chaveAgente(ag.id.includes(':') ? ag.id.split(':')[0] : undefined, ag.id.includes(':') ? ag.id.split(':')[1] : ag.id)
+        const execucao = mapaExecucoes.get(chave) || mapaExecucoes.get(ag.id)
+
+        mesas.push({
+          id: ag.id,
+          chave,
+          agente: ag,
+          squad: sqId,
+          x: mx,
+          y: my,
+          largura: 54,
+          altura: 42,
+          execucao,
+        })
+      })
+
+      yDireita += h + 30
+      maxX = Math.max(maxX, gx + w / 2 + 40)
+      maxY = Math.max(maxY, yDireita + 60)
+    })
+
+    minY = Math.min(minY, gyCoord - hCoord / 2 - 80)
+
+    return {
+      ilhasCalculadas: ilhas,
+      todasMesas: mesas,
+      limitesCena: { minX, maxX, minY, maxY },
+    }
   }, [agentesPorSquad, mapaExecucoes])
 
   // Posição de descanso/lounge dos agentes inativos
-  const posicaoDescanso: Posicao2D = useMemo(() => ({ x: 0, y: 380 }), [])
+  const posicaoDescanso: Posicao2D = useMemo(() => ({ x: 0, y: limitesCena.maxY - 40 }), [limitesCena.maxY])
 
   // Enquadramento automático na câmera (Auto-frame)
   useEffect(() => {
@@ -206,31 +313,52 @@ export function PixelOffice({
         let minY = Infinity
         let maxY = -Infinity
         mesasAtivas.forEach((m) => {
-          minX = Math.min(minX, m.x - 40)
-          maxX = Math.max(maxX, m.x + 40)
-          minY = Math.min(minY, m.y - 40)
-          maxY = Math.max(maxY, m.y + 40)
+          minX = Math.min(minX, m.x - 45)
+          maxX = Math.max(maxX, m.x + 45)
+          minY = Math.min(minY, m.y - 45)
+          maxY = Math.max(maxY, m.y + 45)
         })
-        const boundingW = Math.max(220, maxX - minX)
+        const boundingW = Math.max(240, maxX - minX)
         const boundingH = Math.max(180, maxY - minY)
         const centroX = (minX + maxX) / 2
         const centroY = (minY + maxY) / 2
 
         const zoomDesejado = Math.min(
           ZOOM_MAX,
-          Math.max(ZOOM_MIN, Math.min((largura * 0.75) / boundingW, (altura * 0.75) / boundingH))
+          Math.max(ZOOM_MIN, Math.min((largura * 0.78) / boundingW, (altura * 0.78) / boundingH))
         )
         setZoom(zoomDesejado)
         setPan({ x: -centroX * zoomDesejado, y: -centroY * zoomDesejado })
+        cenaModificadaRef.current = true
         return
       }
     }
 
     // Visão Geral Padrão
-    const zoomPadrao = largura < 640 ? 0.65 : largura < 1024 ? 0.85 : 1.0
+    const zoomPadrao = largura < 640 ? 0.6 : largura < 1024 ? 0.8 : 0.95
     setZoom(zoomPadrao)
-    setPan({ x: 0, y: 20 })
+    setPan({ x: 0, y: 10 })
+    cenaModificadaRef.current = true
   }, [soAtivos, todasMesas])
+
+  // Pausa do loop RAF quando o documento estiver invisível (Blocker 8)
+  useEffect(() => {
+    const ouvirVisibilidade = () => {
+      if (document.hidden) {
+        visivelRef.current = false
+        if (animFrameRef.current !== null) {
+          cancelAnimationFrame(animFrameRef.current)
+          animFrameRef.current = null
+        }
+      } else {
+        visivelRef.current = true
+        ultimoTimestampRef.current = performance.now()
+        cenaModificadaRef.current = true
+      }
+    }
+    document.addEventListener('visibilitychange', ouvirVisibilidade)
+    return () => document.removeEventListener('visibilitychange', ouvirVisibilidade)
+  }, [])
 
   // Total de agentes trabalhando no momento
   const totalTrabalhando = useMemo(() => {
@@ -245,9 +373,10 @@ export function PixelOffice({
     if (!ctx) return
 
     let rodando = true
+    cenaModificadaRef.current = true
 
     const desenhar = (timestamp: number) => {
-      if (!rodando) return
+      if (!rodando || !visivelRef.current) return
       ultimoTimestampRef.current = timestamp
 
       // Ajusta resolução do canvas
@@ -276,41 +405,49 @@ export function PixelOffice({
       ctx.strokeStyle = '#0f172a'
       ctx.lineWidth = 1
       const gradeTam = 40
-      for (let x = -500; x <= 500; x += gradeTam) {
+      const gMinX = limitesCena.minX - 100
+      const gMaxX = limitesCena.maxX + 100
+      const gMinY = limitesCena.minY - 100
+      const gMaxY = limitesCena.maxY + 100
+
+      for (let x = Math.floor(gMinX / gradeTam) * gradeTam; x <= gMaxX; x += gradeTam) {
         ctx.beginPath()
-        ctx.moveTo(x, -400)
-        ctx.lineTo(x, 450)
+        ctx.moveTo(x, gMinY)
+        ctx.lineTo(x, gMaxY)
         ctx.stroke()
       }
-      for (let y = -400; y <= 450; y += gradeTam) {
+      for (let y = Math.floor(gMinY / gradeTam) * gradeTam; y <= gMaxY; y += gradeTam) {
         ctx.beginPath()
-        ctx.moveTo(-500, y)
-        ctx.lineTo(500, y)
+        ctx.moveTo(gMinX, y)
+        ctx.lineTo(gMaxX, y)
         ctx.stroke()
       }
 
       // 2. Corredores e Caminhos Conectando os Squads
       ctx.fillStyle = '#0a1020'
-      ctx.fillRect(-320, -10, 640, 30) // Corredor horizontal principal
-      ctx.fillRect(-15, -240, 30, 490) // Corredor vertical principal
+      ctx.fillRect(-28, gMinY + 60, 56, gMaxY - gMinY - 60) // Corredor vertical principal
+      ilhasCalculadas.forEach((ilha) => {
+        ctx.fillRect(Math.min(0, ilha.gx), ilha.gy - 15, Math.abs(ilha.gx) + ilha.largura / 2, 30)
+      })
 
       // 3. Marca Voxel na Parede: G4ST40VIB3 / casaldotrafego.com
+      const wallY = limitesCena.minY + 20
       ctx.fillStyle = '#0f172a'
-      ctx.fillRect(-190, -325, 380, 48)
+      ctx.fillRect(-190, wallY, 380, 48)
       ctx.strokeStyle = '#facc15'
       ctx.lineWidth = 2
-      ctx.strokeRect(-190, -325, 380, 48)
+      ctx.strokeRect(-190, wallY, 380, 48)
 
       ctx.fillStyle = '#facc15'
       ctx.font = 'bold 15px monospace'
       ctx.textAlign = 'center'
-      ctx.fillText('G4ST40VIB3', 0, -305)
+      ctx.fillText('G4ST40VIB3', 0, wallY + 20)
 
       ctx.fillStyle = '#38bdf8'
       ctx.font = 'bold 11px monospace'
-      ctx.fillText('casaldotrafego.com', 0, -289)
+      ctx.fillText('casaldotrafego.com', 0, wallY + 36)
 
-      // 4. Pisos dos Squads
+      // 4. Pisos dos Squads (Sem sobreposição)
       ilhasCalculadas.forEach((ilha) => {
         const x = ilha.gx - ilha.largura / 2
         const y = ilha.gy - ilha.altura / 2
@@ -339,7 +476,7 @@ export function PixelOffice({
       todasMesas.forEach((mesa) => {
         const mx = mesa.x
         const my = mesa.y
-        const ehSelecionado = agenteSelecionadoId === mesa.chave || agenteSelecionadoId === mesa.id
+        const ehSelecionado = agenteSelecionadoId === mesa.chave
         const ehAtivo = mesa.execucao?.estado === 'trabalhando'
 
         // Sombra da Mesa
@@ -378,7 +515,7 @@ export function PixelOffice({
         ctx.fillText(rotuloCurto, mx, my + 23)
       })
 
-      // 6. Atualização e Desenho dos Personagens (State Machine RAF)
+      // 6. Atualização e Desenho dos Personagens (State Machine RAF com Waypoints)
       todasMesas.forEach((mesa) => {
         const chave = mesa.chave
         const estadoApi = mesa.execucao?.estado ?? 'parado'
@@ -403,7 +540,7 @@ export function PixelOffice({
         )
         estadosBonecosRef.current.set(chave, boneco)
 
-        // Se o modo for "Só Ativos" e o agente estiver completamente no descanso/inativo, omite do desenho
+        // Se o modo for "Só Ativos" e o agente estiver no descanso, omite do desenho
         if (soAtivos && estadoApi === 'parado' && boneco.fase === 'descanso') {
           return
         }
@@ -411,11 +548,12 @@ export function PixelOffice({
         // Desenho do Boneco Voxel
         const bx = boneco.x
         const by = boneco.y
-        const postura = boneco.fase === 'caminhando_para_mesa' || boneco.fase === 'caminhando_para_descanso'
-          ? 'andando'
-          : boneco.posturaTrabalho
+        const postura =
+          boneco.fase === 'caminhando_para_mesa' || boneco.fase === 'caminhando_para_descanso'
+            ? 'andando'
+            : boneco.posturaTrabalho
         const ehTrabalhando = estadoApi === 'trabalhando'
-        const ehSelecionado = agenteSelecionadoId === mesa.chave || agenteSelecionadoId === mesa.id
+        const ehSelecionado = agenteSelecionadoId === mesa.chave
 
         ctx.save()
         ctx.translate(bx, by)
@@ -425,57 +563,66 @@ export function PixelOffice({
           ctx.strokeStyle = '#38bdf8'
           ctx.lineWidth = 1.5
           ctx.beginPath()
-          ctx.arc(0, 0, 15, 0, Math.PI * 2)
+          ctx.arc(0, 0, 16, 0, Math.PI * 2)
           ctx.stroke()
         }
 
         // Cabeça
-        ctx.fillStyle = '#fde047' // tom de pele/amarelo pixel
+        ctx.fillStyle = '#fde047' // tom de pele pixel
         ctx.fillRect(-4, -13, 8, 8)
         ctx.strokeStyle = '#000000'
         ctx.lineWidth = 1
         ctx.strokeRect(-4, -13, 8, 8)
 
         // Cabelo / Boné
-        ctx.fillStyle = mesa.squad === 'coordenação' ? '#38bdf8' : mesa.squad === 'bots' ? '#ea580c' : '#7c3aed'
+        ctx.fillStyle =
+          mesa.squad === 'coordenação'
+            ? '#84cc16'
+            : mesa.squad === 'bots'
+            ? '#ea580c'
+            : mesa.squad === 'tráfego'
+            ? '#a855f7'
+            : '#0284c7'
         ctx.fillRect(-5, -15, 10, 4)
 
         // Corpo / Camiseta
-        const corRoupa = mesa.execucao?.dono === 'luana' ? '#0284c7' : mesa.execucao?.dono === 'renato' ? '#f97316' : '#a855f7'
+        const corRoupa =
+          mesa.execucao?.dono === 'luana'
+            ? '#0284c7'
+            : mesa.execucao?.dono === 'renato'
+            ? '#f97316'
+            : mesa.execucao?.dono === 'bia'
+            ? '#a855f7'
+            : '#334155'
         ctx.fillStyle = corRoupa
         ctx.fillRect(-5, -5, 10, 8)
         ctx.strokeRect(-5, -5, 10, 8)
 
-        // Posturas dos Braços
+        // Posturas dos Braços e Pernas
         if (postura === 'digitando') {
-          // Braços esticados para o teclado com animação sutil
           const animOffset = Math.sin(timestamp * 0.018) * 1.5
           ctx.fillStyle = '#fde047'
           ctx.fillRect(-6, -3 + animOffset, 3, 5)
           ctx.fillRect(3, -3 - animOffset, 3, 5)
         } else if (postura === 'lendo') {
-          // Braços erguidos na altura do monitor
           ctx.fillStyle = '#fde047'
           ctx.fillRect(-6, -6, 3, 5)
           ctx.fillRect(3, -6, 3, 5)
         } else if (postura === 'andando') {
-          // Balanço ao caminhar
           const passo = Math.sin(timestamp * 0.012) * 3
           ctx.fillStyle = corRoupa
           ctx.fillRect(-7, -4 + passo, 3, 7)
           ctx.fillRect(4, -4 - passo, 3, 7)
-          // Pernas
           ctx.fillStyle = '#1e293b'
           ctx.fillRect(-4, 3 + passo, 3, 5)
           ctx.fillRect(1, 3 - passo, 3, 5)
         } else {
-          // Silencioso ou Descanso (mãos no colo)
           ctx.fillStyle = corRoupa
           ctx.fillRect(-6, -2, 3, 5)
           ctx.fillRect(3, -2, 3, 5)
         }
 
-        // Balãozinho de status para ativos
+        // Balão de status para ativos
         if (ehTrabalhando) {
           ctx.fillStyle = '#a3e635'
           ctx.beginPath()
@@ -503,6 +650,7 @@ export function PixelOffice({
   }, [
     ilhasCalculadas,
     todasMesas,
+    limitesCena,
     pan,
     zoom,
     soAtivos,
@@ -511,7 +659,7 @@ export function PixelOffice({
     posicaoDescanso,
   ])
 
-  // Tratamento de clique no canvas para selecionar agente
+  // Tratamento de clique no canvas para selecionar agente (alvo >= 44x44px garantido)
   const tratarCliqueCanvas = (evento: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -522,22 +670,44 @@ export function PixelOffice({
     const w = canvas.clientWidth
     const h = canvas.clientHeight
 
-    // Converte coordenada da tela para coordenadas do mundo
     const mundoX = (clientX - (w / 2 + pan.x)) / zoom
     const mundoY = (clientY - (h / 2 + pan.y)) / zoom
 
-    // Busca a mesa mais próxima clicada
+    // Busca a mesa mais próxima clicada com tolerância de toque de 34px (diâmetro 68px >= 44x44px)
     let mesaEncontrada: MesaCalculada | null = null
+    let menorDist = Infinity
     for (const mesa of todasMesas) {
       const dist = Math.hypot(mesa.x - mundoX, mesa.y - mundoY)
-      if (dist < 32) {
+      if (dist < 34 && dist < menorDist) {
+        menorDist = dist
         mesaEncontrada = mesa
-        break
       }
     }
 
     if (mesaEncontrada) {
       aoSelecionarAgente?.(mesaEncontrada.chave)
+    }
+  }
+
+  // Navegação por teclado acessível no Canvas
+  const tratarTecladoCanvas = (evento: React.KeyboardEvent<HTMLCanvasElement>) => {
+    if (todasMesas.length === 0) return
+    const indexAtual = todasMesas.findIndex((m) => m.chave === agenteSelecionadoId)
+
+    if (evento.key === 'ArrowRight' || evento.key === 'ArrowDown') {
+      evento.preventDefault()
+      const proximo = (indexAtual + 1) % todasMesas.length
+      aoSelecionarAgente?.(todasMesas[proximo].chave)
+    } else if (evento.key === 'ArrowLeft' || evento.key === 'ArrowUp') {
+      evento.preventDefault()
+      const anterior = (indexAtual - 1 + todasMesas.length) % todasMesas.length
+      aoSelecionarAgente?.(todasMesas[anterior].chave)
+    } else if (evento.key === 'Home') {
+      evento.preventDefault()
+      aoSelecionarAgente?.(todasMesas[0].chave)
+    } else if (evento.key === 'End') {
+      evento.preventDefault()
+      aoSelecionarAgente?.(todasMesas[todasMesas.length - 1].chave)
     }
   }
 
@@ -574,7 +744,7 @@ export function PixelOffice({
             type="button"
             onClick={() => aoAlternarSoAtivos?.(!soAtivos)}
             aria-pressed={soAtivos}
-            className={`flex items-center gap-2 border-2 border-black px-3 py-1 text-xs font-black uppercase transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+            className={`flex items-center gap-2 border-2 border-black px-3 py-1.5 min-h-[44px] text-xs font-black uppercase transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
               soAtivos
                 ? 'bg-[#a3e635] text-black hover:bg-[#bef264]'
                 : 'bg-[#1e293b] text-slate-300 hover:bg-[#334155]'
@@ -596,7 +766,7 @@ export function PixelOffice({
             <button
               type="button"
               onClick={aoAbrirCerebro}
-              className="flex items-center gap-1.5 border-2 border-black bg-[#0284c7] px-3 py-1 text-xs font-black uppercase text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#0369a1]"
+              className="flex items-center gap-1.5 border-2 border-black bg-[#0284c7] px-3 py-1.5 min-h-[44px] text-xs font-black uppercase text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#0369a1]"
             >
               <span>🧠 CÉREBRO</span>
             </button>
@@ -612,7 +782,8 @@ export function PixelOffice({
               setZoom((z) => Math.min(ZOOM_MAX, z + 0.2))
             }}
             title="Aproximar Câmera"
-            className="border-2 border-black bg-[#1e293b] px-2.5 py-1 text-xs font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#334155]"
+            aria-label="Aproximar Câmera"
+            className="border-2 border-black bg-[#1e293b] px-3 py-1.5 min-h-[44px] min-w-[44px] text-xs font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#334155]"
           >
             +
           </button>
@@ -623,7 +794,8 @@ export function PixelOffice({
               setZoom((z) => Math.max(ZOOM_MIN, z - 0.2))
             }}
             title="Afastar Câmera"
-            className="border-2 border-black bg-[#1e293b] px-2.5 py-1 text-xs font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#334155]"
+            aria-label="Afastar Câmera"
+            className="border-2 border-black bg-[#1e293b] px-3 py-1.5 min-h-[44px] min-w-[44px] text-xs font-bold text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#334155]"
           >
             -
           </button>
@@ -632,10 +804,11 @@ export function PixelOffice({
             onClick={() => {
               vistaManualRef.current = false
               setZoom(1.0)
-              setPan({ x: 0, y: 20 })
+              setPan({ x: 0, y: 10 })
             }}
             title="Resetar Enquadramento"
-            className="border-2 border-black bg-[#1e293b] px-2.5 py-1 text-xs font-bold text-slate-300 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#334155]"
+            aria-label="Resetar Enquadramento"
+            className="border-2 border-black bg-[#1e293b] px-3 py-1.5 min-h-[44px] text-xs font-bold text-slate-300 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#334155]"
           >
             ↺ RESET
           </button>
@@ -667,7 +840,7 @@ export function PixelOffice({
           )}
         </div>
         <div className="text-[10px] text-slate-500">
-          Clique em qualquer agente/mesa para inspecionar
+          Clique ou use setas do teclado para inspecionar cada mesa
         </div>
       </div>
 
@@ -683,24 +856,46 @@ export function PixelOffice({
           <button
             type="button"
             onClick={() => aoAlternarSoAtivos?.(false)}
-            className="ml-3 border border-black bg-[#0f172a] px-2 py-0.5 text-[11px] font-bold text-[#38bdf8] hover:bg-slate-800"
+            className="ml-3 border border-black bg-[#0f172a] px-3 py-1.5 min-h-[44px] text-[11px] font-bold text-[#38bdf8] hover:bg-slate-800"
           >
             Ver sala completa ↗
           </button>
         </div>
       )}
 
-      {/* Canvas da Cena Voxel Interativa */}
+      {/* Canvas da Cena Voxel Interativa com Acessibilidade e Teclado */}
       <div className="relative h-[min(70vh,560px)] min-h-[380px] w-full overflow-hidden rounded-lg border-4 border-black bg-[#03050a] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
         <canvas
           ref={canvasRef}
+          role="img"
+          aria-label="Escritório virtual dos agentes em voxel"
+          tabIndex={0}
+          onKeyDown={tratarTecladoCanvas}
           onClick={tratarCliqueCanvas}
           onPointerDown={iniciarArrasto}
           onPointerMove={arrastar}
           onPointerUp={finalizarArrasto}
           onPointerCancel={finalizarArrasto}
-          className="h-full w-full cursor-grab active:cursor-grabbing touch-none select-none"
+          className="h-full w-full cursor-grab active:cursor-grabbing touch-none select-none focus:outline-none focus:ring-2 focus:ring-[#38bdf8]"
         />
+      </div>
+
+      {/* Alternativa Semântica Acessível para Leitores de Tela e Seleção por Teclado (Blocker 4) */}
+      <div className="sr-only" role="region" aria-label="Lista acessível de mesas dos agentes">
+        <h2>Mesas e agentes do escritório</h2>
+        <ul>
+          {todasMesas.map((mesa) => (
+            <li key={mesa.chave}>
+              <button
+                type="button"
+                onClick={() => aoSelecionarAgente?.(mesa.chave)}
+                aria-pressed={agenteSelecionadoId === mesa.chave}
+              >
+                {mesa.agente.nome} ({mesa.squad}) - {mesa.execucao?.estado || 'parado'} - {mesa.execucao?.tarefa || 'sem tarefa'}
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   )

@@ -11,7 +11,7 @@ import { Grafo3DCofre } from '../ui/Grafo3DCofre'
 import { PainelInstrumentoCofre } from '../ui/PainelInstrumentoCofre'
 import { useRota } from '../nav/useRota'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
-import { PIXEL_AGENT_SQUADS } from '../dados/pixel-agents'
+import { PIXEL_AGENTS, PIXEL_AGENT_SQUADS, mesclarRuntimesNoCatalogo, resolverAgenteNoCatalogo } from '../dados/pixel-agents'
 
 function useFps(): number {
   const [fps, setFps] = useState(60)
@@ -20,7 +20,12 @@ function useFps(): number {
 
   useEffect(() => {
     let handle: number
+    let ativo = true
+
     const medir = () => {
+      if (document.hidden) {
+        return
+      }
       quadrosRef.current++
       const agora = performance.now()
       if (agora - ultimoTempoRef.current >= 1000) {
@@ -28,10 +33,29 @@ function useFps(): number {
         quadrosRef.current = 0
         ultimoTempoRef.current = agora
       }
+      if (ativo) {
+        handle = requestAnimationFrame(medir)
+      }
+    }
+
+    const aoMudarVisibilidade = () => {
+      if (!document.hidden) {
+        ultimoTempoRef.current = performance.now()
+        quadrosRef.current = 0
+        handle = requestAnimationFrame(medir)
+      }
+    }
+
+    document.addEventListener('visibilitychange', aoMudarVisibilidade)
+    if (!document.hidden) {
       handle = requestAnimationFrame(medir)
     }
-    handle = requestAnimationFrame(medir)
-    return () => cancelAnimationFrame(handle)
+
+    return () => {
+      ativo = false
+      cancelAnimationFrame(handle)
+      document.removeEventListener('visibilitychange', aoMudarVisibilidade)
+    }
   }, [])
 
   return fps
@@ -209,6 +233,12 @@ function VisaoOperacao({
   const aprovacoesItens = estado.aprovacoes?.itens ?? []
   const aprovacoesPendentes = aprovacoesItens.filter((i) => i.estado === 'aguardando' || i.estado === 'pendente')
 
+  // Catálogo dinâmico mesclado com runtimes ao vivo
+  const catalogoMesclado = useMemo(
+    () => mesclarRuntimesNoCatalogo(PIXEL_AGENTS, listaVivos),
+    [listaVivos]
+  )
+
   // Console de Mudanças Detectadas entre Snapshots
   const [logMudancas, setLogMudancas] = useState<Array<{ hora: string; texto: string; tipo: 'ativo' | 'alerta' | 'info' }>>([])
   const agentesAnterioresRef = useRef<Map<string, string>>(new Map())
@@ -238,12 +268,12 @@ function VisaoOperacao({
       }
     }
 
-    // Detecta agentes que saíram
+    // Detecta agentes que saíram (Blocker 7: Ausente na leitura seguinte: ${nome || chave})
     for (const [chave, estadoAnt] of agentesAnterioresRef.current.entries()) {
       if (!novoMapa.has(chave) && estadoAnt === 'trabalhando') {
         logsNovos.push({
           hora: agora,
-          texto: `Execução finalizada ou fora da leitura: ${chave}`,
+          texto: `Ausente na leitura seguinte: ${chave}`,
           tipo: 'info',
         })
       }
@@ -255,8 +285,29 @@ function VisaoOperacao({
     agentesAnterioresRef.current = novoMapa
   }, [vivos, listaVivos])
 
+  // Contagem dinâmica por squad resolvida via catálogo compartilhado (Blocker 6)
+  const ativosCoordenacao = useMemo(
+    () =>
+      ativosTrabalhando.filter(
+        (a) => resolverAgenteNoCatalogo(a, catalogoMesclado)?.squad === 'coordenação'
+      ),
+    [ativosTrabalhando, catalogoMesclado]
+  )
+
+  const squadsComAtivos = useMemo(() => {
+    return PIXEL_AGENT_SQUADS.filter((s) => s.id !== 'coordenação').map((squad) => {
+      const ativosDoDepto = ativosTrabalhando.filter(
+        (a) => resolverAgenteNoCatalogo(a, catalogoMesclado)?.squad === squad.id
+      )
+      return {
+        ...squad,
+        ativos: ativosDoDepto,
+      }
+    })
+  }, [ativosTrabalhando, catalogoMesclado])
+
   return (
-    <div className="space-y-4 font-mono">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden space-y-4 font-mono">
       {/* Botões de Ação no Topo do Cérebro */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-black bg-[#0f172a] p-3 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
         <div className="flex items-center gap-2 min-w-0">
@@ -327,47 +378,44 @@ function VisaoOperacao({
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
             {/* Núcleo Central */}
             <div className="col-span-2 sm:col-span-3 border-2 border-[#84cc16] bg-[#84cc16]/10 p-3 rounded text-center">
-              <div className="text-[10px] uppercase font-black text-[#84cc16]">NÚCLEO CENTRAL DE COORDENAÇÃO</div>
+              <div className="flex items-center justify-center gap-2">
+                <div className="text-[10px] uppercase font-black text-[#84cc16]">NÚCLEO CENTRAL DE COORDENAÇÃO</div>
+                {ativosCoordenacao.length > 0 && (
+                  <span className="text-[9px] font-bold bg-[#84cc16] text-black px-1.5 py-0.5 rounded-full">
+                    {ativosCoordenacao.length} ativo{ativosCoordenacao.length > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
               <div className="text-sm font-black text-white mt-0.5">LUANA · COORDENADORA GERAL</div>
               <div className="text-[10.5px] text-slate-300 mt-1">Supervisão autônoma, triagem de eventos e despacho</div>
             </div>
 
             {/* Squads Catalogados */}
-            {PIXEL_AGENT_SQUADS.filter((s) => s.id !== 'coordenação').map((squad) => {
-              const ativosDoDepto = listaVivos.filter((a) => {
-                if (squad.id === 'bots' && a.dono === 'renato') return true
-                if (squad.id === 'tráfego' && a.dono === 'bia') return true
-                if (squad.id === 'comercial' && (a.dono === 'elza' || a.id.includes('comercial'))) return true
-                if (squad.id === 'conteúdo' && a.dono === 'iris') return true
-                return false
-              })
-
-              return (
-                <div
-                  key={squad.id}
-                  className="border border-slate-800 bg-[#0f172a] p-2.5 rounded flex flex-col justify-between"
-                  style={{ borderTopColor: squad.cor, borderTopWidth: 3 }}
-                >
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black uppercase truncate" style={{ color: squad.cor }}>
-                        {squad.nome}
-                      </span>
-                      {ativosDoDepto.length > 0 && (
-                        <span className="size-2 bg-[#a3e635] rounded-full animate-ping" />
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-1.5 text-[10px]">
-                    <span className="text-slate-400">Ativos:</span>
-                    <span className={`font-bold font-mono ${ativosDoDepto.length > 0 ? 'text-[#a3e635]' : 'text-slate-400'}`}>
-                      {ativosDoDepto.length}
+            {squadsComAtivos.map((squad) => (
+              <div
+                key={squad.id}
+                className="border border-slate-800 bg-[#0f172a] p-2.5 rounded flex flex-col justify-between"
+                style={{ borderTopColor: squad.cor, borderTopWidth: 3 }}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase truncate" style={{ color: squad.cor }}>
+                      {squad.nome}
                     </span>
+                    {squad.ativos.length > 0 && (
+                      <span className="size-2 bg-[#a3e635] rounded-full animate-ping" />
+                    )}
                   </div>
                 </div>
-              )
-            })}
+
+                <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-1.5 text-[10px]">
+                  <span className="text-slate-400">Ativos:</span>
+                  <span className={`font-bold font-mono ${squad.ativos.length > 0 ? 'text-[#a3e635]' : 'text-slate-400'}`}>
+                    {squad.ativos.length}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -540,7 +588,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
   const ligar = (id: string) => setAlvo((antigo) => (antigo === id || id === escolhido ? null : id))
 
   return (
-    <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10 font-mono text-slate-100">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden px-3 py-4 sm:px-6 lg:px-8 xl:px-10 font-mono text-slate-100">
       {/* Header com Seletor de Visão: Operação e Conhecimento */}
       <TituloDaTela
         mostrarSeletorData={false}
