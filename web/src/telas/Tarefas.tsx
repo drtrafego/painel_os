@@ -26,7 +26,7 @@ function PixelJanela({
 }) {
   return (
     <div
-      className={`border-4 border-black bg-[#1e293b] text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all ${className}`}
+      className={`min-w-0 border-4 border-black bg-[#1e293b] text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all ${className}`}
     >
       {/* Barra de Título da Janela Retrô */}
       <div className="flex items-center justify-between border-b-4 border-black bg-[#0f172a] px-3 py-2">
@@ -502,7 +502,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
       </div>
 
       {/* Janelas Secundárias de Trabalho dos Agentes */}
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-2">
         <PixelJanela
           titulo="FILA DE APROVAÇÕES DE AGENTES"
           badge={`${aprovacoesPendentes.length} PENDENTES`}
