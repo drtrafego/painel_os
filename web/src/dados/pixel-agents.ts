@@ -249,9 +249,11 @@ export function mesclarRuntimesNoCatalogo(
         normalizarId(agente.id) === normalizarId(runtime.id) ||
         agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(runtime.id))
       if (!match) return false
-      // Se tiver dono diferente ou squad incompatível com o dono da execução, não compartilha a mesma mesa
-      if (squadDono && agente.squad !== squadDono) return false
       const donoExistente = donosAssociados.get(agente.id)
+      // O catálogo canônico pertence à operação geral (Luana). Bia e Renato
+      // só reutilizam a entrada quando ela já está no squad deles; nos demais
+      // casos recebem uma cópia com chave composta e squad do dono.
+      if (squadDono && agente.squad !== squadDono && !(donoNorm === 'luana' && donoExistente === undefined)) return false
       return donoExistente === undefined || donoExistente === runtime.dono
     })
 

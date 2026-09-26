@@ -278,8 +278,8 @@ export function Tarefas({ estado, vista }: PropsTela) {
 
   return (
     <div className="w-full max-w-none space-y-5 px-3 py-4 font-mono sm:px-6 lg:px-8 xl:px-10">
-      {/* Header Retrô em Pixel Art */}
-      <div className="border-4 border-black bg-[#1e293b] p-4 sm:p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+      {/* O escritório aprovado já tem cabeçalho próprio; o cabeçalho legado fica nas visões antigas. */}
+      {modoExibicao !== 'office' && <div className="border-4 border-black bg-[#1e293b] p-4 sm:p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2.5">
@@ -299,12 +299,8 @@ export function Tarefas({ estado, vista }: PropsTela) {
               <button
                 type="button"
                 onClick={() => setModoExibicao('office')}
-                aria-pressed={modoExibicao === 'office'}
-                className={`px-3 py-1.5 text-xs font-black uppercase transition-all ${
-                  modoExibicao === 'office'
-                    ? 'bg-[#a3e635] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-                    : 'text-slate-400 hover:text-white'
-                }`}
+                aria-pressed={false}
+                className="px-3 py-1.5 text-xs font-black uppercase text-slate-400 transition-all hover:text-white"
               >
                 🎮 ESCRITÓRIO VOXEL
               </button>
@@ -343,10 +339,10 @@ export function Tarefas({ estado, vista }: PropsTela) {
             </button>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Faixa de Agentes Ativos (Trabalhando Agora) */}
-      {listaVivos.filter((a) => a.estado === 'trabalhando').length > 0 && (
+      {modoExibicao !== 'office' && listaVivos.filter((a) => a.estado === 'trabalhando').length > 0 && (
         <div className="border-2 border-black bg-[#0f172a] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center justify-between gap-2 border-b border-slate-700/80 pb-2 mb-2">
             <span className="text-[11px] font-bold text-[#a3e635] uppercase flex items-center gap-1.5">
@@ -393,7 +389,7 @@ export function Tarefas({ estado, vista }: PropsTela) {
       )}
 
       {/* Alerta de Falha da Sonda Viva */}
-      {(erroVivos || vivos?.ok === false) && (
+      {modoExibicao !== 'office' && (erroVivos || vivos?.ok === false) && (
         <div className="border-4 border-black bg-[#450a0a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center gap-2 text-xs font-black uppercase text-[#f87171]">
             <span>⚠ FALHA NA SONDA DE AGENTES AO VIVO</span>
@@ -435,16 +431,12 @@ export function Tarefas({ estado, vista }: PropsTela) {
             aoAbrirCerebro={() => ir('cofre', null, { visao: 'operacao' })}
           />
 
-          {/* Inspetor Único e Acessível */}
-          {resumoSelecionado && (
-            <InspectorUnificadoAgente
-              resumo={resumoSelecionado}
-              aoFechar={() => {
-                setAgenteInspecionado(null)
-                ir('tarefas', null, { visao: soAtivos ? 'ativos' : null, execucao: null })
-              }}
-            />
-          )}
+          <div className="flex flex-wrap items-center justify-end gap-2 text-[10px] font-bold uppercase text-slate-400">
+            <span className="mr-auto">Outras visões</span>
+            <button type="button" onClick={() => setModoExibicao('terminal')} className="min-h-11 rounded border border-slate-700 bg-[#0f172a] px-3 hover:text-white">Terminal CRT</button>
+            <button type="button" onClick={() => setModoExibicao('squad')} className="min-h-11 rounded border border-slate-700 bg-[#0f172a] px-3 hover:text-white">Mapa do squad</button>
+            <button type="button" onClick={() => ir('cofre', null, { visao: 'operacao' })} className="min-h-11 rounded border border-slate-700 bg-[#0f172a] px-3 text-[#38bdf8]">Cérebro</button>
+          </div>
         </section>
       ) : modoExibicao === 'terminal' ? (
         /* Modo Terminal CRT */

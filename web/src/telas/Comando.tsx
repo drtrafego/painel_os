@@ -391,6 +391,46 @@ function PorModelo({ estado }: { estado: Estado }) {
  * "ativa" no cabecalho, e quem batia o olho lia ATIVA. Vencida vira ambar, o
  * cabecalho diz ha quantos dias, e a frase escreve que ninguem substituiu.
  */
+function formatarResetBrt(valor: string | number | null | undefined) {
+  if (valor === null || valor === undefined) return null
+  const data = new Date(typeof valor === 'number' ? valor * 1000 : valor)
+  if (Number.isNaN(data.getTime())) return null
+  const dia = data.toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+  }).replace('.', '')
+  const hora = data.toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return `${dia} às ${hora} BRT`
+}
+
+function corDaBarra(percentual: number | null | undefined) {
+  return (percentual ?? 0) >= 95 ? 'bg-red-500' : (percentual ?? 0) >= 80 ? 'bg-amber-500' : 'bg-emerald-500'
+}
+
+function BarraDeUso({ titulo, percentual, reset, testId }: { titulo: string; percentual: number | null; reset?: string | number | null; testId?: string }) {
+  const resetBrt = formatarResetBrt(reset)
+  return (
+    <div data-testid={testId}>
+      <div className="flex items-start justify-between gap-3 text-[11px]">
+        <span className="font-medium text-tinta-3">{titulo}:</span>
+        <span className="text-right font-mono font-bold text-tinta">
+          {percentual !== null && percentual !== undefined ? `${percentual}%` : 'sem dado'}
+          {resetBrt && <span className="ml-1 text-[9.5px] font-normal text-tinta-3">· reseta em {resetBrt}</span>}
+        </span>
+      </div>
+      <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full border border-linha/40 bg-black/40">
+        <div className={`h-full transition-all duration-300 ${corDaBarra(percentual)}`} style={{ width: `${Math.min(100, Math.max(0, percentual ?? 0))}%` }} />
+      </div>
+    </div>
+  )
+}
+
 function UsoDosPlanos({ uso }: { uso?: Estado['uso_planos'] }) {
   if (!uso || uso.status === 'erro' || (!uso.claude && !uso.codex)) {
     return (
@@ -414,7 +454,7 @@ function UsoDosPlanos({ uso }: { uso?: Estado['uso_planos'] }) {
 
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         {/* Bloco Claude */}
-        <div className="rounded-lg border border-linha bg-white/2 p-3">
+        <div className="rounded-lg border border-linha bg-white/2 p-3" data-testid="uso-claude-card">
           <div className="flex items-center justify-between">
             <span className="font-mono text-xs font-bold text-tinta">Claude</span>
             <span className="rotulo text-[10px]">plano oficial (statusLine)</span>
@@ -515,7 +555,7 @@ function UsoDosPlanos({ uso }: { uso?: Estado['uso_planos'] }) {
         </div>
 
         {/* Bloco Codex */}
-        <div className="rounded-lg border border-linha bg-white/2 p-3">
+        <div className="rounded-lg border border-linha bg-white/2 p-3" data-testid="uso-codex-card">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <span className="font-mono text-xs font-bold text-tinta">Codex</span>
@@ -524,26 +564,22 @@ function UsoDosPlanos({ uso }: { uso?: Estado['uso_planos'] }) {
             <span className="rotulo text-[10px]">conta compartilhada</span>
           </div>
 
-          <div className="mt-2 space-y-1.5 text-[11.5px]">
-            <div className="flex justify-between border-b border-linha/50 pb-1">
-              <span className="text-tinta-3">
-                uso semanal ({codex?.primario_janela_dias ? `${codex.primario_janela_dias}d` : '7d'}):
-              </span>
-              <span className="font-mono text-tinta font-bold">
-                {codex?.primario_percentual !== null && codex?.primario_percentual !== undefined
-                  ? `${codex.primario_percentual}%`
-                  : 'indeterminado'}
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-linha/50 pb-1">
-              <span className="text-tinta-3">uso secundário:</span>
-              <span className="font-mono text-tinta">
-                {codex?.secundario_percentual !== null && codex?.secundario_percentual !== undefined
-                  ? `${codex.secundario_percentual}%`
-                  : 'não informado'}
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-linha/50 pb-1">
+          <div className="mt-3 space-y-3">
+            <BarraDeUso
+              titulo={`uso semanal (${codex?.primario_janela_dias ? `${codex.primario_janela_dias}d` : '7d'})`}
+              percentual={codex?.primario_percentual ?? null}
+              reset={codex?.primario_reset}
+              testId="uso-codex-semanal"
+            />
+            {codex?.secundario_percentual !== null && codex?.secundario_percentual !== undefined && (
+              <BarraDeUso
+                titulo="janela curta"
+                percentual={codex.secundario_percentual}
+                reset={codex.secundario_reset}
+                testId="uso-codex-curto"
+              />
+            )}
+            <div className="flex justify-between border-t border-linha/40 pt-2 text-[11px]">
               <span className="text-tinta-3">estimativa 24h:</span>
               <span className="font-mono text-lima font-bold">
                 {codex?.tokens_24h_estimativa !== null && codex?.tokens_24h_estimativa !== undefined

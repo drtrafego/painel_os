@@ -217,6 +217,9 @@ async function buscarSonda() {
     clearTimeout(timeoutId)
     if (idTentativa !== sequenciaBusca) return
     const isAbort = e instanceof DOMException && e.name === 'AbortError'
+    // React StrictMode monta, desmonta e monta novamente em desenvolvimento.
+    // O cancelamento desse primeiro ciclo não é falha da sonda nem timeout.
+    if (isAbort && ouvintes.size === 0) return
     const msg = isAbort ? 'Tempo limite da sonda esgotado (8s)' : e instanceof Error ? e.message : String(e)
     const decorrido = ultimoSucessoTimestamp ? Math.round((Date.now() - ultimoSucessoTimestamp) / 1000) : 0
 
@@ -236,9 +239,12 @@ async function buscarSonda() {
 
 function iniciarServico() {
   if (timerPolling === null && typeof window !== 'undefined') {
-    buscarSonda()
     timerPolling = window.setInterval(buscarSonda, 10000)
     timerStaleCheck = window.setInterval(verificarStale, 1000)
+    // Adia um microtask para sobreviver ao ciclo de verificação do StrictMode.
+    queueMicrotask(() => {
+      if (ouvintes.size > 0) buscarSonda()
+    })
   }
 }
 

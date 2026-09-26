@@ -265,6 +265,7 @@ def _analisar_cauda(caminho: Path, n: int = CAUDA_BYTES) -> dict:
     etapa = None
     etapa_medida = False
     ferramenta = None
+    esforco = None
     ilegiveis = 0
     problema_detectado = None
 
@@ -281,6 +282,9 @@ def _analisar_cauda(caminho: Path, n: int = CAUDA_BYTES) -> dict:
 
         if ultimo_ts is None and isinstance(reg.get("timestamp"), str):
             ultimo_ts = reg["timestamp"]
+
+        if esforco is None:
+            esforco = _extrair_esforco_registro(reg)
 
         msg = reg.get("message") if isinstance(reg.get("message"), dict) else {}
         is_api_err = (
@@ -313,7 +317,7 @@ def _analisar_cauda(caminho: Path, n: int = CAUDA_BYTES) -> dict:
                     etapa, etapa_medida = _etapa_do_bloco(bloco)
                     ferramenta = bloco.get("name")
                     break
-        if fase != "desconhecida" and etapa is not None:
+        if fase != "desconhecida" and etapa is not None and esforco is not None:
             break
 
     return {
@@ -324,6 +328,7 @@ def _analisar_cauda(caminho: Path, n: int = CAUDA_BYTES) -> dict:
         "ultimo_ts_utc": ultimo_ts,
         "linhas_ilegiveis": ilegiveis,
         "problema_api": problema_detectado,
+        "esforco": _formatar_esforco(esforco),
     }
 
 
@@ -342,6 +347,69 @@ def _texto_curto(valor: object, limite: int = 160) -> str | None:
         return None
     valor = " ".join(valor.split())
     return valor[:limite] if valor else None
+
+
+def _sanitizar_etapa_codex(texto: str) -> str | None:
+    """Prepara uma linha de pedido para exibição pública no painel."""
+    limpo = _sanitizar_caminho(texto)
+    limpo = re.sub(
+        r"(?i)(?<!\S)\S*[\\/]\S*(?:credencial|credential|secret|token|senha|password|\.env)\S*",
+        "[caminho]",
+        limpo,
+    )
+    limpo = re.sub(
+        r"(?i)\b(token|senha|password|credencial|secret|api[ _-]?key)\b\s*[:=]\s*\S+",
+        lambda m: f"{m.group(1)}: [redigido]",
+        limpo,
+    )
+
+    def _redigir_telefone(casamento: re.Match[str]) -> str:
+        valor = casamento.group(0)
+        return "[telefone]" if len(re.sub(r"\D", "", valor)) >= 10 else valor
+
+    limpo = re.sub(r"(?<!\w)\+?\d[\d(). -]{8,}\d(?!\w)", _redigir_telefone, limpo)
+    return _texto_curto(limpo, 90)
+
+
+def _primeira_linha_pedido_codex(registro: dict) -> str | None:
+    """Extrai a primeira linha útil de uma mensagem real do usuário."""
+    payload = registro.get("payload")
+    if not (
+        registro.get("type") == "response_item"
+        and isinstance(payload, dict)
+        and payload.get("type") == "message"
+        and payload.get("role") == "user"
+    ):
+        return None
+
+    conteudo = payload.get("content")
+    if isinstance(conteudo, str):
+        blocos = [conteudo]
+    elif isinstance(conteudo, list):
+        blocos = [
+            bloco.get("text")
+            for bloco in conteudo
+            if isinstance(bloco, dict)
+            and bloco.get("type") in ("input_text", "text")
+            and isinstance(bloco.get("text"), str)
+        ]
+    else:
+        return None
+
+    prefixos_injetados = (
+        "<recommended_plugins>",
+        "# agents.md instructions for ",
+        "<environment_context>",
+    )
+    for bloco in blocos:
+        texto = bloco.lstrip()
+        if texto.lower().startswith(prefixos_injetados):
+            continue
+        for linha in texto.splitlines():
+            linha = " ".join(linha.split())
+            if linha:
+                return _sanitizar_etapa_codex(linha)
+    return None
 
 
 def _formatar_modelo(modelo: str | None) -> str | None:
@@ -381,10 +449,27 @@ def _formatar_modelo(modelo: str | None) -> str | None:
     if "haiku" in m_low:
         return "Haiku"
 
-    if "gpt-6" in m_low:
-        return "GPT-6 Astra" if "astra" in m_low else "GPT-6"
+    # OpenAI: variantes específicas precisam vir antes das famílias genéricas.
+    modelos_codex = {
+        "gpt-5.6-sol": "GPT-5.6 Sol",
+        "gpt-5.6-terra": "GPT-5.6 Terra",
+        "gpt-5.6-luna": "GPT-5.6 Luna",
+        "gpt-6-astra": "GPT-6 Astra",
+    }
+    for id_modelo, rotulo in modelos_codex.items():
+        if id_modelo in m_low:
+            return rotulo
     if any(k in m_low for k in ("gpt-5-5", "gpt-5.5")):
         return "GPT-5.5"
+    versao_gpt = re.search(r"\bgpt-(\d+\.\d+)(?:-([a-z0-9][a-z0-9._-]*))?", m_low)
+    if versao_gpt:
+        rotulo = f"GPT-{versao_gpt.group(1)}"
+        variante = versao_gpt.group(2)
+        if variante:
+            rotulo += " " + variante.replace("-", " ").replace("_", " ").title()
+        return rotulo[:25]
+    if "gpt-6" in m_low:
+        return "GPT-6"
     if "gpt-5" in m_low:
         return "GPT-5"
     if "gpt-4o-mini" in m_low:
@@ -445,11 +530,60 @@ def _formatar_esforco(esforco: str | None) -> str | None:
         "médio": "médio",
         "high": "alto",
         "alto": "alto",
-        "max": "máximo",
-        "maximo": "máximo",
-        "máximo": "máximo",
+        "xhigh": "máximo (xhigh)",
+        "max": "máximo (xhigh)",
+        "maximo": "máximo (xhigh)",
+        "máximo": "máximo (xhigh)",
+        "máximo (xhigh)": "máximo (xhigh)",
     }
     return mapa.get(e, e.capitalize())
+
+
+_CHAVES_ESFORCO = (
+    "model_reasoning_effort",
+    "reasoning_effort",
+    "perTurnEffort",
+    "effort",
+)
+_ESFORCOS_REAIS = {"low", "medium", "high", "xhigh"}
+_CAMPOS_CONTEUDO_LIVRE = {"content", "input", "arguments", "text", "thinking", "signature"}
+
+
+def _extrair_esforco_registro(registro: dict) -> str | None:
+    """Lê o esforço real da telemetria, sem confundir texto/tool input com metadado.
+
+    Codex grava o valor em turn_context (direto ou em settings); Claude grava
+    normalmente `effort`/`perTurnEffort` no evento. As chaves específicas de
+    reasoning têm precedência sobre o alias genérico.
+    """
+    if not isinstance(registro, dict):
+        return None
+
+    def buscar(objeto: object, chave: str) -> str | None:
+        if isinstance(objeto, dict):
+            valor = objeto.get(chave)
+            if isinstance(valor, str) and valor.strip():
+                normalizado = valor.strip().lower()
+                if normalizado in _ESFORCOS_REAIS:
+                    return normalizado
+            for nome, filho in objeto.items():
+                if nome in _CAMPOS_CONTEUDO_LIVRE:
+                    continue
+                achado = buscar(filho, chave)
+                if achado:
+                    return achado
+        elif isinstance(objeto, list):
+            for filho in objeto:
+                achado = buscar(filho, chave)
+                if achado:
+                    return achado
+        return None
+
+    for chave in _CHAVES_ESFORCO:
+        achado = buscar(registro, chave)
+        if achado:
+            return achado
+    return None
 
 
 def _ts_para_epoch(ts: object) -> float | None:
@@ -469,6 +603,7 @@ def _mesmo_dia_brt(epoch: float, agora: float) -> bool:
 
 
 _CACHE_PATH = Path(tempfile.gettempdir()) / "painel_os_metricas_cache.json"
+_CACHE_METRICAS_VERSAO = 3
 
 
 def _carregar_cache_disco() -> dict[str, dict]:
@@ -504,7 +639,12 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
         return {}
 
     cached = _CACHE_METRICAS.get(chave)
-    if cached and cached.get("mtime") == st.st_mtime and cached.get("size") == st.st_size:
+    if (
+        cached
+        and cached.get("versao") == _CACHE_METRICAS_VERSAO
+        and cached.get("mtime") == st.st_mtime
+        and cached.get("size") == st.st_size
+    ):
         res = dict(cached["metricas"])
         p_epoch = cached.get("primeiro_ts_epoch")
         if p_epoch:
@@ -520,6 +660,7 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
     tokens_output = 0
     tokens_cache = 0
     primeiro_ts_epoch = None
+    etapa_codex = None
     msgs_vistas: set[str] = set()
     tools_vistos: set[str] = set()
 
@@ -536,20 +677,20 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
                 if not isinstance(reg, dict):
                     continue
 
+                if etapa_codex is None:
+                    etapa_codex = _primeira_linha_pedido_codex(reg)
+
                 ts_raw = reg.get("timestamp") or reg.get("created_at") or reg.get("time")
                 ts_ep = _ts_para_epoch(ts_raw)
                 if ts_ep:
                     if primeiro_ts_epoch is None:
                         primeiro_ts_epoch = ts_ep
 
-                if not esforco:
-                    e = reg.get("effort")
-                    if not e and isinstance(reg.get("message"), dict):
-                        e = reg["message"].get("effort")
-                    if not e and isinstance(reg.get("payload"), dict):
-                        e = reg["payload"].get("effort")
-                    if isinstance(e, str) and e.strip():
-                        esforco = e.strip()
+                # A sessão pode trocar o esforço ao ser retomada. Assim como o
+                # modelo, o último valor explícito do transcript é o vigente.
+                e = _extrair_esforco_registro(reg)
+                if e:
+                    esforco = e
 
                 msg = reg.get("message")
                 if isinstance(msg, dict):
@@ -585,15 +726,17 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
                 tipo = reg.get("type")
                 payload = reg.get("payload") if isinstance(reg.get("payload"), dict) else {}
 
-                if not modelo:
+                if tipo == "turn_context" and isinstance(payload.get("model"), str):
+                    # O turn_context registra o motor efetivamente usado. Em uma
+                    # sessão retomada ele pode mudar, então o último vence.
+                    modelo = payload["model"].strip()
+                elif not modelo:
                     if tipo == "session_meta":
                         prov = payload.get("provenance")
                         if isinstance(prov, dict) and isinstance(prov.get("model"), str):
                             modelo = prov["model"].strip()
                         elif isinstance(payload.get("model"), str):
                             modelo = payload["model"].strip()
-                    elif tipo == "turn_context" and isinstance(payload.get("model"), str):
-                        modelo = payload["model"].strip()
 
                 if tipo == "token_usage_record":
                     u = payload.get("usage") or payload.get("turn_token_usage") or payload.get("thread_token_usage")
@@ -626,9 +769,11 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
         "tokens_formatado": _formatar_tokens(tokens_total) if tokens_total > 0 else None,
         "rodando_ha_s": round(rodando_s, 1) if rodando_s is not None else None,
         "rodando_ha": _formatar_duracao(rodando_s),
+        "etapa_codex": etapa_codex,
     }
 
     _CACHE_METRICAS[chave] = {
+        "versao": _CACHE_METRICAS_VERSAO,
         "mtime": st.st_mtime,
         "size": st.st_size,
         "primeiro_ts_epoch": primeiro_ts_epoch,
@@ -827,7 +972,7 @@ def _codex_recentes(agora: float, dono: str | None = None,
             "profundidade": identidade["profundidade"],
             "estado": estado_codex,
             "fase": "atividade_codex",
-            "etapa": "atividade Codex detectada",
+            "etapa": metricas.get("etapa_codex") or "atividade Codex detectada",
             "etapa_e_description": False,
             "ferramenta": None,
             "silencio_s": round(silencio, 1),
@@ -996,7 +1141,7 @@ def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float, process
         "problema": cauda.get("problema_api"),
         "modelo": None,
         "modelo_legivel": None,
-        "esforco": None,
+        "esforco": cauda.get("esforco"),
         "ferramentas_usadas": None,
         "tokens_total": None,
         "tokens_formatado": None,

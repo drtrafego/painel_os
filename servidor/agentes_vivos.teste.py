@@ -23,6 +23,7 @@ from agentes_vivos import (
     SILENCIOSO,
     PARADO,
     LIMIAR_VIVO_S,
+    _formatar_esforco,
     _formatar_modelo,
     ler_agentes,
     ler_agentes_da_casa,
@@ -274,6 +275,7 @@ def testar_agentes_vivos():
         transcript_fallback = projeto_bia_sessao / f"{sessao_fallback}.jsonl"
         transcript_fallback.write_text(json.dumps({
             "type": "assistant",
+            "effort": "medium",
             "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "entrega sintetica"}]},
         }) + "\n", encoding="utf-8")
         os.utime(transcript_fallback, (mtime_pai, mtime_pai))
@@ -284,6 +286,7 @@ def testar_agentes_vivos():
         )
         conferir("sessão pai recente entregue também aparece", r_bia_sessao["agentes"][0]["id"], f"sessao-{sessao_fallback[-8:]}")
         conferir("fallback da sessão pai mantém dono bia", r_bia_sessao["agentes"][0]["dono"], "bia")
+        conferir("sessão Claude raiz expõe esforço real do transcript", r_bia_sessao["agentes"][0]["esforco"], "médio")
         conferir("fallback da sessão pai entregue fica ocioso", r_bia_sessao["agentes"][0]["estado"], SILENCIOSO)
         conferir("sessão pai ociosa não conta como trabalhando", r_bia_sessao["contagem"]["trabalhando"], 0)
         conferir("sessão pai ociosa conta como silenciosa", r_bia_sessao["contagem"]["silencioso"], 1)
@@ -405,6 +408,76 @@ def testar_agentes_vivos():
         conferir("sessão Codex aparece uma vez só (não triplica)", len(sessoes_codex), 1)
         conferir("sessão Codex carimbada com o dono certo", [a.get("dono") for a in sessoes_codex], ["luana"])
         conferir("total = 4 Claude + 1 Codex", len(casa_codex["agentes"]), 5)
+
+        print("\n--- Teste 6c: Codex usa modelo real e primeira linha útil do pedido")
+        raiz_codex_etapa = tmp / "codex-etapa"
+        pasta_codex_etapa = raiz_codex_etapa / "2026"
+        pasta_codex_etapa.mkdir(parents=True)
+        transcript_codex_etapa = pasta_codex_etapa / "rollout-etapa-sintetica.jsonl"
+        linhas_codex_etapa = [
+            {"type": "session_meta", "payload": {"agent_role": "worker"}},
+            {"type": "response_item", "payload": {
+                "type": "message", "role": "user", "content": [
+                    {"type": "input_text", "text": "<recommended_plugins>\nconteúdo injetado\n</recommended_plugins>"},
+                    {"type": "input_text", "text": "# AGENTS.md instructions for /exemplo\nconteúdo injetado"},
+                ],
+            }},
+            {"type": "turn_context", "payload": {
+                "model": "gpt-5.5", "model_reasoning_effort": "high",
+            }},
+            {"type": "turn_context", "payload": {
+                "model": "gpt-5.6-sol", "effort": "high", "reasoning_effort": "xhigh",
+            }},
+            {"type": "response_item", "payload": {
+                "type": "message", "role": "user", "content": [{
+                    "type": "input_text",
+                    "text": "Revise /srv/exemplo/.credencial e ligue para +55 (11) 99999-8888\nSegunda linha não entra",
+                }],
+            }},
+            {"type": "response_item", "payload": {
+                "type": "message", "role": "user", "content": [{
+                    "type": "input_text", "text": "Pedido posterior não substitui o primeiro",
+                }],
+            }},
+        ]
+        transcript_codex_etapa.write_text(
+            "\n".join(json.dumps(linha, ensure_ascii=False) for linha in linhas_codex_etapa) + "\n",
+            encoding="utf-8",
+        )
+        agora_codex_etapa = time.time()
+        os.utime(transcript_codex_etapa, (agora_codex_etapa, agora_codex_etapa))
+        cards_codex_etapa = mod._codex_recentes(
+            agora_codex_etapa,
+            dono="luana",
+            raiz_codex=raiz_codex_etapa,
+        )
+        conferir("transcript sintético gera um card Codex", len(cards_codex_etapa), 1)
+        card_codex_etapa = cards_codex_etapa[0]
+        conferir("último turn_context fornece o modelo real", card_codex_etapa["modelo"], "gpt-5.6-sol")
+        conferir("modelo real recebe rótulo específico", card_codex_etapa["modelo_legivel"], "GPT-5.6 Sol")
+        conferir("último turn_context fornece esforço real", card_codex_etapa["esforco"], "máximo (xhigh)")
+        conferir(
+            "etapa usa primeira linha útil e redige caminho/telefone",
+            card_codex_etapa["etapa"],
+            "Revise [caminho] e ligue para [telefone]",
+        )
+        conferir("etapa respeita limite de 90 caracteres", len(card_codex_etapa["etapa"]) <= 90, True)
+
+        raiz_codex_sem_pedido = tmp / "codex-sem-pedido"
+        pasta_codex_sem_pedido = raiz_codex_sem_pedido / "2026"
+        pasta_codex_sem_pedido.mkdir(parents=True)
+        transcript_sem_pedido = pasta_codex_sem_pedido / "rollout-sem-pedido.jsonl"
+        transcript_sem_pedido.write_text(
+            json.dumps({"type": "session_meta", "payload": {"agent_role": "worker"}}) + "\n",
+            encoding="utf-8",
+        )
+        os.utime(transcript_sem_pedido, (agora_codex_etapa, agora_codex_etapa))
+        card_sem_pedido = mod._codex_recentes(
+            agora_codex_etapa,
+            dono="luana",
+            raiz_codex=raiz_codex_sem_pedido,
+        )[0]
+        conferir("sem pedido mantém etapa anterior", card_sem_pedido["etapa"], "atividade Codex detectada")
 
         print("\n--- Teste 7: Identidade Codex lida só do session_meta, sem vazar agent_path")
         meta_codex = tmp / "rollout-teste.jsonl"
@@ -665,7 +738,27 @@ def testar_agentes_vivos():
             # Não pode somar 3x (3000+), deve deduplicar pelo id da mensagem
             conferir("tokens de streaming deduplicados por message.id", ag_stream.get("tokens_total") < 2000, True)
 
-        print("\n--- Teste 16: Formatação de modelos GPT-5.5 / Opus e não-redação de ID de modelo (Item 3.c)")
+        print("\n--- Teste 16: Formatação exata de modelos, esforço e não-redação de ID")
+        conferir("esforço low vira baixo", _formatar_esforco("low"), "baixo")
+        conferir("esforço medium vira médio", _formatar_esforco("medium"), "médio")
+        conferir("esforço high vira alto", _formatar_esforco("high"), "alto")
+        conferir("esforço xhigh preserva o nível máximo real", _formatar_esforco("xhigh"), "máximo (xhigh)")
+        conferir(
+            "model_reasoning_effort é lido fora de turn_context",
+            mod._extrair_esforco_registro({"payload": {"settings": {"model_reasoning_effort": "low"}}}),
+            "low",
+        )
+        conferir(
+            "chave de esforço em conteúdo livre não vira telemetria",
+            mod._extrair_esforco_registro({"message": {"content": [{"reasoning_effort": "low"}]}}),
+            None,
+        )
+        conferir("GPT-5.6 Sol recebe rótulo específico", _formatar_modelo("gpt-5.6-sol"), "GPT-5.6 Sol")
+        conferir("GPT-5.6 Terra recebe rótulo específico", _formatar_modelo("gpt-5.6-terra"), "GPT-5.6 Terra")
+        conferir("GPT-5.6 Luna recebe rótulo específico", _formatar_modelo("gpt-5.6-luna"), "GPT-5.6 Luna")
+        conferir("GPT-6 Astra recebe rótulo específico", _formatar_modelo("gpt-6-astra"), "GPT-6 Astra")
+        conferir("outra versão decimal não cai em GPT-5 genérico", _formatar_modelo("gpt-5.7-nova"), "GPT-5.7 Nova")
+        conferir("versão decimal futura mantém versão exata", _formatar_modelo("gpt-6.1-zen"), "GPT-6.1 Zen")
         conferir("GPT-5.5 formatado com maiúsculas", _formatar_modelo("gpt-5.5"), "GPT-5.5")
         conferir("GPT-5-5 formatado com maiúsculas", _formatar_modelo("gpt-5-5-turbo"), "GPT-5.5")
         conferir("Opus desconhecido não vira Opus 3", _formatar_modelo("opus-futuro-spec"), "opus-futuro-spec")
