@@ -120,6 +120,24 @@ conferir('simulação 60Hz chega na mesa', res60.fase === 'sentando' || res60.fa
 conferir('simulação 120Hz chega na mesa', res120.fase === 'sentando' || res120.fase === 'trabalhando', true)
 conferir('posições finais em 30Hz, 60Hz e 120Hz convergem', { x30: res30.x, x60: res60.x, x120: res120.x }, { x30: 100, x60: 100, x120: 100 })
 
+// 15. Regressão do relato do Gastão: trabalho contínuo não pode reiniciar um ciclo.
+let trabalhandoPorUmMinuto = criarEstadoInicialBoneco('dev-estavel', 'trabalhando', posMesa, posDescanso, 0, 'Edit')
+const fasesDoMinuto = new Set<string>()
+for (let t = 1000; t <= 60_000; t += 1000) {
+  trabalhandoPorUmMinuto = avancarEstadoAnimacao(
+    trabalhandoPorUmMinuto,
+    'trabalhando',
+    posMesa,
+    posDescanso,
+    t,
+    false,
+    'Edit'
+  )
+  fasesDoMinuto.add(trabalhandoPorUmMinuto.fase)
+}
+conferir('agente trabalhando por 60 s nunca levanta nem volta ao descanso', [...fasesDoMinuto], ['trabalhando'])
+conferir('agente permanece sentado na mesma mesa depois dos 60 s', { x: trabalhandoPorUmMinuto.x, y: trabalhandoPorUmMinuto.y }, posMesa)
+
 if (falhas > 0) {
   console.error(`\n${falhas} teste(s) falharam.`)
   process.exit(1)
