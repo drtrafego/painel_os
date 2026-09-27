@@ -89,7 +89,9 @@ export interface LayoutSala {
   mesas: MesaVisual[]
 }
 
-const ZOOM_MIN = 0.24
+// O mínimo precisa continuar abaixo da escala que cabe no palco quando o
+// navegador está ampliado. Um piso visual aqui faria o canvas escapar no celular.
+const ZOOM_MIN = 0.05
 const ZOOM_MAX = 2.4
 const SALA_MISTA: PixelAgentSquad = 'sala mista'
 const DURACAO_TRANSICAO_AMBIENTE_MS = 720
@@ -436,7 +438,12 @@ export function filtrarSquadsSobDemanda(execucoes: ExecucaoVisual[], squadsAbert
   return execucoes.filter((execucao) => !sobDemanda.has(execucao.squad) || squadsAbertos.has(execucao.squad))
 }
 
-type OpcoesLayoutSala = { larguraDisponivel?: number; alturaDisponivel?: number }
+type OpcoesLayoutSala = {
+  larguraDisponivel?: number
+  alturaDisponivel?: number
+  /** Piso de zoom escolhido pela tela para preservar a leitura física. */
+  zoomMinimo?: number
+}
 
 /** Escolhe a planta cuja escala uniforme é a maior que cabe nos dois eixos. */
 export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes: boolean | OpcoesLayoutSala = false): LayoutSala {
@@ -447,16 +454,16 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     ...PIXEL_AGENT_SQUADS.map((squad) => squad.id).filter((id) => id !== SALA_MISTA && grupos.has(id)),
     ...(grupos.has(SALA_MISTA) ? [SALA_MISTA] : []),
   ]
-  const larguraIlha = 282
+  const larguraIlha = 400
   const margemX = 24
   const vaoX = 18
-  const margemTopo = 90
+  const margemTopo = 128
   const alturas = new Map<PixelAgentSquad, number>()
   ordemSquads.forEach((squad) => {
     const quantidade = squad === SALA_MISTA ? Math.max(3, grupos.get(squad)?.length || 0) : grupos.get(squad)?.length || 0
     const colunasMesa = squad === SALA_MISTA ? Math.min(3, quantidade) : Math.min(4, Math.max(1, quantidade))
     const linhasMesa = Math.ceil(quantidade / colunasMesa)
-    alturas.set(squad, 42 + linhasMesa * 73 + (squad === SALA_MISTA ? 52 : 0))
+    alturas.set(squad, 76 + linhasMesa * 112 + (squad === SALA_MISTA ? 72 : 0))
   })
 
   const distribuir = (colunas: number) => {
@@ -470,34 +477,50 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
       posicoes.push({ squad, coluna, y: cursores[coluna] })
       cursores[coluna] += (alturas.get(squad) || 0) + 16
     })
-    const descansoY = Math.max(...cursores, 280) + 8
+    // A faixa de descanso já tem respiro próprio; somar outro vão externo
+    // deixava uma borda morta no fundo quando a largura limitava a escala.
+    const descansoY = Math.max(...cursores, 280)
     const paradas = execucoes.filter((execucao) => execucao.squad !== SALA_MISTA && execucao.execucao.estado === 'parado').length
     const larguraNatural = margemX * 2 + colunas * larguraIlha + (colunas - 1) * vaoX
-    const porLinha = Math.max(8, Math.floor((larguraNatural - 70) / 34))
+    const larguraDescanso = Math.min(larguraNatural - 60, 140 + paradas * 44)
+    const porLinha = Math.max(1, Math.floor((larguraDescanso - 36) / 44))
     const linhasDescanso = paradas > 0 ? Math.ceil(paradas / porLinha) : 0
-    const alturaDescanso = paradas > 0 ? 63 + linhasDescanso * 35 : 30
+    const alturaDescanso = paradas > 0 ? 40 + linhasDescanso * 44 : 26
     return { posicoes, descansoY, larguraNatural, altura: descansoY + alturaDescanso }
   }
 
   const larguraDisponivel = Math.max(0, opcoes.larguraDisponivel || 0)
   const alturaDisponivel = Math.max(0, opcoes.alturaDisponivel || 0)
   let melhor = { colunas: 1, ...distribuir(1), escala: Number.NEGATIVE_INFINITY }
+  let melhorComAltura: typeof melhor | null = null
   for (let colunas = 1; colunas <= Math.min(6, ordemSquads.length); colunas += 1) {
     const candidato = distribuir(colunas)
     const escala = larguraDisponivel && alturaDisponivel
       ? Math.min(larguraDisponivel / candidato.larguraNatural, alturaDisponivel / candidato.altura)
       : colunas === Math.min(3, ordemSquads.length) ? 1 : 0
+    const avaliado = { colunas, ...candidato, escala }
     if (escala > melhor.escala + 0.001 || (Math.abs(escala - melhor.escala) <= 0.001 && colunas > melhor.colunas)) {
-      melhor = { colunas, ...candidato, escala }
+      melhor = avaliado
+    }
+    // Quando há espaço vertical sobrando, prefira a planta mais ampliada que
+    // também preenche pelo menos 90% da altura. A escala continua uniforme e
+    // a largura final continua limitada pelo palco, sem criar rolagem lateral.
+    const preencheAltura = !alturaDisponivel || escala * candidato.altura >= alturaDisponivel * 0.9
+    if (preencheAltura && (!melhorComAltura || escala > melhorComAltura.escala + 0.001 || (Math.abs(escala - melhorComAltura.escala) <= 0.001 && colunas > melhorComAltura.colunas))) {
+      melhorComAltura = avaliado
     }
   }
+  if (melhorComAltura) melhor = melhorComAltura
 
   const zoomSugeridoNatural = larguraDisponivel && alturaDisponivel
-    ? Math.min(larguraDisponivel / melhor.larguraNatural, alturaDisponivel / melhor.altura) * 0.985
+    ? Math.min(larguraDisponivel / melhor.larguraNatural, alturaDisponivel / melhor.altura)
     : 1
-  const zoomSugerido = limitar(zoomSugeridoNatural, ZOOM_MIN, ZOOM_MAX)
+  // A margem de dois pixels da medição do palco já protege o arredondamento do
+  // canvas. Não reduza esta escala com uma "folga" percentual: em 200% ela
+  // virava vazio vertical mensurável e um piso alto causava overflow horizontal.
+  const zoomSugerido = limitar(zoomSugeridoNatural, opcoes.zoomMinimo ?? ZOOM_MIN, ZOOM_MAX)
   const largura = larguraDisponivel ? Math.max(melhor.larguraNatural, larguraDisponivel / zoomSugerido) : melhor.larguraNatural
-  const passoColuna = melhor.colunas > 1 ? (largura - margemX * 2 - larguraIlha) / (melhor.colunas - 1) : 0
+  const larguraIlhaFinal = (largura - margemX * 2 - (melhor.colunas - 1) * vaoX) / melhor.colunas
   const ilhas: IlhaVisual[] = []
   const mesas: MesaVisual[] = []
 
@@ -507,43 +530,44 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     const capacidade = coworking ? Math.max(3, lista.length) : lista.length
     const colunasMesa = coworking ? Math.min(3, capacidade) : Math.min(4, Math.max(1, capacidade))
     const alturaIlha = alturas.get(squad) || 0
-    const x = melhor.colunas === 1 ? (largura - larguraIlha) / 2 : margemX + coluna * passoColuna
+    const x = margemX + coluna * (larguraIlhaFinal + vaoX)
     const mesasIlha: MesaVisual[] = []
     const postos: Array<{ x: number; y: number }> = []
     for (let posicao = 0; posicao < capacidade; posicao += 1) {
       const colunaMesa = posicao % colunasMesa
       const linhaMesa = Math.floor(posicao / colunasMesa)
-      const intervalo = larguraIlha / colunasMesa
-      postos.push({ x: x + intervalo * (colunaMesa + 0.5), y: y + 49 + linhaMesa * 73 })
+      const intervalo = larguraIlhaFinal / colunasMesa
+      postos.push({ x: x + intervalo * (colunaMesa + 0.5), y: y + 70 + linhaMesa * 112 })
     }
     lista.forEach((execucao, posicao) => {
       const posto = postos[posicao]
       const mesa: MesaVisual = { execucao, x: posto.x, y: posto.y, descanso: { x: 0, y: 0 } }
       mesasIlha.push(mesa); mesas.push(mesa)
     })
-    ilhas.push({ squad, nome: lista[0]?.squadNome || NOMES_SQUAD.get(squad) || squad.toUpperCase(), cor: CORES_SQUAD.get(squad) || '#7bcaad', tipo: coworking ? 'coworking' : 'squad', compacta: coworking && lista.length === 0, x, y, largura: larguraIlha, altura: alturaIlha, postos, mesas: mesasIlha })
+    ilhas.push({ squad, nome: lista[0]?.squadNome || NOMES_SQUAD.get(squad) || squad.toUpperCase(), cor: CORES_SQUAD.get(squad) || '#7bcaad', tipo: coworking ? 'coworking' : 'squad', compacta: coworking && lista.length === 0, x, y, largura: larguraIlhaFinal, altura: alturaIlha, postos, mesas: mesasIlha })
   })
 
   const descansoY = melhor.descansoY
-  const porLinha = Math.max(8, Math.floor((largura - 70) / 34))
   const mesasFixas = mesas.filter((mesa) => mesa.execucao.squad !== SALA_MISTA)
   const mesasEmDescanso = mesasFixas.filter((mesa) => mesa.execucao.execucao.estado === 'parado')
+  const larguraDescanso = Math.min(largura - 60, 140 + mesasEmDescanso.length * 44)
+  const porLinha = Math.max(1, Math.floor((larguraDescanso - 36) / 44))
   mesasFixas.forEach((mesa) => {
     mesa.descanso = { x: largura / 2, y: descansoY + 16 }
   })
   mesasEmDescanso.forEach((mesa, indice) => {
     const linha = Math.floor(indice / porLinha)
     const itensNaLinha = Math.min(porLinha, mesasEmDescanso.length - linha * porLinha)
-    const intervalo = Math.min(34, (largura - 76) / Math.max(1, itensNaLinha))
+    const intervalo = Math.min(44, (larguraDescanso - 36) / Math.max(1, itensNaLinha - 1 || 1))
     const inicio = (largura - intervalo * (itensNaLinha - 1)) / 2
-    mesa.descanso = { x: inicio + (indice % porLinha) * intervalo, y: descansoY + 36 + linha * 35 }
+    mesa.descanso = { x: inicio + (indice % porLinha) * intervalo, y: descansoY + 30 + linha * 44 }
   })
   const ilhaMista = ilhas.find((ilha) => ilha.squad === SALA_MISTA)
   ilhaMista?.mesas.forEach((mesa, indice) => {
-    mesa.descanso = { x: ilhaMista.x + ilhaMista.largura - 12, y: ilhaMista.y + ilhaMista.altura - 18 - (indice % 2) * 9 }
+    mesa.descanso = { x: ilhaMista.x + ilhaMista.largura - 18, y: ilhaMista.y + ilhaMista.altura - 24 - (indice % 2) * 12 }
   })
   const linhasDescanso = mesasEmDescanso.length > 0 ? Math.ceil(mesasEmDescanso.length / porLinha) : 0
-  const alturaDescanso = mesasEmDescanso.length > 0 ? 63 + linhasDescanso * 35 : 30
+  const alturaDescanso = mesasEmDescanso.length > 0 ? 40 + linhasDescanso * 44 : 26
   return {
     largura,
     altura: descansoY + alturaDescanso,
@@ -644,7 +668,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const tempoRef = useRef(0)
   const zoomAutomaticoRef = useRef(1)
   const [zoom, setZoom] = useState(1)
-  const [dimensoesPalco, setDimensoesPalco] = useState({ largura: 900, altura: 600 })
+  const [dimensoesPalco, setDimensoesPalco] = useState({ largura: 900, altura: 600, dpr: 1, larguraFisica: 900 })
   const [pausado, setPausado] = useState(false)
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
   const [relogioDetalhe, setRelogioDetalhe] = useState(0)
@@ -672,10 +696,21 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     const porAtividade = soAtivos ? todasExecucoes.filter((execucao) => execucao.ativa) : todasExecucoes
     return filtrarSquadsSobDemanda(porAtividade, squadsSobDemandaAbertos)
   }, [soAtivos, squadsSobDemandaAbertos, todasExecucoes])
+  // O nome principal da mesa é desenhado com 7,5 px no canvas. Em tela física
+  // de celular, sua escala nunca pode deixá-lo abaixo de 9 px. A sobra vira
+  // rolagem DENTRO do palco, não overflow da página. A conta inclui o DPR,
+  // portanto continua válida entre 50% e 200% de zoom do navegador.
+  const zoomMinimoLegivel = dimensoesPalco.larguraFisica < 700
+    ? limitar(9 / (7.5 * dimensoesPalco.dpr), ZOOM_MIN, ZOOM_MAX)
+    : ZOOM_MIN
   const layout = useMemo(() => calcularLayoutSala(execucoesVisiveis, {
     larguraDisponivel: dimensoesPalco.largura,
     alturaDisponivel: dimensoesPalco.altura,
-  }), [dimensoesPalco.altura, dimensoesPalco.largura, execucoesVisiveis])
+    zoomMinimo: zoomMinimoLegivel,
+  }), [dimensoesPalco.altura, dimensoesPalco.largura, execucoesVisiveis, zoomMinimoLegivel])
+  // O palco é deliberadamente rolável. Limitar a aproximação à própria largura
+  // obrigaria o desenho a voltar a encolher e tornaria os nomes ilegíveis.
+  const zoomMaximoSeguro = ZOOM_MAX
   const totalAtivos = todasExecucoes.filter((execucao) => execucao.ativa).length
   const totalFixos = todasExecucoes.filter((execucao) => !execucao.temporaria).length
   const totalExtras = todasExecucoes.filter((execucao) => execucao.temporaria).length
@@ -713,14 +748,41 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   useEffect(() => {
     const palco = palcoRef.current
     if (!palco) return
+    let quadro = 0
+    let mediaResolucao: MediaQueryList | null = null
     const ajustar = () => {
-      const larguraDisponivel = Math.max(260, palco.clientWidth - 2)
-      const alturaDisponivel = Math.max(300, palco.clientHeight - 2)
-      setDimensoesPalco((atuais) => atuais.largura === larguraDisponivel && atuais.altura === alturaDisponivel ? atuais : { largura: larguraDisponivel, altura: alturaDisponivel })
+      // O palco, e não um mínimo de layout, é a fonte da escala. Em zoom alto
+      // o celular pode ter menos de 260 px CSS disponíveis.
+      const larguraDisponivel = Math.max(1, palco.clientWidth - 2)
+      const alturaDisponivel = Math.max(1, palco.clientHeight - 2)
+      const dpr = window.devicePixelRatio || 1
+      const larguraFisica = Math.round(larguraDisponivel * dpr)
+      setDimensoesPalco((atuais) => atuais.largura === larguraDisponivel && atuais.altura === alturaDisponivel && atuais.dpr === dpr && atuais.larguraFisica === larguraFisica
+        ? atuais
+        : { largura: larguraDisponivel, altura: alturaDisponivel, dpr, larguraFisica })
     }
-    ajustar()
-    const observador = new ResizeObserver(ajustar); observador.observe(palco)
-    return () => observador.disconnect()
+    const ajustarDepoisDoLayout = () => {
+      window.cancelAnimationFrame(quadro)
+      quadro = window.requestAnimationFrame(() => {
+        ajustar()
+        quadro = window.requestAnimationFrame(ajustar)
+      })
+    }
+    const aoMudarResolucao = () => {
+      mediaResolucao?.removeEventListener('change', aoMudarResolucao)
+      mediaResolucao = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`)
+      mediaResolucao.addEventListener('change', aoMudarResolucao)
+      ajustarDepoisDoLayout()
+    }
+    aoMudarResolucao()
+    const observador = new ResizeObserver(ajustarDepoisDoLayout); observador.observe(palco)
+    window.addEventListener('resize', ajustarDepoisDoLayout)
+    return () => {
+      observador.disconnect()
+      window.removeEventListener('resize', ajustarDepoisDoLayout)
+      mediaResolucao?.removeEventListener('change', aoMudarResolucao)
+      window.cancelAnimationFrame(quadro)
+    }
   }, [])
 
   useEffect(() => {
@@ -753,36 +815,37 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       poligono([a, b, e, f], topo)
     }
     const texto = (valor: string, x: number, y: number, tamanho: number, cor = '#d6e4da', alinhamento: CanvasTextAlign = 'center', peso = 500) => {
-      ctx.fillStyle = cor; ctx.textAlign = alinhamento; ctx.font = `${peso} ${tamanho}px monospace`; ctx.fillText(valor, x, y)
+      ctx.fillStyle = cor; ctx.textAlign = alinhamento; ctx.font = `${peso} ${tamanho}px "JetBrains Mono", ui-monospace, monospace`; ctx.fillText(valor, x, y)
     }
     const cadeira = (x: number, y: number) => {
-      bloco(x, y, 18, 17, 5, '#5a777a', '#31484f', '#263c43'); bloco(x, y + 5, 19, 4, 16, '#779295', '#405d65', '#2c474f')
+      bloco(x, y, 27, 26, 9, '#5a777a', '#31484f', '#263c43'); bloco(x, y + 9, 28, 6, 26, '#779295', '#405d65', '#2c474f')
     }
     const desenharObjeto = (mesa: MesaVisual) => {
-      const { x, y, execucao } = mesa; const ox = x + 17; const oy = y - 6; ctx.fillStyle = execucao.destaque
-      if (execucao.objeto === 'radar') { ctx.beginPath(); ctx.arc(ox, oy - 4, 4, 0, Math.PI * 2); ctx.strokeStyle = execucao.destaque; ctx.lineWidth = 2; ctx.stroke(); ctx.fillRect(ox + 3, oy, 6, 2) }
-      else if (execucao.objeto === 'qualidade') texto('✓', ox, oy, 9, execucao.destaque, 'center', 900)
-      else if (execucao.objeto === 'arte') { ctx.fillRect(ox - 6, oy - 8, 5, 5); ctx.fillStyle = '#facc15'; ctx.fillRect(ox, oy - 8, 5, 5); ctx.fillStyle = '#38bdf8'; ctx.fillRect(ox - 3, oy - 2, 5, 5) }
-      else if (execucao.objeto === 'texto') { ctx.save(); ctx.translate(ox, oy - 3); ctx.rotate(-0.55); ctx.fillRect(-1, -7, 3, 13); ctx.restore() }
-      else if (execucao.objeto === 'metricas') { ctx.fillRect(ox - 6, oy - 3, 3, 5); ctx.fillRect(ox - 1, oy - 7, 3, 9); ctx.fillRect(ox + 4, oy - 11, 3, 13) }
-      else if (execucao.objeto === 'envio') poligono([[ox - 7, oy - 7], [ox + 7, oy - 3], [ox - 4, oy + 2]], execucao.destaque)
-      else if (execucao.objeto === 'codigo') texto('</>', ox, oy - 1, 5.5, execucao.destaque, 'center', 800)
-      else { ctx.fillRect(ox - 4, oy - 7, 7, 7); ctx.fillRect(ox + 3, oy - 6, 3, 4) }
+      const { x, y, execucao } = mesa; const ox = x + 24; const oy = y - 8; ctx.fillStyle = execucao.destaque
+      if (execucao.objeto === 'radar') { ctx.beginPath(); ctx.arc(ox, oy - 6, 5.6, 0, Math.PI * 2); ctx.strokeStyle = execucao.destaque; ctx.lineWidth = 2.8; ctx.stroke(); ctx.fillRect(ox + 4, oy, 8, 3) }
+      else if (execucao.objeto === 'qualidade') texto('✓', ox, oy, 12, execucao.destaque, 'center', 900)
+      else if (execucao.objeto === 'arte') { ctx.fillRect(ox - 8, oy - 11, 7, 7); ctx.fillStyle = '#facc15'; ctx.fillRect(ox, oy - 11, 7, 7); ctx.fillStyle = '#38bdf8'; ctx.fillRect(ox - 4, oy - 3, 7, 7) }
+      else if (execucao.objeto === 'texto') { ctx.save(); ctx.translate(ox, oy - 4); ctx.rotate(-0.55); ctx.fillRect(-1, -10, 4, 18); ctx.restore() }
+      else if (execucao.objeto === 'metricas') { ctx.fillRect(ox - 8, oy - 4, 4, 7); ctx.fillRect(ox - 1, oy - 10, 4, 13); ctx.fillRect(ox + 6, oy - 15, 4, 18) }
+      else if (execucao.objeto === 'envio') poligono([[ox - 10, oy - 10], [ox + 10, oy - 4], [ox - 6, oy + 3]], execucao.destaque)
+      else if (execucao.objeto === 'codigo') texto('</>', ox, oy - 1, 7.5, execucao.destaque, 'center', 800)
+      else { ctx.fillRect(ox - 6, oy - 10, 10, 10); ctx.fillRect(ox + 4, oy - 8, 4, 6) }
     }
     const desenharMesa = (mesa: Pick<MesaVisual, 'x' | 'y'> & { execucao?: ExecucaoVisual }) => {
       const { x, y, execucao } = mesa
-      ctx.fillStyle = '#0003'; ctx.beginPath(); ctx.ellipse(x + 3, y + 14, 29, 15, 0, 0, Math.PI * 2); ctx.fill()
-      bloco(x - 18, y + 3, 5, 6, 19, '#d6b181', '#705037', '#58422f'); bloco(x + 18, y + 4, 5, 6, 19, '#d6b181', '#705037', '#58422f')
-      bloco(x, y, 48, 27, 6, '#ceac7b', '#9a7650', '#755435'); bloco(x - 3, y - 8, 23, 4, 20, '#516e72', '#1b303b', '#10232b')
-      ctx.fillStyle = execucao?.ativa ? '#163d48' : '#112328'; ctx.fillRect(x - 13, y - 27, 20, 13)
-      if (execucao?.ativa) { ctx.shadowColor = execucao.cor; ctx.shadowBlur = 8; ctx.fillStyle = execucao.cor; ctx.fillRect(x - 10, y - 24, 12, 2); ctx.shadowBlur = 0; ctx.fillStyle = '#82aaa5'; ctx.fillRect(x - 10, y - 20, 8, 1) }
-      else if (execucao?.execucao.estado === 'silencioso' && Math.floor(tempoRef.current * 2) % 2 === 0) { ctx.fillStyle = '#82aaa5'; ctx.fillRect(x - 10, y - 20, 2, 2) }
-      bloco(x - 2, y + 4, 17, 8, 2, '#c1cfb9', '#7a8d84', '#4d655f'); if (execucao) desenharObjeto(mesa as MesaVisual); cadeira(x, y + 24)
+      const t = ambiente.progressoDia
+      ctx.fillStyle = `rgba(0,0,0,${0.22 + 0.08 * t})`; ctx.beginPath(); ctx.ellipse(x + 5, y + 20, 43, 23, 0, 0, Math.PI * 2); ctx.fill()
+      bloco(x - 25, y + 3, 7, 9, 28, '#d6b181', '#705037', '#58422f'); bloco(x + 25, y + 5, 7, 9, 28, '#d6b181', '#705037', '#58422f')
+      bloco(x, y, 68, 42, 9, '#ceac7b', '#9a7650', '#755435'); bloco(x, y - 11, 33, 6, 30, '#516e72', '#1b303b', '#10232b')
+      ctx.fillStyle = execucao?.ativa ? '#163d48' : '#112328'; ctx.fillRect(x - 14, y - 38, 26, 19)
+      if (execucao?.ativa) {
+        for (let linha = 0; linha < 3; linha += 1) { ctx.fillStyle = linha === 0 ? execucao.cor : '#77a6a0'; ctx.fillRect(x - 10, y - 34 + linha * 5, 14 - linha * 3, 2) }
+      } else if (execucao?.execucao.estado === 'silencioso' && Math.floor(tempoRef.current * 2) % 2 === 0) { ctx.fillStyle = '#82aaa5'; ctx.fillRect(x - 10, y - 29, 3, 3) }
+      bloco(x, y + 5, 22, 12, 3, '#c1cfb9', '#7a8d84', '#4d655f'); if (execucao) desenharObjeto(mesa as MesaVisual); cadeira(x, y + 34)
       if (execucao) {
-        execucao.rotulos.forEach((rotulo, indice) => texto(rotulo, x, y + 42 + indice * 7, 5.8, indice === 0 ? '#f4ead0' : '#c7d5cf', 'center', 700))
-        if (execucao.squad === SALA_MISTA) texto('POSTO COMPARTILHADO', x, y + 57, 4.8, '#8ed8dc', 'center', 800)
-        else if (execucao.temporaria) texto('+ TEMP', x, y + 57, 5.2, '#f7cb73', 'center', 800)
-      } else texto('LIVRE', x, y + 43, 5.2, '#7f9995', 'center', 800)
+        execucao.rotulos.forEach((rotulo, indice) => texto(rotulo, x, y + 62 + indice * 9, indice === 0 ? 7.5 : 6.5, indice === 0 ? misturarHex('#f4ead0', '#1f2d2e', t) : misturarHex('#c7d5cf', '#43575a', t), 'center', 650))
+        if (execucao.temporaria && execucao.squad !== SALA_MISTA) texto('+ TEMP', x, y + 81, 7, '#76501b', 'center', 800)
+      } else texto('LIVRE', x, y + 64, 7, '#43575a', 'center', 800)
     }
     const progressosDoQuadro = new Map<PixelAgentSquad, number>()
     const comTransformacaoDoAmbiente = (ilha: IlhaVisual, desenharConteudo: () => void) => {
@@ -797,11 +860,9 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     }
     const desenharPlanta = (x: number, y: number, escala = 1) => {
       ctx.save(); ctx.translate(x, y); ctx.scale(escala, escala)
-      ctx.fillStyle = '#a98157'; ctx.fillRect(-7, 12, 14, 10); ctx.fillStyle = '#6b4633'; ctx.fillRect(-5, 22, 10, 3)
-      ctx.strokeStyle = '#5c8c64'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, 13); ctx.lineTo(0, -13); ctx.stroke()
-      for (const [folhaX, folhaY, rotacao] of [[-7, -6, -0.4], [7, -2, 0.4], [-6, 3, -0.8], [6, 8, 0.7]] as Array<[number, number, number]>) {
-        ctx.save(); ctx.translate(folhaX, folhaY); ctx.rotate(rotacao); ctx.fillStyle = '#5e9a62'; ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore()
-      }
+      bloco(0, 0, 19, 20, 18, '#859487', '#56665c', '#37483f')
+      bloco(-4, -17, 21, 22, 20, '#8ab77a', '#567f4e', '#395c43')
+      bloco(7, -24, 14, 16, 20, '#9acb82', '#6a935c', '#456c49')
       ctx.restore()
     }
     const desenharSala = () => {
@@ -810,85 +871,92 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       const parede = misturarHex('#071a21', '#c9a77b', t)
       const piso = misturarHex('#303943', '#a9bec7', t)
       ctx.fillStyle = piso; ctx.fillRect(0, 0, largura, altura)
-      ctx.fillStyle = parede; ctx.fillRect(8, 10, largura - 16, 62)
+      ctx.fillStyle = parede; ctx.fillRect(8, 10, largura - 16, 100)
 
       // Noite: janelões, cidade iluminada e concreto polido.
       ctx.save(); ctx.globalAlpha = 1 - t
-      ctx.fillStyle = '#08131c'; ctx.fillRect(10, 14, largura - 20, 55)
+      ctx.fillStyle = '#08131c'; ctx.fillRect(10, 14, largura - 20, 94)
       for (let x = 12; x < largura - 10; x += 70) {
         const alturaPredio = 13 + (hashTexto(`predio:${x}`) % 27)
-        ctx.fillStyle = '#122b3c'; ctx.fillRect(x, 68 - alturaPredio, 48, alturaPredio)
-        for (let janelaY = 68 - alturaPredio + 6; janelaY < 66; janelaY += 8) for (let janelaX = x + 7; janelaX < x + 42; janelaX += 12) {
+        ctx.fillStyle = '#122b3c'; ctx.fillRect(x, 106 - alturaPredio, 48, alturaPredio)
+        for (let janelaY = 106 - alturaPredio + 6; janelaY < 104; janelaY += 8) for (let janelaX = x + 7; janelaX < x + 42; janelaX += 12) {
           ctx.fillStyle = (hashTexto(`${x}:${janelaY}:${janelaX}`) % 3 === 0) ? '#f6c765' : '#467ba0'; ctx.fillRect(janelaX, janelaY, 4, 3)
         }
       }
       ctx.strokeStyle = '#294555'; ctx.lineWidth = 3
-      for (let x = 10; x < largura; x += 82) { ctx.beginPath(); ctx.moveTo(x, 13); ctx.lineTo(x, 69); ctx.stroke() }
-      ctx.beginPath(); ctx.moveTo(10, 67); ctx.lineTo(largura - 10, 67); ctx.stroke(); ctx.restore()
+      for (let x = 10; x < largura; x += 82) { ctx.beginPath(); ctx.moveTo(x, 13); ctx.lineTo(x, 108); ctx.stroke() }
+      ctx.beginPath(); ctx.moveTo(10, 106); ctx.lineTo(largura - 10, 106); ctx.stroke(); ctx.restore()
 
       // Dia: lambris de madeira clara, prateleiras, plantas e lousa.
       ctx.save(); ctx.globalAlpha = t
-      ctx.fillStyle = '#d4b285'; ctx.fillRect(10, 14, largura - 20, 55)
-      for (let x = 12; x < largura - 10; x += 18) { ctx.fillStyle = x % 36 ? '#bd986b' : '#e0c395'; ctx.fillRect(x, 15, 2, 52) }
+      ctx.fillStyle = '#d4b285'; ctx.fillRect(10, 14, largura - 20, 94)
+      for (let x = 12; x < largura - 10; x += 18) { ctx.fillStyle = x % 36 ? '#bd986b' : '#e0c395'; ctx.fillRect(x, 15, 2, 91) }
       for (const shelfX of [44, largura / 2 - 150, largura / 2 + 110, largura - 115]) {
         ctx.fillStyle = '#906843'; ctx.fillRect(shelfX, 30, 74, 4); ctx.fillStyle = '#ecd9b5'; ctx.fillRect(shelfX + 4, 25, 12, 5); ctx.fillStyle = '#6f9d68'; ctx.fillRect(shelfX + 24, 21, 12, 9); ctx.fillStyle = '#a57843'; ctx.fillRect(shelfX + 50, 22, 15, 8)
       }
-      const lousaX = largura / 2 - 76; ctx.fillStyle = '#eee6d5'; ctx.fillRect(lousaX, 18, 152, 28); ctx.strokeStyle = '#a68b68'; ctx.lineWidth = 2; ctx.strokeRect(lousaX, 18, 152, 28)
-      for (const [x, y, cor] of [[lousaX + 16, 25, '#ef8d61'], [lousaX + 42, 34, '#62a9ca'], [lousaX + 72, 24, '#f0bf3e'], [lousaX + 104, 34, '#e86fa2'], [lousaX + 126, 24, '#83bd68']] as Array<[number, number, string]>) { ctx.fillStyle = cor; ctx.fillRect(x, y, 9, 7) }
+      const lousaX = Math.max(96, largura / 2 - 250); ctx.fillStyle = '#eee6d5'; ctx.fillRect(lousaX, 50, 110, 36); ctx.strokeStyle = '#a68b68'; ctx.lineWidth = 2; ctx.strokeRect(lousaX, 50, 110, 36)
+      for (const [x, y, cor] of [[lousaX + 12, 58, '#ef8d61'], [lousaX + 37, 70, '#62a9ca'], [lousaX + 67, 58, '#f0bf3e']] as Array<[number, number, string]>) { ctx.fillStyle = cor; ctx.fillRect(x, y, 11, 8) }
       ctx.restore()
 
-      // O piso também troca de material, sem a antiga madeira alaranjada.
-      ctx.fillStyle = rgba(t > 0.5 ? '#d6e7eb' : '#7f8c96', 0.23); ctx.fillRect(10, 72, largura - 20, altura - 80)
-      ctx.strokeStyle = rgba(t > 0.5 ? '#718f9b' : '#69747d', 0.45); ctx.lineWidth = 1
-      for (let y = 78; y < altura - 8; y += 24) { ctx.beginPath(); ctx.moveTo(10, y); ctx.lineTo(largura - 10, y); ctx.stroke() }
-      for (let x = 20; x < largura - 10; x += 54) { ctx.beginPath(); ctx.moveTo(x, 72); ctx.lineTo(x, altura - 8); ctx.stroke() }
-      for (const ilha of layout.ilhas) {
-        ctx.save(); ctx.globalAlpha = t * 0.32; ctx.fillStyle = '#d9eef0'; ctx.fillRect(ilha.x - 9, ilha.y - 8, ilha.largura + 18, ilha.altura + 17); ctx.restore()
-      }
-      desenharPlanta(28, altura - 37, 1.1); desenharPlanta(largura - 28, altura - 37, 1.1)
+      const ladrilhoA = misturarHex('#2c353e', '#aebfc6', t); const ladrilhoB = misturarHex('#29313a', '#a8bac1', t)
+      for (let y = 110; y < altura - 8; y += 96) for (let x = 10; x < largura - 10; x += 96) { ctx.fillStyle = (Math.floor(x / 96) + Math.floor(y / 96)) % 2 ? ladrilhoA : ladrilhoB; ctx.fillRect(x, y, 95, 95) }
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1
+      for (let y = 110; y < altura - 8; y += 96) { ctx.beginPath(); ctx.moveTo(10, y + 0.5); ctx.lineTo(largura - 10, y + 0.5); ctx.stroke() }
+      for (let x = 10; x < largura - 10; x += 96) { ctx.beginPath(); ctx.moveTo(x + 0.5, 110); ctx.lineTo(x + 0.5, altura - 8); ctx.stroke() }
+      if (t > 0) poligono([[18, 110], [90, 110], [210, altura - 15], [80, altura - 15]], `rgba(255,246,216,${0.10 * t})`)
+      ctx.fillStyle = misturarHex('#172b30', '#9c7a55', t); ctx.fillRect(12, 110, 6, altura - 120); ctx.fillRect(largura - 18, 110, 6, altura - 120)
+      desenharPlanta(38, altura - 37, 1.1); desenharPlanta(largura - 38, altura - 37, 1.1)
+      if (t > 0.5) { desenharPlanta(84, 42, 0.42); desenharPlanta(largura - 88, 42, 0.42); desenharPlanta(largura * 0.25, 42, 0.38) }
       const corNeon = misturarHex('#59b9ff', '#51412a', t)
-      if (t < 0.9) { ctx.save(); ctx.shadowColor = '#47b8ff'; ctx.shadowBlur = 10 * (1 - t); texto('G4ST4OVIB3', largura / 2, 38, 16, corNeon, 'center', 900); ctx.restore() }
-      else texto('G4ST4OVIB3', largura / 2, 38, 16, '#51412a', 'center', 900)
-      texto('SQUADS NAS ILHAS · EXECUTORES NO DESCANSO', largura / 2, 55, 6.5, misturarHex('#9eb9ba', '#6e5b43', t), 'center', 650)
+      if (t < 0.9) { ctx.save(); ctx.shadowColor = '#47b8ff'; ctx.shadowBlur = 10 * (1 - t); texto('G4ST4OVIB3', largura / 2, 58, 21, corNeon, 'center', 900); ctx.restore() }
+      else texto('G4ST4OVIB3', largura / 2, 58, 21, '#3b2f22', 'center', 900)
+      texto('casaldotrafego.com', largura / 2, 80, 9, misturarHex('#9eb9ba', '#6e5b43', t), 'center', 650)
       layout.ilhas.forEach((ilha) => {
         comTransformacaoDoAmbiente(ilha, () => {
-          const alfa = ilha.compacta ? 0.1 : 0.23
-          ctx.fillStyle = rgba(ilha.cor, alfa); ctx.fillRect(ilha.x, ilha.y, ilha.largura, ilha.altura); ctx.strokeStyle = rgba(ilha.cor, ilha.compacta ? 0.36 : 0.82); ctx.lineWidth = ilha.tipo === 'coworking' ? 2 : 1; ctx.strokeRect(ilha.x + 0.5, ilha.y + 0.5, ilha.largura - 1, ilha.altura - 1)
+          const baseTapete = misturarHex('#26383b', '#c3cfd2', t)
+          ctx.fillStyle = 'rgba(0,0,0,0.16)'; ctx.fillRect(ilha.x + 4, ilha.y + 6, ilha.largura, ilha.altura)
+          ctx.fillStyle = ilha.compacta ? misturarHex('#42686b', baseTapete, 0.85) : misturarHex(ilha.cor, baseTapete, 0.72); ctx.fillRect(ilha.x, ilha.y, ilha.largura, ilha.altura)
+          ctx.strokeStyle = rgba(escurecer(ilha.cor, 0.7), 0.55); ctx.lineWidth = 1; ctx.strokeRect(ilha.x + 0.5, ilha.y + 0.5, ilha.largura - 1, ilha.altura - 1)
           if (ilha.tipo === 'coworking') { ctx.fillStyle = '#193b3e'; ctx.fillRect(ilha.x - 5, ilha.y, 5, ilha.altura); ctx.fillStyle = '#90a69d'; ctx.fillRect(ilha.x - 3, ilha.y + 28, 1, ilha.altura - 34) }
-          ctx.fillStyle = ilha.compacta ? '#42686b' : ilha.cor; ctx.fillRect(ilha.x, ilha.y, ilha.largura, 24); texto(ilha.nome, ilha.x + 9, ilha.y + 16, 7.2, '#081819', 'left', 900); texto(ilha.tipo === 'coworking' ? `${ilha.mesas.length} / ${ilha.postos.length}` : `${ilha.mesas.length}`, ilha.x + ilha.largura - 9, ilha.y + 16, 7, '#081819', 'right', 900)
+          ctx.fillStyle = ilha.compacta ? '#42686b' : ilha.cor; ctx.fillRect(ilha.x, ilha.y, ilha.largura, 6)
+          const corRotuloIlha = misturarHex('#e7dec3', '#1f2d2e', t)
+          texto(ilha.nome, ilha.x + 13, ilha.y + 22, 9, corRotuloIlha, 'left', 750); texto(ilha.tipo === 'coworking' ? `${ilha.mesas.length} / ${ilha.postos.length}` : `${ilha.mesas.length}`, ilha.x + ilha.largura - 13, ilha.y + 22, 9, corRotuloIlha, 'right', 750)
           ilha.postos.forEach((posto, indice) => desenharMesa({ ...posto, execucao: ilha.mesas[indice]?.execucao }))
           if (ilha.tipo === 'coworking') {
-            const sofaX = ilha.x + ilha.largura / 2; const sofaY = ilha.y + ilha.altura - 12
+            const sofaX = ilha.x + ilha.largura / 2; const sofaY = ilha.y + ilha.altura - 24
             bloco(sofaX, sofaY, 92, 28, 12, '#688b83', '#355953', '#294a47'); bloco(sofaX, sofaY - 12, 88, 8, 21, '#779991', '#42645e', '#31534e')
             texto(ilha.compacta ? 'COWORKING DISPONÍVEL' : 'SOFÁ / PAUSA', sofaX, sofaY + 12, 5.3, ilha.compacta ? '#86a6a2' : '#cde1d8', 'center', 800)
           }
           if (SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)) {
             const progresso = progressosDoQuadro.get(ilha.squad) ?? 1; const centro = ilha.x + ilha.largura / 2; const base = ilha.y + ilha.altura - 2; const painel = 31 * (1 - progresso)
-            ctx.fillStyle = '#13282b'; ctx.fillRect(centro - 32, base - 38, painel, 38); ctx.fillRect(centro + 32 - painel, base - 38, painel, 38); ctx.strokeStyle = rgba(ilha.cor, 0.9); ctx.strokeRect(centro - 33, base - 39, 66, 39)
+            if (progresso < 0.999) { ctx.fillStyle = '#13282b'; ctx.fillRect(centro - 32, base - 38, painel, 38); ctx.fillRect(centro + 32 - painel, base - 38, painel, 38); ctx.strokeStyle = rgba(ilha.cor, 0.9); ctx.strokeRect(centro - 33, base - 39, 66, 39) }
           }
         })
       })
-      ctx.fillStyle = '#214747'; ctx.fillRect(18, layout.descansoY, largura - 36, layout.altura - layout.descansoY - 10); ctx.fillStyle = '#496b63'; ctx.fillRect(21, layout.descansoY - 2, largura - 42, 5); texto(layout.descansoAberto ? 'DESCANSO' : 'DESCANSO · VAZIO', largura - 30, layout.descansoY + 17, 6.5, '#e0d5af', 'right', 800)
+      const larguraDescanso = Math.min(largura - 60, 140 + layout.ocupantesDescanso * 44)
+      const xDescanso = (largura - larguraDescanso) / 2
+      const alturaDescanso = layout.altura - layout.descansoY - 10
+      ctx.fillStyle = '#214747'; ctx.fillRect(xDescanso, layout.descansoY, larguraDescanso, alturaDescanso); ctx.fillStyle = '#496b63'; ctx.fillRect(xDescanso + 3, layout.descansoY - 2, larguraDescanso - 6, 5); texto(layout.descansoAberto ? 'DESCANSO' : 'DESCANSO · VAZIO', xDescanso + larguraDescanso - 12, layout.descansoY + 17, 7, '#e0d5af', 'right', 800)
     }
     const desenharBoneco = (mesa: MesaVisual, estadoAnimacao: EstadoAnimacaoBoneco) => {
       const personagem = mesa.execucao; const pose = poseDoEstado(estadoAnimacao, layout.corredorX); const selecionado = personagem.chave === agenteSelecionadoId
-      const passo = pose.andando ? Math.sin(tempoRef.current * 13 + personagem.ordem) * 2.5 : 0; const flutuar = pose.andando ? Math.abs(Math.sin(tempoRef.current * 13 + personagem.ordem)) * 0.7 : 0; const deslocamento = pose.sentado * 5
-      const digitando = pose.fase === 'trabalhando' && !reduzirMovimento ? Math.sin(tempoRef.current * 17 + personagem.ordem) * 1.35 : 0
-      ctx.save(); ctx.translate(pose.x, pose.y - flutuar); ctx.fillStyle = '#12252770'; ctx.beginPath(); ctx.ellipse(0, 3, 12, 4, 0, 0, Math.PI * 2); ctx.fill()
-      if (selecionado) { ctx.strokeStyle = '#fff1b2'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(0, 3, 15, 6, 0, 0, Math.PI * 2); ctx.stroke() }
-      bloco(-4, 1 + passo, 5, 7, pose.sentado ? 6 : 12, '#607783', '#314653', '#213541'); bloco(4, 1 - passo, 5, 7, pose.sentado ? 6 : 12, '#607783', '#314653', '#213541')
-      bloco(-4, 3 + passo, 6, 8, 3, '#d5d9c8', '#8e9b93', '#64796c'); bloco(4, 3 - passo, 6, 8, 3, '#d5d9c8', '#8e9b93', '#64796c'); bloco(0, -10 + deslocamento, 15, 11, 14, personagem.cor, personagem.corEscura, personagem.corEscura)
-      for (const lado of [-1, 1]) { const bracoY = pose.sentado ? -17 + deslocamento + digitando * lado : -8 + passo * lado; bloco(lado * 9, bracoY, 4, 8, pose.sentado ? 8 : 11, personagem.cor, personagem.corEscura, personagem.corEscura); bloco(lado * 9, bracoY - 1, 4, 5, 3, personagem.pele, escurecer(personagem.pele, 0.83), '#9a684c') }
-      bloco(0, -25 + deslocamento, 13, 12, 12, personagem.pele, escurecer(personagem.pele, 0.83), '#9a684c'); bloco(0, -33 + deslocamento, 14, 13, 6, personagem.cabelo, escurecer(personagem.cabelo, 0.68), escurecer(personagem.cabelo, 0.58))
-      if (personagem.acessorio === 0) { ctx.fillStyle = personagem.destaque; ctx.fillRect(-9, -31 + deslocamento, 18, 2) }
-      if (personagem.acessorio === 1) { ctx.strokeStyle = '#d8efe7'; ctx.lineWidth = 1; ctx.strokeRect(-6, -26 + deslocamento, 5, 3); ctx.strokeRect(1, -26 + deslocamento, 5, 3) }
-      if (personagem.acessorio === 2) { ctx.fillStyle = personagem.destaque; ctx.fillRect(6, -23 + deslocamento, 3, 7) }
-      if (personagem.acessorio === 3) { ctx.fillStyle = '#e8d8a9'; ctx.fillRect(-7, -36 + deslocamento, 14, 2) }
-      if (personagem.acessorio === 4) { ctx.fillStyle = personagem.destaque; ctx.fillRect(-2, -12 + deslocamento, 4, 5) }
-      if (personagem.ativa) { ctx.fillStyle = '#d4f79f'; ctx.fillRect(11, -28 + deslocamento, 3, 3) }
-      if (selecionado) texto('▼', 0, -45 + deslocamento, 8, '#fff0ae')
-      if (pose.fase === 'trabalhando' && personagem.execucao.ferramenta) { const ferramenta = formatarRotulo(personagem.execucao.ferramenta, '', 13); const larguraBalao = Math.max(34, ferramenta.length * 4.4 + 8); ctx.fillStyle = '#102529ee'; ctx.fillRect(-larguraBalao / 2, -51 + deslocamento, larguraBalao, 12); ctx.fillStyle = personagem.cor; ctx.fillRect(-larguraBalao / 2, -51 + deslocamento, 2, 12); texto(ferramenta, 0, -43 + deslocamento, 5.2, '#e8f0ec', 'center', 700) }
-      ctx.restore(); hitsRef.current.push({ chave: personagem.chave, x: pose.x - 18, y: pose.y - 58, largura: 36, altura: 66 })
+      const passo = pose.andando ? Math.sin(tempoRef.current * 13 + personagem.ordem) * 4 : 0; const flutuar = pose.andando ? Math.abs(Math.sin(tempoRef.current * 13 + personagem.ordem)) * 0.9 : 0; const deslocamento = pose.sentado * 7
+      const digitando = pose.fase === 'trabalhando' && !reduzirMovimento ? Math.sin(tempoRef.current * 17 + personagem.ordem) * 2 : 0
+      ctx.save(); ctx.translate(pose.x, pose.y - flutuar); ctx.fillStyle = '#12252760'; ctx.beginPath(); ctx.ellipse(0, 4, 17, 6, 0, 0, Math.PI * 2); ctx.fill()
+      if (selecionado) { ctx.strokeStyle = '#fff1b2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 5, 21, 8, 0, 0, Math.PI * 2); ctx.stroke() }
+      bloco(-6, 1 + passo, 8, 10, pose.sentado ? 9 : 17, '#607783', '#314653', '#213541'); bloco(6, 1 - passo, 8, 10, pose.sentado ? 9 : 17, '#607783', '#314653', '#213541')
+      bloco(-6, 4 + passo, 9, 13, 4, '#d5d9c8', '#8e9b93', '#64796c'); bloco(6, 4 - passo, 9, 13, 4, '#d5d9c8', '#8e9b93', '#64796c'); bloco(0, -15 + deslocamento, 22, 17, 20, personagem.cor, personagem.corEscura, personagem.corEscura)
+      for (const lado of [-1, 1]) { const bracoY = pose.sentado ? -25 + deslocamento + digitando * lado : -12 + passo * lado; bloco(lado * 14, bracoY, 6, 12, pose.sentado ? 12 : 16, personagem.cor, personagem.corEscura, personagem.corEscura); bloco(lado * 14, bracoY - 1, 6, 7, 4, personagem.pele, escurecer(personagem.pele, 0.83), '#9a684c') }
+      bloco(0, -36 + deslocamento, 19, 18, 17, personagem.pele, escurecer(personagem.pele, 0.83), '#9a684c'); bloco(0, -47 + deslocamento, 20, 19, 9, personagem.cabelo, escurecer(personagem.cabelo, 0.68), escurecer(personagem.cabelo, 0.58))
+      if (personagem.acessorio === 0) { ctx.fillStyle = personagem.destaque; ctx.fillRect(-10, -43 + deslocamento, 20, 3) }
+      if (personagem.acessorio === 1) { ctx.strokeStyle = '#d8efe7'; ctx.lineWidth = 1.4; ctx.strokeRect(-8, -37 + deslocamento, 7, 4); ctx.strokeRect(1, -37 + deslocamento, 7, 4) }
+      if (personagem.acessorio === 2) { ctx.fillStyle = personagem.destaque; ctx.fillRect(9, -33 + deslocamento, 4, 10) }
+      if (personagem.acessorio === 3) { ctx.fillStyle = '#e8d8a9'; ctx.fillRect(-10, -51 + deslocamento, 20, 3) }
+      if (personagem.acessorio === 4) { ctx.fillStyle = personagem.destaque; ctx.fillRect(-3, -17 + deslocamento, 5, 7) }
+      if (personagem.ativa) { ctx.fillStyle = '#d4f79f'; ctx.fillRect(16, -41 + deslocamento, 4, 4) }
+      if (selecionado) texto('▼', 0, -64 + deslocamento, 11, '#fff0ae')
+      if (selecionado && pose.fase === 'trabalhando' && personagem.execucao.ferramenta) { const ferramenta = formatarRotulo(personagem.execucao.ferramenta, '', 13); const larguraBalao = Math.max(44, ferramenta.length * 5.5 + 10); ctx.fillStyle = '#102529ee'; ctx.fillRect(-larguraBalao / 2, -72 + deslocamento, larguraBalao, 14); ctx.fillStyle = personagem.cor; ctx.fillRect(-larguraBalao / 2, -72 + deslocamento, 2, 14); texto(ferramenta, 0, -62 + deslocamento, 7, '#e8f0ec', 'center', 700) }
+      ctx.restore(); hitsRef.current.push({ chave: personagem.chave, x: pose.x - 25, y: pose.y - 70, largura: 50, altura: 82 })
     }
     const estadoDaMesa = (mesa: MesaVisual, agoraMs: number) => {
       const posMesa = { x: mesa.x - layout.corredorX, y: mesa.y + 24 }; const posDescanso = { x: mesa.descanso.x - layout.corredorX, y: mesa.descanso.y }; const alvo = alvoDaExecucao(mesa.execucao)
@@ -910,19 +978,23 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
         const proximo = alvo > inicial ? Math.min(alvo, inicial + passo) : Math.max(alvo, inicial - passo)
         progressoIlhasRef.current.set(ilha.squad, proximo); progressosDoQuadro.set(ilha.squad, proximo)
       })
-      const dpr = Math.min(window.devicePixelRatio || 1, 2); const larguraCss = Math.round(layout.largura * zoom); const alturaCss = Math.round(layout.altura * zoom)
-      if (canvas.width !== Math.round(larguraCss * dpr) || canvas.height !== Math.round(alturaCss * dpr)) { canvas.width = Math.round(larguraCss * dpr); canvas.height = Math.round(alturaCss * dpr); canvas.style.width = `${larguraCss}px`; canvas.style.height = `${alturaCss}px` }
+      const dpr = Math.min(dimensoesPalco.dpr, 2); const larguraCss = Math.round(layout.largura * zoom); const alturaCss = Math.round(layout.altura * zoom)
+      const larguraBacking = Math.round(larguraCss * dpr); const alturaBacking = Math.round(alturaCss * dpr)
+      if (canvas.width !== larguraBacking) canvas.width = larguraBacking
+      if (canvas.height !== alturaBacking) canvas.height = alturaBacking
+      if (canvas.style.width !== `${larguraCss}px`) canvas.style.width = `${larguraCss}px`
+      if (canvas.style.height !== `${alturaCss}px`) canvas.style.height = `${alturaCss}px`
       ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, 0, 0); ctx.clearRect(0, 0, layout.largura, layout.altura); desenharSala(); hitsRef.current = []
       const estados = layout.mesas.map((mesa) => ({ mesa, estado: estadoDaMesa(mesa, agoraAnimacaoMs) })); estados.sort((a, b) => a.estado.y - b.estado.y).forEach(({ mesa, estado }) => {
         const ilha = layout.ilhas.find((item) => item.squad === mesa.execucao.squad)
         if (ilha) comTransformacaoDoAmbiente(ilha, () => desenharBoneco(mesa, estado)); else desenharBoneco(mesa, estado)
       })
-      canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0); canvas.dataset.officeRest = layout.descansoAberto ? 'aberto' : 'encolhido'; canvas.dataset.officeResting = String(layout.ocupantesDescanso); canvas.dataset.officeEnvironment = ambiente.fase; canvas.dataset.officeDayProgress = ambiente.progressoDia.toFixed(3); canvas.dataset.officeDemandSquads = layout.ilhas.filter((ilha) => SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)).map((ilha) => ilha.squad).join('|')
+      canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeNamePx = String((7.5 * zoom * dpr).toFixed(2)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0); canvas.dataset.officeRest = layout.descansoAberto ? 'aberto' : 'encolhido'; canvas.dataset.officeResting = String(layout.ocupantesDescanso); canvas.dataset.officeEnvironment = ambiente.fase; canvas.dataset.officeDayProgress = ambiente.progressoDia.toFixed(3); canvas.dataset.officeDemandSquads = layout.ilhas.filter((ilha) => SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)).map((ilha) => ilha.squad).join('|')
       quadro = requestAnimationFrame(desenhar)
     }
     quadro = requestAnimationFrame(desenhar)
     return () => { ativo = false; cancelAnimationFrame(quadro) }
-  }, [agenteSelecionadoId, ambiente, layout, pausado, reduzirMovimento, squadsSobDemandaSaindo, zoom])
+  }, [agenteSelecionadoId, ambiente, dimensoesPalco.dpr, layout, pausado, reduzirMovimento, squadsSobDemandaSaindo, zoom])
 
   const selecionar = (chave: string) => aoSelecionarAgente?.(chave)
   const visualDoAgente = (agente: AgenteVivo) => todasExecucoes.find((visual) => visual.execucao === agente)
@@ -974,13 +1046,11 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       <div className="mb-2.5 flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
         <button type="button" onClick={() => aoAlternarSoAtivos?.(!soAtivos)} aria-pressed={soAtivos} className={`min-h-11 rounded-lg border px-3 text-xs font-semibold ${soAtivos ? 'border-[#c1ec86] bg-[#c1ec86] text-[#1a2a1b]' : 'border-[#42534f] bg-[#162a2a] text-[#e7f0e7]'}`}>Só ativos</button>
         <button type="button" onClick={() => setPausado((valor) => !valor)} aria-pressed={pausado} className="min-h-11 rounded-lg border border-[#42534f] bg-[#162a2a] px-3 text-xs font-semibold text-[#e7f0e7]">{pausado ? 'Retomar' : 'Pausar'}</button>
-        <div className="flex items-center overflow-hidden rounded-lg border border-[#42534f] bg-[#162a2a]"><button type="button" aria-label="Afastar sala" onClick={() => setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, ZOOM_MAX))} className="min-h-11 min-w-10 px-2 text-base text-[#e7f0e7]">−</button><button type="button" title="Repor enquadramento" onClick={() => setZoom(zoomAutomaticoRef.current)} className="min-h-11 border-x border-[#42534f] px-2 font-mono text-[10px] text-[#aebfb8]">{Math.round(zoom * 100)}%</button><button type="button" aria-label="Aproximar sala" onClick={() => setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, ZOOM_MAX))} className="min-h-11 min-w-10 px-2 text-base text-[#e7f0e7]">+</button></div>
+        <div className="flex items-center overflow-hidden rounded-lg border border-[#42534f] bg-[#162a2a]"><button type="button" aria-label="Afastar sala" onClick={() => setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, zoomMaximoSeguro))} className="min-h-11 min-w-10 px-2 text-base text-[#e7f0e7]">−</button><button type="button" title="Repor enquadramento" onClick={() => setZoom(zoomAutomaticoRef.current)} className="min-h-11 border-x border-[#42534f] px-2 font-mono text-[10px] text-[#aebfb8]">{Math.round(zoom * 100)}%</button><button type="button" aria-label="Aproximar sala" onClick={() => setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))} className="min-h-11 min-w-10 px-2 text-base text-[#e7f0e7]">+</button></div>
         <span className="ml-auto whitespace-nowrap font-mono text-[10px] text-[#aebfb8] sm:text-[11px]"><b className="text-[#c1ec86]">{totalAtivos}</b> trabalhando · {totalFixos} fixos{totalExtras ? ` + ${totalExtras} no coworking/extra` : ''}</span>
       </div>
       <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_270px] xl:gap-4">
         <section className="relative min-w-0 overflow-hidden rounded-xl border border-[#405655] bg-[#163032]" aria-label="Sala voxel interativa">
-          <span className="pointer-events-none absolute left-3 top-3 z-10 font-mono text-[9px] tracking-[0.12em] text-[#afc8c4]">VISÃO GERAL / CABER TUDO</span>
-          <div className="pointer-events-none absolute bottom-2 right-2 z-10 max-w-[58%] rounded-md border border-[#526865] bg-[#0d1e22e8] p-1.5 shadow-lg" aria-label="Legenda de cores dos ambientes" data-testid="office-squad-legend"><div className="mb-1 font-mono text-[7px] font-bold tracking-[0.12em] text-[#c8d8d2] sm:text-[8px]">SQUADS E AMBIENTES</div><div className="grid grid-cols-2 gap-x-2 gap-y-0.5">{squadsVisiveis.map((squad) => <span key={squad.id} className="flex min-w-0 items-center gap-1 font-mono text-[6px] text-[#c5d2ce] sm:text-[7px]"><i className="size-1.5 shrink-0 rounded-[1px]" style={{ backgroundColor: squad.cor }} /><b className="truncate font-medium">{squad.nome}</b></span>)}</div></div>
           <div ref={palcoRef} className="h-[420px] w-full overflow-auto overscroll-contain sm:h-[600px]" data-testid="office-scroll-room"><canvas ref={canvasRef} tabIndex={0} role="group" aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`} onClick={tratarClique} onKeyDown={tratarTeclado} className="block max-w-none cursor-pointer touch-pan-x touch-pan-y focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#e8c575]" /></div>
         </section>
         <aside className="min-w-0 self-start rounded-lg border-t-2 border-[#c1ec86] bg-[#142426] p-3 sm:p-4 xl:sticky xl:top-3" aria-label="Detalhe do agente">
@@ -1024,7 +1094,10 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
           <p className="mt-3 font-mono text-[9px] leading-4 text-[#869c94] sm:text-[10px]"><span className="text-[#c1ec86]">●</span> Trabalhando: vai à mesa uma vez e permanece digitando.<br />○ Parado: monitor apagado, sem ciclo automático.</p>
         </aside>
       </div>
-      <footer className="mt-2 font-mono text-[9px] leading-4 text-[#839a90] sm:text-[10px]">{execucoesVisiveis.length} {execucoesVisiveis.length === 1 ? 'agente visível' : 'agentes visíveis'} · {layout.ilhas.length - 1} ilhas + sala mista · {layout.colunas} colunas · caber tudo em largura e altura.</footer>
+      <footer className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[9px] leading-4 text-[#839a90] sm:text-[10px]">
+        <span>{execucoesVisiveis.length} {execucoesVisiveis.length === 1 ? 'agente visível' : 'agentes visíveis'} · {layout.ilhas.length - 1} ilhas + sala mista · {layout.colunas} colunas · caber tudo em largura e altura.</span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5" aria-label="Legenda de cores dos ambientes" data-testid="office-squad-legend">{squadsVisiveis.map((squad) => <span key={squad.id} className="flex items-center gap-1 whitespace-nowrap"><i className="size-1.5 shrink-0 rounded-[1px]" style={{ backgroundColor: squad.cor }} /><b className="font-medium text-[#c5d2ce]">{squad.nome}</b></span>)}</span>
+      </footer>
       <div className="sr-only" role="region" aria-label="Lista acessível de agentes do escritório"><ul>{execucoesVisiveis.map((execucao) => <li key={execucao.animacaoChave}><button type="button" onClick={() => selecionar(execucao.chave)}>{execucao.nome} — {execucao.ativa ? 'trabalhando' : 'parado'} — {execucao.squadNome}</button></li>)}</ul></div>
       <span className="sr-only" aria-live="polite">{relogioDetalhe ? '' : ''}</span>
     </div>

@@ -131,7 +131,7 @@ const layoutDescansoComOcupante = calcularLayoutSala(
   { larguraDisponivel: 990, alturaDisponivel: 600 },
 )
 conferir('descanso vazio fica encolhido', !layoutDescansoVazio.descansoAberto && layoutDescansoVazio.ocupantesDescanso === 0)
-conferir('faixa vazia usa só 30 px da planta', layoutDescansoVazio.altura - layoutDescansoVazio.descansoY === 30)
+conferir('faixa vazia usa só 26 px da planta', layoutDescansoVazio.altura - layoutDescansoVazio.descansoY === 26)
 conferir('descanso abre quando há ocupante', layoutDescansoComOcupante.descansoAberto && layoutDescansoComOcupante.ocupantesDescanso === 1)
 conferir('descanso ocupado recupera espaço para o boneco', layoutDescansoComOcupante.altura - layoutDescansoComOcupante.descansoY > 30)
 
@@ -164,6 +164,33 @@ conferir('cenário com todos os setores abre todas as ilhas sob demanda', new Se
 const zoomUm = calcularLayoutSala(filtrarSquadsSobDemanda(umAtivo, new Set(['conteúdo'])), { larguraDisponivel: 990, alturaDisponivel: 600 }).zoomSugerido
 const zoomTodos = calcularLayoutSala(filtrarSquadsSobDemanda(todosSetores, demandas), { larguraDisponivel: 990, alturaDisponivel: 600 }).zoomSugerido
 conferir('com poucos setores ativos o caber-tudo aproxima mais', zoomUm > zoomTodos, `${zoomUm}/${zoomTodos}`)
+
+// Reprodução da largura útil que sobra para o palco em 390x844 a 200%.
+// A tela física continua com 390 px: nome de mesa de 7,5 px precisa chegar a
+// 9 px efetivos, mesmo que isso transforme o palco, e só o palco, em rolável.
+const celularZoomAlto = calcularLayoutSala(
+  filtrarSquadsSobDemanda(todosSetores, demandas),
+  { larguraDisponivel: 143, alturaDisponivel: 420, zoomMinimo: 9 / (7.5 * 2) },
+)
+conferir('celular ampliado preserva nome de mesa com ao menos 9 px físicos', 7.5 * celularZoomAlto.zoomSugerido * 2 >= 9, String(7.5 * celularZoomAlto.zoomSugerido * 2))
+conferir('celular ampliado usa rolagem do palco em vez de reduzir o nome', celularZoomAlto.largura * celularZoomAlto.zoomSugerido > 143, `${celularZoomAlto.largura * celularZoomAlto.zoomSugerido}/143`)
+
+// Em 50%, o DPR cai a 0,5. O piso acompanha essa mudança e não sacrifica a
+// leitura para encaixar a planta inteira na página.
+const celularZoomBaixo = calcularLayoutSala(
+  filtrarSquadsSobDemanda(todosSetores, demandas),
+  { larguraDisponivel: 688, alturaDisponivel: 600, zoomMinimo: 9 / (7.5 * 0.5) },
+)
+conferir('celular em 50% preserva nome de mesa com ao menos 9 px físicos', 7.5 * celularZoomBaixo.zoomSugerido * 0.5 >= 9, String(7.5 * celularZoomBaixo.zoomSugerido * 0.5))
+
+// Reprodução do palco desktop a 200%. A planta deve usar a altura disponível,
+// sem a folga percentual que antes deixava mais de 10% vazio abaixo.
+const desktopZoomAlto = calcularLayoutSala(
+  filtrarSquadsSobDemanda(todosSetores, demandas),
+  { larguraDisponivel: 718, alturaDisponivel: 420 },
+)
+const alturaCssDesktopZoomAlto = Math.round(desktopZoomAlto.altura * desktopZoomAlto.zoomSugerido)
+conferir('desktop ampliado ocupa ao menos 90% da altura do palco', alturaCssDesktopZoomAlto >= 420 * 0.9, `${alturaCssDesktopZoomAlto}/420`)
 
 const globais: AgenteVivo[] = [
   ...Array.from({ length: 3 }, (_, indice) => ({
