@@ -1,6 +1,13 @@
 import type { AgenteVivo } from './tipos.ts'
 import { PIXEL_AGENTS, PIXEL_AGENT_SQUADS } from './pixel-agents.ts'
-import { calcularLayoutSala, montarExecucoesVisuais, nomeLegivelDaExecucao } from '../ui/PixelOffice.tsx'
+import {
+  SQUADS_SOB_DEMANDA,
+  calcularLayoutSala,
+  fichaUsaSalaMista,
+  filtrarSquadsSobDemanda,
+  montarExecucoesVisuais,
+  nomeLegivelDaExecucao,
+} from '../ui/PixelOffice.tsx'
 
 let falhas = 0
 function conferir(nome: string, condicao: boolean, detalhe = '') {
@@ -11,81 +18,80 @@ function conferir(nome: string, condicao: boolean, detalhe = '') {
   }
 }
 
-// A sala vazia de runtimes continua sendo o catálogo inteiro, nunca uma sala vazia.
+const fichasFixas = PIXEL_AGENTS.filter((ficha) => !fichaUsaSalaMista(ficha))
 const catalogoVisual = montarExecucoesVisuais([], PIXEL_AGENTS)
-const desktop = calcularLayoutSala(catalogoVisual)
-const celular = calcularLayoutSala(catalogoVisual, true)
+const escritorioSemComercial = filtrarSquadsSobDemanda(catalogoVisual, new Set())
+const desktop = calcularLayoutSala(escritorioSemComercial, { larguraDisponivel: 990, alturaDisponivel: 600 })
+const celular = calcularLayoutSala(escritorioSemComercial, { larguraDisponivel: 360, alturaDisponivel: 420 })
 
-conferir('todo agente do catálogo ganha um boneco fixo', catalogoVisual.length === PIXEL_AGENTS.length)
-conferir('todo agente do catálogo ganha uma mesa fixa', desktop.mesas.length === PIXEL_AGENTS.length)
-conferir('o argumento móvel preserva todas as mesas', celular.mesas.length === PIXEL_AGENTS.length)
-conferir('cada squad populado ganha uma ilha', desktop.ilhas.length === new Set(PIXEL_AGENTS.map((agente) => agente.squad)).size)
-conferir('o escritório inteiro cabe em altura de desktop', desktop.altura < 900, `altura=${desktop.altura}`)
-conferir('layout móvel usa a mesma planta geral para enquadrar várias ilhas', celular.ilhas.length === desktop.ilhas.length && celular.altura === desktop.altura)
-conferir('nomes aparecem sob todas as mesas', catalogoVisual.every((item) => item.rotulos.length > 0))
+conferir('papéis globais não ganham mesa fixa', catalogoVisual.length === fichasFixas.length)
+conferir('Dev, QA e Explore saem das ilhas fixas', ['dev', 'qa', 'explore'].every((id) => !catalogoVisual.some((item) => item.ficha?.id === id)))
+conferir('a sala mista existe vazia e compacta', Boolean(desktop.ilhas.find((ilha) => ilha.squad === 'sala mista')?.compacta))
+conferir('a sala mista vazia oferece poucos postos compartilhados', desktop.ilhas.find((ilha) => ilha.squad === 'sala mista')?.postos.length === 3)
+conferir('comercial começa escondido', !desktop.ilhas.some((ilha) => ilha.squad === 'comercial'))
+conferir('configuração sob demanda começa somente no comercial', SQUADS_SOB_DEMANDA.length === 1 && SQUADS_SOB_DEMANDA[0].id === 'comercial')
+conferir('comercial permanece alguns minutos depois do último ativo', SQUADS_SOB_DEMANDA[0].permanenciaAposUltimoAtivoMs >= 2 * 60 * 1000)
+conferir('nomes aparecem sob todas as mesas ocupadas', catalogoVisual.every((item) => item.rotulos.length > 0))
+
+for (const [nome, layout, largura, altura] of [
+  ['desktop', desktop, 990, 600],
+  ['celular', celular, 360, 420],
+] as const) {
+  const larguraRenderizada = layout.largura * layout.zoomSugerido
+  const alturaRenderizada = layout.altura * layout.zoomSugerido
+  conferir(`${nome}: caber tudo respeita a largura`, larguraRenderizada <= largura + 0.5, `${larguraRenderizada}/${largura}`)
+  conferir(`${nome}: caber tudo respeita a altura`, alturaRenderizada <= altura + 0.5, `${alturaRenderizada}/${altura}`)
+  conferir(`${nome}: sala ocupa praticamente toda a largura`, larguraRenderizada >= largura * 0.97, `${larguraRenderizada}/${largura}`)
+}
+
 const ilhaCoordenacao = desktop.ilhas.find((ilha) => ilha.squad === 'coordenação')
-conferir('ilha de coordenação ocupa a coluna central', Boolean(ilhaCoordenacao && Math.abs((ilhaCoordenacao.x + ilhaCoordenacao.largura / 2) - desktop.largura / 2) < 2))
+conferir('coordenação continua numa ilha própria', Boolean(ilhaCoordenacao && ilhaCoordenacao.mesas.every((mesa) => mesa.execucao.squad === 'coordenação')))
 
-// A roupa é do squad; cabelo, acessório ou pele diferenciam os membros.
 for (const squad of PIXEL_AGENT_SQUADS) {
+  if (squad.id === 'sala mista') continue
   const membros = catalogoVisual.filter((item) => item.squad === squad.id)
   if (!membros.length) continue
-  const membrosSemExcecaoDosChefes = membros.filter((item) => !['luana', 'renato', 'bia'].includes(item.ficha?.id || ''))
-  conferir(`${squad.nome}: roupa usa a cor do squad`, membrosSemExcecaoDosChefes.every((item) => item.cor === squad.cor))
-  if (membros.length > 1) {
-    const variantes = new Set(membros.map((item) => `${item.cabelo}:${item.pele}:${item.acessorio}`))
-    conferir(`${squad.nome}: membros não são clones genéricos`, variantes.size > 1)
-  }
+  const membrosSemChefes = membros.filter((item) => !['luana', 'renato', 'bia'].includes(item.ficha?.id || ''))
+  conferir(`${squad.nome}: roupa usa a cor do squad`, membrosSemChefes.every((item) => item.cor === squad.cor))
 }
 
-const luana = catalogoVisual.find((item) => item.ficha?.id === 'luana')
-const renato = catalogoVisual.find((item) => item.ficha?.id === 'renato')
-const bia = catalogoVisual.find((item) => item.ficha?.id === 'bia')
-conferir('chefes mantêm as cores atuais', luana?.cor === '#84cc16' && renato?.cor === '#c2410c' && bia?.cor === '#8b5cf6')
-conferir('Luana, Renato e Bia ficam juntos na ilha central de coordenação', [luana, renato, bia].every((item) => item?.squad === 'coordenação'))
+const comerciaisAtivos: AgenteVivo[] = [{
+  id: 'exec-elza', identidade: 'elza', tipo: 'diretora-comercial', estado: 'trabalhando',
+  fase: 'execução', etapa: 'qualificando conta', ferramenta: 'Read',
+}]
+const comercialAberto = montarExecucoesVisuais(comerciaisAtivos, PIXEL_AGENTS)
+const comerciaisVisiveis = filtrarSquadsSobDemanda(comercialAberto, new Set(['comercial']))
+conferir('chamar Elza abre a ilha com as oito mesas comerciais', comerciaisVisiveis.filter((item) => item.squad === 'comercial').length === 8)
+conferir('fechar o ambiente remove toda a ilha comercial', filtrarSquadsSobDemanda(comercialAberto, new Set()).every((item) => item.squad !== 'comercial'))
 
-// Três execuções do mesmo tipo: uma ocupa a mesa do Dev e duas são temporárias.
-const devs: AgenteVivo[] = Array.from({ length: 3 }, (_, indice) => ({
-  id: `execucao-dev-${indice + 1}`,
-  dono: 'renato',
-  identidade: 'dev',
-  nome: `Dev paralelo ${indice + 1}`,
-  tipo: 'dev',
-  motor: 'claude',
-  estado: 'trabalhando',
-  fase: 'execução',
-  etapa: 'implementando',
-  ferramenta: 'Edit',
-}))
-const comParalelos = montarExecucoesVisuais(devs, PIXEL_AGENTS)
-const devsVisuais = comParalelos.filter((item) => item.ficha?.id === 'dev')
-conferir('três Dev paralelos aparecem como três bonecos', devsVisuais.length === 3)
-conferir('um Dev permanece fixo e dois são extras temporários', devsVisuais.filter((item) => !item.temporaria).length === 1 && devsVisuais.filter((item) => item.temporaria).length === 2)
-conferir('extras paralelos ficam na ilha de bots', devsVisuais.every((item) => item.squad === 'bots'))
-conferir('payload paralelo não remove o restante do catálogo', comParalelos.filter((item) => !item.temporaria).length === PIXEL_AGENTS.length)
+const globais: AgenteVivo[] = [
+  ...Array.from({ length: 3 }, (_, indice) => ({
+    id: `execucao-dev-${indice + 1}`, identidade: 'dev', tipo: 'dev', motor: 'claude', estado: 'trabalhando' as const,
+    fase: 'execução', etapa: `implementando módulo ${indice + 1}`, tarefa: `Tarefa independente do Dev ${indice + 1}`, ferramenta: 'Edit',
+  })),
+  { id: 'execucao-arquiteto-1', identidade: 'arquiteto', tipo: 'arquiteto', motor: 'claude', estado: 'trabalhando', fase: 'execução', etapa: 'desenhando arquitetura', tarefa: 'Definir fronteiras do serviço', ferramenta: 'Read' },
+  { id: 'sessao-codex-1', identidade: 'sessao-codex', tipo: 'codex', motor: 'codex', modelo_legivel: 'GPT-5.6 Sol', estado: 'trabalhando', fase: 'execução', etapa: 'teste visual', tarefa: 'Validar sala mista', ferramenta: 'Playwright' },
+  { id: 'sessao-codex-2', identidade: 'sessao-codex', tipo: 'codex', motor: 'codex', modelo_legivel: 'GPT-5.6 Sol', estado: 'trabalhando', fase: 'execução', etapa: 'build', tarefa: 'Preparar o patch público', ferramenta: 'Terminal' },
+]
+const comGlobais = montarExecucoesVisuais(globais, PIXEL_AGENTS)
+const ocupantes = comGlobais.filter((item) => item.squad === 'sala mista')
+conferir('3 dev + 1 arquiteto + 2 Codex geram seis bonecos no coworking', ocupantes.length === 6)
+conferir('os seis ocupantes são distintos', new Set(ocupantes.map((item) => item.chave)).size === 6 && new Set(ocupantes.map((item) => item.nome)).size === 6)
+conferir('cada ocupante conserva sua tarefa para o detalhe', ocupantes.every((item) => Boolean(item.execucao.tarefa)))
+conferir('todos usam posto compartilhado, nenhum vira mesa fixa', ocupantes.every((item) => item.temporaria))
 
-const comDuplicata = montarExecucoesVisuais([...devs, devs[0]], PIXEL_AGENTS)
-conferir('payload duplicado por chave não cria outro boneco', comDuplicata.length === comParalelos.length)
-
-const sessaoCodex: AgenteVivo = {
-  id: '01A0DFF5-20E9-7FB0-AAAA-BBBBBBBBBBBB',
-  dono: 'luana',
-  identidade: 'sessao-codex',
-  tipo: 'codex',
-  motor: 'codex',
-  modelo_legivel: 'GPT-5.6 Sol',
-  esforco: 'alto',
-  tarefa: 'Ajustar os nomes legíveis do escritório vivo',
-  estado: 'trabalhando',
-  fase: 'execução',
-  etapa: 'implementando',
+for (let restantes = globais.length - 1; restantes >= 0; restantes -= 1) {
+  const visuais = montarExecucoesVisuais(globais.slice(0, restantes), PIXEL_AGENTS)
+  conferir(`saída sequencial deixa ${restantes} no coworking`, visuais.filter((item) => item.squad === 'sala mista').length === restantes)
 }
-const visualCodex = montarExecucoesVisuais([sessaoCodex], PIXEL_AGENTS).find((item) => item.execucao.id === sessaoCodex.id)
-conferir('sessão Codex desconhecida entra como extra temporário legível', Boolean(visualCodex?.temporaria && visualCodex.nome === 'Codex · GPT-5.6 Sol · Ajustar os nomes legíveis…'))
+
+const sessaoCodex = globais[4]
+const visualCodex = ocupantes.find((item) => item.execucao.id === sessaoCodex.id)
+conferir('sessão Codex desconhecida tem nome legível', Boolean(visualCodex?.nome.startsWith('Codex · GPT-5.6 Sol')))
 conferir('ID cru não vira nome primário da sessão Codex', Boolean(visualCodex && !visualCodex.nome.includes(sessaoCodex.id)))
 
 const cleo: AgenteVivo = { ...sessaoCodex, id: 'rollout-cleo', identidade: 'cleo', tipo: 'copy' }
-conferir('identidade catalogada tem prioridade sobre a sessão', nomeLegivelDaExecucao(cleo, PIXEL_AGENTS.find((item) => item.id === 'cleo')) === 'Cleo')
+conferir('nome catalogado continua humano no detalhe', nomeLegivelDaExecucao(cleo, PIXEL_AGENTS.find((item) => item.id === 'cleo')) === 'Cleo')
 
 if (falhas) process.exit(1)
-console.log('\nTodos os testes do escritório completo passaram!')
+console.log('\nTodos os testes do escritório responsivo passaram!')

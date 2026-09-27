@@ -6,7 +6,7 @@
 
 import { corDaSessao } from '../ui/paleta.ts'
 
-export type PixelAgentSquad = 'coordenação' | 'bots' | 'tráfego' | 'radar' | 'conteúdo' | 'comercial' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex'
+export type PixelAgentSquad = 'coordenação' | 'bots' | 'tráfego' | 'radar' | 'conteúdo' | 'comercial' | 'destinos' | 'análise' | 'globais' | 'pipeline Codex' | 'sala mista'
 
 export type PixelAgent = {
   id: string
@@ -46,6 +46,7 @@ export const PIXEL_AGENT_SQUADS: Array<{ id: PixelAgentSquad; nome: string; cor:
   { id: 'análise', nome: 'DESTINOS / ANÁLISE', cor: '#facc15' },
   { id: 'globais', nome: 'GLOBAIS', cor: '#06b6d4' },
   { id: 'pipeline Codex', nome: 'PIPELINE CODEX', cor: '#ec4899' },
+  { id: 'sala mista', nome: 'SALA MISTA / COWORKING', cor: '#67e8f9' },
 ]
 
 export const PIXEL_AGENTS: PixelAgent[] = [

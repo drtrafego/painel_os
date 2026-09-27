@@ -65,16 +65,21 @@ export interface IlhaVisual {
   squad: PixelAgentSquad
   nome: string
   cor: string
+  tipo: 'squad' | 'coworking'
+  compacta: boolean
   x: number
   y: number
   largura: number
   altura: number
+  postos: Array<{ x: number; y: number }>
   mesas: MesaVisual[]
 }
 
 export interface LayoutSala {
   largura: number
   altura: number
+  colunas: number
+  zoomSugerido: number
   corredorX: number
   descansoY: number
   ilhas: IlhaVisual[]
@@ -82,7 +87,23 @@ export interface LayoutSala {
 }
 
 const ZOOM_MIN = 0.24
-const ZOOM_MAX = 1.7
+const ZOOM_MAX = 2.4
+const SALA_MISTA: PixelAgentSquad = 'sala mista'
+const DURACAO_TRANSICAO_AMBIENTE_MS = 720
+
+/** Squads que só ocupam espaço quando a operação os convoca. */
+export const SQUADS_SOB_DEMANDA: ReadonlyArray<{
+  id: PixelAgentSquad
+  permanenciaAposUltimoAtivoMs: number
+}> = [
+  { id: 'comercial', permanenciaAposUltimoAtivoMs: 3 * 60 * 1000 },
+]
+
+const IDS_CATALOGO_SALA_MISTA = new Set(['dev', 'qa', 'explore'])
+const PAPEIS_SALA_MISTA = new Set([
+  'copy', 'designer', 'social', 'closer', 'frank', 'lex', 'arquiteto',
+  'deployer', 'dev', 'qa', 'explore', 'general-purpose', 'general purpose',
+])
 const CORES_SQUAD = new Map(PIXEL_AGENT_SQUADS.map((squad) => [squad.id, squad.cor]))
 const NOMES_SQUAD = new Map(PIXEL_AGENT_SQUADS.map((squad) => [squad.id, squad.nome]))
 const CABELOS = ['#302d29', '#5a3825', '#c08a48', '#1f2c36', '#6b3546', '#ded0ad']
@@ -113,15 +134,24 @@ function rgba(hex: string, alfa: number) {
   return `rgba(${r}, ${g}, ${b}, ${alfa})`
 }
 
-function squadDaExecucao(execucao: AgenteVivo, catalogo: PixelAgent[]): PixelAgentSquad {
-  const encontrado = resolverAgenteNoCatalogo(execucao, catalogo)
-  if (encontrado) return encontrado.squad
-  const dono = execucao.dono?.toLowerCase()
-  if (dono === 'renato') return 'bots'
-  if (dono === 'bia') return 'tráfego'
-  if (dono === 'luana') return 'coordenação'
-  if (execucao.motor === 'codex' || execucao.tipo === 'codex') return 'pipeline Codex'
-  return 'globais'
+function normalizarPapel(valor?: string | null) {
+  return (valor || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+export function fichaUsaSalaMista(ficha?: PixelAgent) {
+  if (!ficha) return true
+  return ficha.squad === 'globais' || ficha.squad === 'pipeline Codex' || IDS_CATALOGO_SALA_MISTA.has(normalizarPapel(ficha.id))
+}
+
+/** Execuções genéricas nunca "herdam" por alias a mesa fixa de uma pessoa. */
+export function execucaoUsaSalaMista(execucao: AgenteVivo, ficha?: PixelAgent) {
+  const identidade = normalizarPapel(execucao.identidade)
+  const tipo = normalizarPapel(execucao.tipo)
+  const papel = normalizarPapel(execucao.papel)
+  if ([identidade, tipo, papel].some((valor) => PAPEIS_SALA_MISTA.has(valor))) return true
+  const semIdentidade = !identidade || identidade === 'sessao codex' || identidade === 'sessao claude' || identidade === 'sessao claude code'
+  if ((execucao.motor === 'codex' || tipo === 'codex') && semIdentidade) return true
+  return fichaUsaSalaMista(ficha)
 }
 
 const IDENTIDADES_GENERICAS = new Set(['sessao-codex', 'sessao-claude', 'sessão codex', 'sessão claude code'])
@@ -158,6 +188,10 @@ export function nomeLegivelDaExecucao(execucao: AgenteVivo, ficha?: PixelAgent) 
   const tipo = execucao.tipo?.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
   if (tipo && !TIPOS_GENERICOS.has(execucao.tipo?.toLowerCase() || '')) return tipo.charAt(0).toUpperCase() + tipo.slice(1)
   return 'Agente sem identidade'
+}
+
+function capitalizarNome(valor: string) {
+  return valor ? valor.charAt(0).toLocaleUpperCase('pt-BR') + valor.slice(1) : valor
 }
 
 function rotulosDaMesa(nome: string) {
@@ -229,22 +263,23 @@ function criarVisual(execucao: AgenteVivo, ficha: PixelAgent | undefined, squad:
   }
 }
 
-/** Materializa o catálogo inteiro; execuções paralelas viram extras temporários na ilha. */
+/** Materializa ilhas fixas e manda executores sem squad próprio para o coworking. */
 export function montarExecucoesVisuais(agentes: AgenteVivo[], catalogo: PixelAgent[]): ExecucaoVisual[] {
   const runtimes = agentes.filter((execucao, indice, todos) => {
     const chave = chaveAgente(execucao.dono, execucao.id)
     return todos.findIndex((item) => chaveAgente(item.dono, item.id) === chave) === indice
   })
   const porFicha = new Map<string, AgenteVivo[]>()
-  const semFicha: AgenteVivo[] = []
+  const coworking: Array<{ execucao: AgenteVivo; ficha?: PixelAgent }> = []
   runtimes.forEach((runtime) => {
     const ficha = resolverAgenteNoCatalogo(runtime, catalogo)
-    if (!ficha) { semFicha.push(runtime); return }
+    if (!ficha || execucaoUsaSalaMista(runtime, ficha)) { coworking.push({ execucao: runtime, ficha }); return }
     porFicha.set(ficha.id, [...(porFicha.get(ficha.id) || []), runtime])
   })
 
   const visuais: ExecucaoVisual[] = []
   catalogo.forEach((ficha) => {
+    if (fichaUsaSalaMista(ficha)) return
     const execucoes = porFicha.get(ficha.id) || []
     const squadVisual = ['luana', 'renato', 'bia'].includes(ficha.id) ? 'coordenação' : ficha.squad
     visuais.push(criarVisual(execucoes[0] || execucaoParada(ficha), ficha, squadVisual, visuais.length, false, ficha.nome))
@@ -252,55 +287,128 @@ export function montarExecucoesVisuais(agentes: AgenteVivo[], catalogo: PixelAge
       visuais.push(criarVisual(execucao, ficha, squadVisual, visuais.length, true, `${ficha.nome} · extra ${indice + 2}`))
     })
   })
-  semFicha.forEach((execucao) => visuais.push(criarVisual(execucao, undefined, squadDaExecucao(execucao, catalogo), visuais.length, true)))
+  const bases = coworking.map(({ execucao, ficha }) => capitalizarNome(nomeLegivelDaExecucao(execucao, ficha)))
+  const totais = new Map<string, number>()
+  bases.forEach((nome) => totais.set(nome, (totais.get(nome) || 0) + 1))
+  const ocorrencias = new Map<string, number>()
+  coworking.forEach(({ execucao, ficha }, indice) => {
+    const base = bases[indice]
+    const ocorrencia = (ocorrencias.get(base) || 0) + 1
+    ocorrencias.set(base, ocorrencia)
+    const nome = (totais.get(base) || 0) > 1 ? `${base} · ${ocorrencia}` : base
+    visuais.push(criarVisual(execucao, ficha, SALA_MISTA, visuais.length, true, nome))
+  })
   return visuais
 }
 
-/** Layout compacto em até três colunas; o enquadramento padrão considera largura e altura. */
-export function calcularLayoutSala(execucoes: ExecucaoVisual[], _compacto = false): LayoutSala {
+export function filtrarSquadsSobDemanda(execucoes: ExecucaoVisual[], squadsAbertos: ReadonlySet<PixelAgentSquad>) {
+  const sobDemanda = new Set(SQUADS_SOB_DEMANDA.map((item) => item.id))
+  return execucoes.filter((execucao) => !sobDemanda.has(execucao.squad) || squadsAbertos.has(execucao.squad))
+}
+
+type OpcoesLayoutSala = { larguraDisponivel?: number; alturaDisponivel?: number }
+
+/** Escolhe a planta cuja escala uniforme é a maior que cabe nos dois eixos. */
+export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes: boolean | OpcoesLayoutSala = false): LayoutSala {
+  const opcoes = typeof compactoOuOpcoes === 'object' ? compactoOuOpcoes : {}
   const grupos = new Map<PixelAgentSquad, ExecucaoVisual[]>()
   execucoes.forEach((execucao) => grupos.set(execucao.squad, [...(grupos.get(execucao.squad) || []), execucao]))
-  const ordemSquads = PIXEL_AGENT_SQUADS.map((squad) => squad.id).filter((id) => grupos.has(id))
-  const colunasIlhas = Math.max(1, Math.min(3, ordemSquads.length))
+  const ordemSquads = [
+    ...PIXEL_AGENT_SQUADS.map((squad) => squad.id).filter((id) => id !== SALA_MISTA && grupos.has(id)),
+    SALA_MISTA,
+  ]
   const larguraIlha = 282
   const margemX = 24
   const vaoX = 18
-  const largura = margemX * 2 + colunasIlhas * larguraIlha + (colunasIlhas - 1) * vaoX
-  const cursoresY = Array.from({ length: colunasIlhas }, () => 90)
+  const margemTopo = 90
+  const alturas = new Map<PixelAgentSquad, number>()
+  ordemSquads.forEach((squad) => {
+    const quantidade = squad === SALA_MISTA ? Math.max(3, grupos.get(squad)?.length || 0) : grupos.get(squad)?.length || 0
+    const colunasMesa = squad === SALA_MISTA ? Math.min(3, quantidade) : Math.min(4, Math.max(1, quantidade))
+    const linhasMesa = Math.ceil(quantidade / colunasMesa)
+    alturas.set(squad, 42 + linhasMesa * 73 + (squad === SALA_MISTA ? 52 : 0))
+  })
+
+  const distribuir = (colunas: number) => {
+    const cursores = Array.from({ length: colunas }, () => margemTopo)
+    const posicoes: Array<{ squad: PixelAgentSquad; coluna: number; y: number }> = []
+    ordemSquads.forEach((squad) => {
+      const menor = Math.min(...cursores)
+      const coluna = squad === 'coordenação' && cursores.every((cursor) => cursor === margemTopo)
+        ? Math.floor((colunas - 1) / 2)
+        : cursores.indexOf(menor)
+      posicoes.push({ squad, coluna, y: cursores[coluna] })
+      cursores[coluna] += (alturas.get(squad) || 0) + 16
+    })
+    const descansoY = Math.max(...cursores, 280) + 8
+    const fixas = execucoes.filter((execucao) => execucao.squad !== SALA_MISTA).length
+    const larguraNatural = margemX * 2 + colunas * larguraIlha + (colunas - 1) * vaoX
+    const porLinha = Math.max(8, Math.floor((larguraNatural - 70) / 34))
+    const linhasDescanso = Math.max(1, Math.ceil(fixas / porLinha))
+    return { posicoes, descansoY, larguraNatural, altura: descansoY + 63 + linhasDescanso * 35 }
+  }
+
+  const larguraDisponivel = Math.max(0, opcoes.larguraDisponivel || 0)
+  const alturaDisponivel = Math.max(0, opcoes.alturaDisponivel || 0)
+  let melhor = { colunas: 1, ...distribuir(1), escala: Number.NEGATIVE_INFINITY }
+  for (let colunas = 1; colunas <= Math.min(6, ordemSquads.length); colunas += 1) {
+    const candidato = distribuir(colunas)
+    const escala = larguraDisponivel && alturaDisponivel
+      ? Math.min(larguraDisponivel / candidato.larguraNatural, alturaDisponivel / candidato.altura)
+      : colunas === Math.min(3, ordemSquads.length) ? 1 : 0
+    if (escala > melhor.escala + 0.001 || (Math.abs(escala - melhor.escala) <= 0.001 && colunas > melhor.colunas)) {
+      melhor = { colunas, ...candidato, escala }
+    }
+  }
+
+  const zoomSugeridoNatural = larguraDisponivel && alturaDisponivel
+    ? Math.min(larguraDisponivel / melhor.larguraNatural, alturaDisponivel / melhor.altura) * 0.985
+    : 1
+  const zoomSugerido = limitar(zoomSugeridoNatural, ZOOM_MIN, ZOOM_MAX)
+  const largura = larguraDisponivel ? Math.max(melhor.larguraNatural, larguraDisponivel / zoomSugerido) : melhor.larguraNatural
+  const passoColuna = melhor.colunas > 1 ? (largura - margemX * 2 - larguraIlha) / (melhor.colunas - 1) : 0
   const ilhas: IlhaVisual[] = []
   const mesas: MesaVisual[] = []
 
-  ordemSquads.forEach((squad) => {
+  melhor.posicoes.forEach(({ squad, coluna, y }) => {
     const lista = grupos.get(squad) || []
-    const coluna = squad === 'coordenação' && colunasIlhas === 3 ? 1 : cursoresY.indexOf(Math.min(...cursoresY))
-    const colunasMesa = Math.min(4, Math.max(1, lista.length))
-    const linhasMesa = Math.ceil(lista.length / colunasMesa)
-    const alturaIlha = 42 + linhasMesa * 73
-    const x = margemX + coluna * (larguraIlha + vaoX)
-    const y = cursoresY[coluna]
+    const coworking = squad === SALA_MISTA
+    const capacidade = coworking ? Math.max(3, lista.length) : lista.length
+    const colunasMesa = coworking ? Math.min(3, capacidade) : Math.min(4, Math.max(1, capacidade))
+    const alturaIlha = alturas.get(squad) || 0
+    const x = melhor.colunas === 1 ? (largura - larguraIlha) / 2 : margemX + coluna * passoColuna
     const mesasIlha: MesaVisual[] = []
-    lista.forEach((execucao, posicao) => {
+    const postos: Array<{ x: number; y: number }> = []
+    for (let posicao = 0; posicao < capacidade; posicao += 1) {
       const colunaMesa = posicao % colunasMesa
       const linhaMesa = Math.floor(posicao / colunasMesa)
       const intervalo = larguraIlha / colunasMesa
-      const mesa: MesaVisual = { execucao, x: x + intervalo * (colunaMesa + 0.5), y: y + 49 + linhaMesa * 73, descanso: { x: 0, y: 0 } }
+      postos.push({ x: x + intervalo * (colunaMesa + 0.5), y: y + 49 + linhaMesa * 73 })
+    }
+    lista.forEach((execucao, posicao) => {
+      const posto = postos[posicao]
+      const mesa: MesaVisual = { execucao, x: posto.x, y: posto.y, descanso: { x: 0, y: 0 } }
       mesasIlha.push(mesa); mesas.push(mesa)
     })
-    ilhas.push({ squad, nome: lista[0]?.squadNome || squad.toUpperCase(), cor: CORES_SQUAD.get(squad) || '#7bcaad', x, y, largura: larguraIlha, altura: alturaIlha, mesas: mesasIlha })
-    cursoresY[coluna] += alturaIlha + 16
+    ilhas.push({ squad, nome: lista[0]?.squadNome || NOMES_SQUAD.get(squad) || squad.toUpperCase(), cor: CORES_SQUAD.get(squad) || '#7bcaad', tipo: coworking ? 'coworking' : 'squad', compacta: coworking && lista.length === 0, x, y, largura: larguraIlha, altura: alturaIlha, postos, mesas: mesasIlha })
   })
 
-  const descansoY = Math.max(...cursoresY, 280) + 8
+  const descansoY = melhor.descansoY
   const porLinha = Math.max(8, Math.floor((largura - 70) / 34))
-  mesas.forEach((mesa, indice) => {
+  const mesasFixas = mesas.filter((mesa) => mesa.execucao.squad !== SALA_MISTA)
+  mesasFixas.forEach((mesa, indice) => {
     const linha = Math.floor(indice / porLinha)
-    const itensNaLinha = Math.min(porLinha, mesas.length - linha * porLinha)
+    const itensNaLinha = Math.min(porLinha, mesasFixas.length - linha * porLinha)
     const intervalo = Math.min(34, (largura - 76) / Math.max(1, itensNaLinha))
     const inicio = (largura - intervalo * (itensNaLinha - 1)) / 2
     mesa.descanso = { x: inicio + (indice % porLinha) * intervalo, y: descansoY + 36 + linha * 35 }
   })
-  const linhasDescanso = Math.max(1, Math.ceil(mesas.length / porLinha))
-  return { largura, altura: descansoY + 63 + linhasDescanso * 35, corredorX: largura / 2, descansoY, ilhas, mesas }
+  const ilhaMista = ilhas.find((ilha) => ilha.squad === SALA_MISTA)
+  ilhaMista?.mesas.forEach((mesa, indice) => {
+    mesa.descanso = { x: ilhaMista.x + ilhaMista.largura - 12, y: ilhaMista.y + ilhaMista.altura - 18 - (indice % 2) * 9 }
+  })
+  const linhasDescanso = Math.max(1, Math.ceil(mesasFixas.length / porLinha))
+  return { largura, altura: descansoY + 63 + linhasDescanso * 35, colunas: melhor.colunas, zoomSugerido, corredorX: largura / 2, descansoY, ilhas, mesas }
 }
 
 function alvoDaExecucao(execucao: ExecucaoVisual): 'trabalhando' | 'silencioso' | 'parado' {
@@ -323,15 +431,73 @@ function poseDoEstado(estado: EstadoAnimacaoBoneco, corredorX: number) {
   return { x: estado.x + corredorX, y: estado.y, sentado, andando: estado.fase === 'caminhando_para_mesa' || estado.fase === 'caminhando_para_descanso', fase: estado.fase }
 }
 
+function squadsAtivosSobDemanda(execucoes: ExecucaoVisual[]) {
+  const configurados = new Set(SQUADS_SOB_DEMANDA.map((item) => item.id))
+  return new Set(execucoes.filter((item) => item.ativa && configurados.has(item.squad)).map((item) => item.squad))
+}
+
+function useSquadsSobDemanda(execucoes: ExecucaoVisual[]) {
+  const [abertos, setAbertos] = useState<Set<PixelAgentSquad>>(() => squadsAtivosSobDemanda(execucoes))
+  const [saindo, setSaindo] = useState<Set<PixelAgentSquad>>(() => new Set())
+  const timersEsconder = useRef(new Map<PixelAgentSquad, number>())
+  const timersRemover = useRef(new Map<PixelAgentSquad, number>())
+  const ativos = squadsAtivosSobDemanda(execucoes)
+  const assinaturaAtivos = [...ativos].sort().join('|')
+
+  useEffect(() => {
+    SQUADS_SOB_DEMANDA.forEach((configuracao) => {
+      const squad = configuracao.id
+      if (ativos.has(squad)) {
+        const timerEsconder = timersEsconder.current.get(squad)
+        const timerRemover = timersRemover.current.get(squad)
+        if (timerEsconder) window.clearTimeout(timerEsconder)
+        if (timerRemover) window.clearTimeout(timerRemover)
+        timersEsconder.current.delete(squad)
+        timersRemover.current.delete(squad)
+        setSaindo((atuais) => {
+          if (!atuais.has(squad)) return atuais
+          const proximos = new Set(atuais); proximos.delete(squad); return proximos
+        })
+        setAbertos((atuais) => {
+          if (atuais.has(squad)) return atuais
+          const proximos = new Set(atuais); proximos.add(squad); return proximos
+        })
+        return
+      }
+      if (!abertos.has(squad) || timersEsconder.current.has(squad) || saindo.has(squad)) return
+      const timer = window.setTimeout(() => {
+        timersEsconder.current.delete(squad)
+        setSaindo((atuais) => new Set(atuais).add(squad))
+        const remover = window.setTimeout(() => {
+          timersRemover.current.delete(squad)
+          setSaindo((atuais) => { const proximos = new Set(atuais); proximos.delete(squad); return proximos })
+          setAbertos((atuais) => { const proximos = new Set(atuais); proximos.delete(squad); return proximos })
+        }, DURACAO_TRANSICAO_AMBIENTE_MS)
+        timersRemover.current.set(squad, remover)
+      }, configuracao.permanenciaAposUltimoAtivoMs)
+      timersEsconder.current.set(squad, timer)
+    })
+  }, [abertos, assinaturaAtivos, saindo])
+
+  useEffect(() => () => {
+    timersEsconder.current.forEach((timer) => window.clearTimeout(timer))
+    timersRemover.current.forEach((timer) => window.clearTimeout(timer))
+  }, [])
+
+  return { abertos, saindo }
+}
+
 export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos }: PixelOfficeProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const palcoRef = useRef<HTMLDivElement | null>(null)
   const hitsRef = useRef<Array<{ chave: string; x: number; y: number; largura: number; altura: number }>>([])
   const animacoesRef = useRef(new Map<string, EstadoAnimacaoBoneco>())
   const fasesRef = useRef(new Map<string, FaseBoneco>())
+  const progressoIlhasRef = useRef(new Map<PixelAgentSquad, number>())
   const tempoRef = useRef(0)
   const zoomAutomaticoRef = useRef(1)
   const [zoom, setZoom] = useState(1)
+  const [dimensoesPalco, setDimensoesPalco] = useState({ largura: 900, altura: 600 })
   const [pausado, setPausado] = useState(false)
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
   const [relogioDetalhe, setRelogioDetalhe] = useState(0)
@@ -345,12 +511,19 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   }, [])
 
   const todasExecucoes = useMemo(() => montarExecucoesVisuais(agentes, catalogo), [agentes, catalogo])
-  const execucoesVisiveis = useMemo(() => soAtivos ? todasExecucoes.filter((execucao) => execucao.ativa) : todasExecucoes, [soAtivos, todasExecucoes])
-  const layout = useMemo(() => calcularLayoutSala(execucoesVisiveis), [execucoesVisiveis])
+  const { abertos: squadsSobDemandaAbertos, saindo: squadsSobDemandaSaindo } = useSquadsSobDemanda(todasExecucoes)
+  const execucoesVisiveis = useMemo(() => {
+    const porAtividade = soAtivos ? todasExecucoes.filter((execucao) => execucao.ativa) : todasExecucoes
+    return filtrarSquadsSobDemanda(porAtividade, squadsSobDemandaAbertos)
+  }, [soAtivos, squadsSobDemandaAbertos, todasExecucoes])
+  const layout = useMemo(() => calcularLayoutSala(execucoesVisiveis, {
+    larguraDisponivel: dimensoesPalco.largura,
+    alturaDisponivel: dimensoesPalco.altura,
+  }), [dimensoesPalco.altura, dimensoesPalco.largura, execucoesVisiveis])
   const totalAtivos = todasExecucoes.filter((execucao) => execucao.ativa).length
   const totalFixos = todasExecucoes.filter((execucao) => !execucao.temporaria).length
   const totalExtras = todasExecucoes.filter((execucao) => execucao.temporaria).length
-  const selecionada = todasExecucoes.find((execucao) => execucao.chave === agenteSelecionadoId) || execucoesVisiveis[0]
+  const selecionada = execucoesVisiveis.find((execucao) => execucao.chave === agenteSelecionadoId) || execucoesVisiveis[0]
   const faseSelecionada = selecionada ? fasesRef.current.get(selecionada.animacaoChave) : undefined
   const squadsVisiveis = useMemo(() => PIXEL_AGENT_SQUADS.filter((squad) => layout.ilhas.some((ilha) => ilha.squad === squad.id)), [layout.ilhas])
 
@@ -360,13 +533,17 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
     const ajustar = () => {
       const larguraDisponivel = Math.max(260, palco.clientWidth - 2)
       const alturaDisponivel = Math.max(300, palco.clientHeight - 2)
-      const automatico = limitar(Math.min(larguraDisponivel / layout.largura, alturaDisponivel / layout.altura) * 0.985, ZOOM_MIN, 1)
-      zoomAutomaticoRef.current = automatico; setZoom(automatico)
+      setDimensoesPalco((atuais) => atuais.largura === larguraDisponivel && atuais.altura === alturaDisponivel ? atuais : { largura: larguraDisponivel, altura: alturaDisponivel })
     }
     ajustar()
     const observador = new ResizeObserver(ajustar); observador.observe(palco)
     return () => observador.disconnect()
-  }, [layout.altura, layout.largura])
+  }, [])
+
+  useEffect(() => {
+    zoomAutomaticoRef.current = layout.zoomSugerido
+    setZoom(layout.zoomSugerido)
+  }, [layout.zoomSugerido])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -409,30 +586,57 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
       else if (execucao.objeto === 'codigo') texto('</>', ox, oy - 1, 5.5, execucao.destaque, 'center', 800)
       else { ctx.fillRect(ox - 4, oy - 7, 7, 7); ctx.fillRect(ox + 3, oy - 6, 3, 4) }
     }
-    const desenharMesa = (mesa: MesaVisual) => {
+    const desenharMesa = (mesa: Pick<MesaVisual, 'x' | 'y'> & { execucao?: ExecucaoVisual }) => {
       const { x, y, execucao } = mesa
       ctx.fillStyle = '#0003'; ctx.beginPath(); ctx.ellipse(x + 3, y + 14, 29, 15, 0, 0, Math.PI * 2); ctx.fill()
       bloco(x - 18, y + 3, 5, 6, 19, '#d6b181', '#705037', '#58422f'); bloco(x + 18, y + 4, 5, 6, 19, '#d6b181', '#705037', '#58422f')
       bloco(x, y, 48, 27, 6, '#ceac7b', '#9a7650', '#755435'); bloco(x - 3, y - 8, 23, 4, 20, '#516e72', '#1b303b', '#10232b')
-      ctx.fillStyle = execucao.ativa ? '#163d48' : '#112328'; ctx.fillRect(x - 13, y - 27, 20, 13)
-      if (execucao.ativa) { ctx.shadowColor = execucao.cor; ctx.shadowBlur = 8; ctx.fillStyle = execucao.cor; ctx.fillRect(x - 10, y - 24, 12, 2); ctx.shadowBlur = 0; ctx.fillStyle = '#82aaa5'; ctx.fillRect(x - 10, y - 20, 8, 1) }
-      bloco(x - 2, y + 4, 17, 8, 2, '#c1cfb9', '#7a8d84', '#4d655f'); desenharObjeto(mesa); cadeira(x, y + 24)
-      execucao.rotulos.forEach((rotulo, indice) => texto(rotulo, x, y + 42 + indice * 7, 5.8, indice === 0 ? '#f4ead0' : '#c7d5cf', 'center', 700))
-      if (execucao.temporaria) texto('+ TEMP', x, y + 57, 5.2, '#f7cb73', 'center', 800)
+      ctx.fillStyle = execucao?.ativa ? '#163d48' : '#112328'; ctx.fillRect(x - 13, y - 27, 20, 13)
+      if (execucao?.ativa) { ctx.shadowColor = execucao.cor; ctx.shadowBlur = 8; ctx.fillStyle = execucao.cor; ctx.fillRect(x - 10, y - 24, 12, 2); ctx.shadowBlur = 0; ctx.fillStyle = '#82aaa5'; ctx.fillRect(x - 10, y - 20, 8, 1) }
+      bloco(x - 2, y + 4, 17, 8, 2, '#c1cfb9', '#7a8d84', '#4d655f'); if (execucao) desenharObjeto(mesa as MesaVisual); cadeira(x, y + 24)
+      if (execucao) {
+        execucao.rotulos.forEach((rotulo, indice) => texto(rotulo, x, y + 42 + indice * 7, 5.8, indice === 0 ? '#f4ead0' : '#c7d5cf', 'center', 700))
+        if (execucao.squad === SALA_MISTA) texto('POSTO COMPARTILHADO', x, y + 57, 4.8, '#8ed8dc', 'center', 800)
+        else if (execucao.temporaria) texto('+ TEMP', x, y + 57, 5.2, '#f7cb73', 'center', 800)
+      } else texto('LIVRE', x, y + 43, 5.2, '#7f9995', 'center', 800)
+    }
+    const progressosDoQuadro = new Map<PixelAgentSquad, number>()
+    const comTransformacaoDoAmbiente = (ilha: IlhaVisual, desenharConteudo: () => void) => {
+      const progresso = progressosDoQuadro.get(ilha.squad) ?? 1
+      if (progresso >= 0.999) { desenharConteudo(); return }
+      const escalaX = 0.72 + progresso * 0.28
+      const escalaY = 0.18 + progresso * 0.82
+      const centroX = ilha.x + ilha.largura / 2
+      const baseY = ilha.y + ilha.altura
+      ctx.save(); ctx.globalAlpha *= 0.12 + progresso * 0.88; ctx.translate(centroX, baseY); ctx.scale(escalaX, escalaY); ctx.translate(-centroX, -baseY)
+      desenharConteudo(); ctx.restore()
     }
     const desenharSala = () => {
       const { largura, altura } = layout
       ctx.fillStyle = '#183237'; ctx.fillRect(0, 0, largura, altura); ctx.fillStyle = '#244249'; ctx.fillRect(8, 10, largura - 16, 62)
       ctx.fillStyle = '#2b4a4d'; ctx.fillRect(10, 11, largura - 20, 3)
       for (let x = 18; x < largura; x += 43) { ctx.fillStyle = '#1f393e'; ctx.fillRect(x, 17, 1, 50) }
-      texto('G4ST4OVIB3', largura / 2, 38, 16, '#dfd6b4', 'center', 900); texto('TODOS OS AGENTES · CADA SQUAD NA SUA ILHA', largura / 2, 55, 6.5, '#a9bbb0', 'center', 650)
+      texto('G4ST4OVIB3', largura / 2, 38, 16, '#dfd6b4', 'center', 900); texto('SQUADS NAS ILHAS · EXECUTORES GLOBAIS NO COWORKING', largura / 2, 55, 6.5, '#a9bbb0', 'center', 650)
       ctx.fillStyle = '#947951'; ctx.fillRect(8, 72, largura - 16, altura - 80)
       for (let y = 72; y < altura - 7; y += 18) { ctx.fillStyle = Math.round(y / 18) % 2 ? '#a78b60' : '#aa916c'; ctx.fillRect(10, y, largura - 20, 16); ctx.fillStyle = '#846c49'; for (let x = 10 + (Math.round(y / 18) % 2) * 27; x < largura - 10; x += 54) ctx.fillRect(x, y, 1, 16) }
       layout.ilhas.forEach((ilha) => {
-        ctx.fillStyle = rgba(ilha.cor, 0.23); ctx.fillRect(ilha.x, ilha.y, ilha.largura, ilha.altura); ctx.strokeStyle = rgba(ilha.cor, 0.82); ctx.lineWidth = 1; ctx.strokeRect(ilha.x + 0.5, ilha.y + 0.5, ilha.largura - 1, ilha.altura - 1)
-        ctx.fillStyle = ilha.cor; ctx.fillRect(ilha.x, ilha.y, ilha.largura, 24); texto(ilha.nome, ilha.x + 9, ilha.y + 16, 7.2, '#081819', 'left', 900); texto(`${ilha.mesas.length}`, ilha.x + ilha.largura - 9, ilha.y + 16, 7, '#081819', 'right', 900)
+        comTransformacaoDoAmbiente(ilha, () => {
+          const alfa = ilha.compacta ? 0.1 : 0.23
+          ctx.fillStyle = rgba(ilha.cor, alfa); ctx.fillRect(ilha.x, ilha.y, ilha.largura, ilha.altura); ctx.strokeStyle = rgba(ilha.cor, ilha.compacta ? 0.36 : 0.82); ctx.lineWidth = ilha.tipo === 'coworking' ? 2 : 1; ctx.strokeRect(ilha.x + 0.5, ilha.y + 0.5, ilha.largura - 1, ilha.altura - 1)
+          if (ilha.tipo === 'coworking') { ctx.fillStyle = '#193b3e'; ctx.fillRect(ilha.x - 5, ilha.y, 5, ilha.altura); ctx.fillStyle = '#90a69d'; ctx.fillRect(ilha.x - 3, ilha.y + 28, 1, ilha.altura - 34) }
+          ctx.fillStyle = ilha.compacta ? '#42686b' : ilha.cor; ctx.fillRect(ilha.x, ilha.y, ilha.largura, 24); texto(ilha.nome, ilha.x + 9, ilha.y + 16, 7.2, '#081819', 'left', 900); texto(ilha.tipo === 'coworking' ? `${ilha.mesas.length} / ${ilha.postos.length}` : `${ilha.mesas.length}`, ilha.x + ilha.largura - 9, ilha.y + 16, 7, '#081819', 'right', 900)
+          ilha.postos.forEach((posto, indice) => desenharMesa({ ...posto, execucao: ilha.mesas[indice]?.execucao }))
+          if (ilha.tipo === 'coworking') {
+            const sofaX = ilha.x + ilha.largura / 2; const sofaY = ilha.y + ilha.altura - 12
+            bloco(sofaX, sofaY, 92, 28, 12, '#688b83', '#355953', '#294a47'); bloco(sofaX, sofaY - 12, 88, 8, 21, '#779991', '#42645e', '#31534e')
+            texto(ilha.compacta ? 'COWORKING DISPONÍVEL' : 'SOFÁ / PAUSA', sofaX, sofaY + 12, 5.3, ilha.compacta ? '#86a6a2' : '#cde1d8', 'center', 800)
+          }
+          if (SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)) {
+            const progresso = progressosDoQuadro.get(ilha.squad) ?? 1; const centro = ilha.x + ilha.largura / 2; const base = ilha.y + ilha.altura - 2; const painel = 31 * (1 - progresso)
+            ctx.fillStyle = '#13282b'; ctx.fillRect(centro - 32, base - 38, painel, 38); ctx.fillRect(centro + 32 - painel, base - 38, painel, 38); ctx.strokeStyle = rgba(ilha.cor, 0.9); ctx.strokeRect(centro - 33, base - 39, 66, 39)
+          }
+        })
       })
-      layout.mesas.forEach(desenharMesa)
       ctx.fillStyle = '#214747'; ctx.fillRect(18, layout.descansoY, largura - 36, layout.altura - layout.descansoY - 10); ctx.fillStyle = '#496b63'; ctx.fillRect(21, layout.descansoY - 2, largura - 42, 5); texto('DESCANSO', largura - 30, layout.descansoY + 17, 6.5, '#e0d5af', 'right', 800)
     }
     const desenharBoneco = (mesa: MesaVisual, estadoAnimacao: EstadoAnimacaoBoneco) => {
@@ -467,16 +671,28 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
       if (!pausado && !document.hidden) tempoRef.current += delta / 1000
       const agoraAnimacaoMs = tempoRef.current * 1000
       if (agora - ultimoDetalhe > 400) { ultimoDetalhe = agora; setRelogioDetalhe((valor) => valor + 1) }
+      layout.ilhas.forEach((ilha) => {
+        const ehSobDemanda = SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)
+        const alvo = ehSobDemanda && squadsSobDemandaSaindo.has(ilha.squad) ? 0 : 1
+        const inicial = progressoIlhasRef.current.get(ilha.squad) ?? (ehSobDemanda ? 0 : 1)
+        const passo = reduzirMovimento ? 1 : delta / DURACAO_TRANSICAO_AMBIENTE_MS
+        const proximo = alvo > inicial ? Math.min(alvo, inicial + passo) : Math.max(alvo, inicial - passo)
+        progressoIlhasRef.current.set(ilha.squad, proximo); progressosDoQuadro.set(ilha.squad, proximo)
+      })
       const dpr = Math.min(window.devicePixelRatio || 1, 2); const larguraCss = Math.round(layout.largura * zoom); const alturaCss = Math.round(layout.altura * zoom)
       if (canvas.width !== Math.round(larguraCss * dpr) || canvas.height !== Math.round(alturaCss * dpr)) { canvas.width = Math.round(larguraCss * dpr); canvas.height = Math.round(alturaCss * dpr); canvas.style.width = `${larguraCss}px`; canvas.style.height = `${alturaCss}px` }
       ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, 0, 0); ctx.clearRect(0, 0, layout.largura, layout.altura); desenharSala(); hitsRef.current = []
-      const estados = layout.mesas.map((mesa) => ({ mesa, estado: estadoDaMesa(mesa, agoraAnimacaoMs) })); estados.sort((a, b) => a.estado.y - b.estado.y).forEach(({ mesa, estado }) => desenharBoneco(mesa, estado))
-      canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length)
+      const estados = layout.mesas.map((mesa) => ({ mesa, estado: estadoDaMesa(mesa, agoraAnimacaoMs) })); estados.sort((a, b) => a.estado.y - b.estado.y).forEach(({ mesa, estado }) => {
+        if (SQUADS_SOB_DEMANDA.some((item) => item.id === mesa.execucao.squad) && !mesa.execucao.ativa && estado.fase === 'descanso') return
+        const ilha = layout.ilhas.find((item) => item.squad === mesa.execucao.squad)
+        if (ilha) comTransformacaoDoAmbiente(ilha, () => desenharBoneco(mesa, estado)); else desenharBoneco(mesa, estado)
+      })
+      canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0)
       quadro = requestAnimationFrame(desenhar)
     }
     quadro = requestAnimationFrame(desenhar)
     return () => { ativo = false; cancelAnimationFrame(quadro) }
-  }, [agenteSelecionadoId, layout, pausado, reduzirMovimento, zoom])
+  }, [agenteSelecionadoId, layout, pausado, reduzirMovimento, squadsSobDemandaSaindo, zoom])
 
   const selecionar = (chave: string) => aoSelecionarAgente?.(chave)
   const tratarClique = (evento: React.MouseEvent<HTMLCanvasElement>) => {
@@ -493,26 +709,26 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   const descricaoSonda = statusLeitura === 'confirmado' ? `Leitura ao vivo${recebidoEm ? ` · ${Math.max(0, Math.round((Date.now() - recebidoEm.getTime()) / 1000))}s` : ''}` : statusLeitura === 'consultando' ? 'Consultando dados vivos' : statusLeitura === 'leitura_vencida' ? `Leitura vencida · ${falhouHaSegundos ?? 0}s` : erroSonda || 'Sonda indisponível'
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl bg-[#0a151a] p-3 text-[#e8f0ec] sm:p-5 font-sans" data-testid="pixel-office">
+    <div className="min-w-0 overflow-hidden rounded-xl bg-[#0a151a] p-3 text-[#e8f0ec] sm:p-5 font-sans" data-testid="pixel-office" data-office-columns={layout.colunas} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'}>
       <header className="mb-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="text-[10px] tracking-[0.17em] text-[#b1c2bd]">G4ST4OVIB3 / PAINEL OS</div><h2 className="mt-1 text-[23px] font-bold leading-none tracking-[-0.04em] sm:text-2xl">O escritório inteiro, ao vivo.</h2></div><span className={`shrink-0 rounded border px-2 py-1 font-mono text-[9px] sm:text-[10px] ${statusLeitura === 'confirmado' ? 'border-[#63735e] text-[#c6e98a]' : 'border-[#785f45] text-[#e8c575]'}`} title={descricaoSonda}>{statusLeitura === 'confirmado' ? 'AO VIVO' : 'SONDA'}</span></header>
       <div className="mb-2.5 flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
         <button type="button" onClick={() => aoAlternarSoAtivos?.(!soAtivos)} aria-pressed={soAtivos} className={`min-h-11 rounded-lg border px-3 text-xs font-semibold ${soAtivos ? 'border-[#c1ec86] bg-[#c1ec86] text-[#1a2a1b]' : 'border-[#42534f] bg-[#162a2a] text-[#e7f0e7]'}`}>Só ativos</button>
         <button type="button" onClick={() => setPausado((valor) => !valor)} aria-pressed={pausado} className="min-h-11 rounded-lg border border-[#42534f] bg-[#162a2a] px-3 text-xs font-semibold text-[#e7f0e7]">{pausado ? 'Retomar' : 'Pausar'}</button>
         <div className="flex items-center overflow-hidden rounded-lg border border-[#42534f] bg-[#162a2a]"><button type="button" aria-label="Afastar sala" onClick={() => setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, ZOOM_MAX))} className="min-h-11 min-w-10 px-2 text-base text-[#e7f0e7]">−</button><button type="button" title="Repor enquadramento" onClick={() => setZoom(zoomAutomaticoRef.current)} className="min-h-11 border-x border-[#42534f] px-2 font-mono text-[10px] text-[#aebfb8]">{Math.round(zoom * 100)}%</button><button type="button" aria-label="Aproximar sala" onClick={() => setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, ZOOM_MAX))} className="min-h-11 min-w-10 px-2 text-base text-[#e7f0e7]">+</button></div>
-        <span className="ml-auto whitespace-nowrap font-mono text-[10px] text-[#aebfb8] sm:text-[11px]"><b className="text-[#c1ec86]">{totalAtivos}</b> trabalhando · {totalFixos} fixos{totalExtras ? ` + ${totalExtras} extras` : ''}</span>
+        <span className="ml-auto whitespace-nowrap font-mono text-[10px] text-[#aebfb8] sm:text-[11px]"><b className="text-[#c1ec86]">{totalAtivos}</b> trabalhando · {totalFixos} fixos{totalExtras ? ` + ${totalExtras} no coworking/extra` : ''}</span>
       </div>
       <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_270px] xl:gap-4">
         <section className="relative min-w-0 overflow-hidden rounded-xl border border-[#405655] bg-[#163032]" aria-label="Sala voxel interativa">
           <span className="pointer-events-none absolute left-3 top-3 z-10 font-mono text-[9px] tracking-[0.12em] text-[#afc8c4]">VISÃO GERAL / CABER TUDO</span>
-          <div className="pointer-events-none absolute bottom-2 right-2 z-10 max-w-[58%] rounded-md border border-[#526865] bg-[#0d1e22e8] p-1.5 shadow-lg" aria-label="Legenda de cores dos squads" data-testid="office-squad-legend"><div className="mb-1 font-mono text-[7px] font-bold tracking-[0.12em] text-[#c8d8d2] sm:text-[8px]">CORES DOS SQUADS</div><div className="grid grid-cols-2 gap-x-2 gap-y-0.5">{squadsVisiveis.map((squad) => <span key={squad.id} className="flex min-w-0 items-center gap-1 font-mono text-[6px] text-[#c5d2ce] sm:text-[7px]"><i className="size-1.5 shrink-0 rounded-[1px]" style={{ backgroundColor: squad.cor }} /><b className="truncate font-medium">{squad.nome}</b></span>)}</div></div>
-          <div ref={palcoRef} className="h-[420px] w-full overflow-auto overscroll-contain sm:h-[600px]" data-testid="office-scroll-room">{execucoesVisiveis.length > 0 ? <canvas ref={canvasRef} tabIndex={0} role="group" aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`} onClick={tratarClique} onKeyDown={tratarTeclado} className="block max-w-none cursor-pointer touch-pan-x touch-pan-y focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#e8c575]" /> : <div className="flex h-full min-h-[360px] items-center justify-center p-6 text-center text-sm text-[#aebfb8]">Nenhum agente está trabalhando agora.</div>}</div>
+          <div className="pointer-events-none absolute bottom-2 right-2 z-10 max-w-[58%] rounded-md border border-[#526865] bg-[#0d1e22e8] p-1.5 shadow-lg" aria-label="Legenda de cores dos ambientes" data-testid="office-squad-legend"><div className="mb-1 font-mono text-[7px] font-bold tracking-[0.12em] text-[#c8d8d2] sm:text-[8px]">SQUADS E AMBIENTES</div><div className="grid grid-cols-2 gap-x-2 gap-y-0.5">{squadsVisiveis.map((squad) => <span key={squad.id} className="flex min-w-0 items-center gap-1 font-mono text-[6px] text-[#c5d2ce] sm:text-[7px]"><i className="size-1.5 shrink-0 rounded-[1px]" style={{ backgroundColor: squad.cor }} /><b className="truncate font-medium">{squad.nome}</b></span>)}</div></div>
+          <div ref={palcoRef} className="h-[420px] w-full overflow-auto overscroll-contain sm:h-[600px]" data-testid="office-scroll-room"><canvas ref={canvasRef} tabIndex={0} role="group" aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`} onClick={tratarClique} onKeyDown={tratarTeclado} className="block max-w-none cursor-pointer touch-pan-x touch-pan-y focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#e8c575]" /></div>
         </section>
         <aside className="min-w-0 self-start rounded-lg border-t-2 border-[#c1ec86] bg-[#142426] p-3 sm:p-4 xl:sticky xl:top-3" aria-label="Detalhe do agente">
-          {selecionada ? <><div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="break-words text-sm font-semibold leading-5 sm:text-base" data-testid="office-agent-name">{selecionada.nome}</h3><p className="mt-0.5 font-mono text-[9px] text-[#718a82]">{selecionada.squadNome}{selecionada.temporaria ? ' · TEMPORÁRIO' : ' · MESA FIXA'}</p></div><span className="shrink-0 font-mono text-[10px] text-[#c1ec86] sm:text-[11px]">{rotuloFase(faseSelecionada, selecionada.ativa)}</span></div><p className="my-2 break-words text-[13px] leading-5 text-[#d4e4dc] sm:my-3 sm:text-sm">{selecionada.execucao.tarefa || selecionada.execucao.descricao || selecionada.execucao.etapa || selecionada.ficha?.papel || 'Sem tarefa no momento'}</p><dl className="grid grid-cols-2 gap-2"><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Ferramenta</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.ferramenta || '—'}>{selecionada.execucao.ferramenta || '—'}</dd></div><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Estado</dt><dd className="mt-1 truncate text-xs">{selecionada.ativa ? 'Trabalhando' : 'Parado'}</dd></div><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Modelo</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}>{selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}</dd></div><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Função</dt><dd className="mt-1 truncate text-xs" title={selecionada.ficha?.papel || selecionada.execucao.papel || '—'}>{selecionada.ficha?.papel || selecionada.execucao.papel || '—'}</dd></div></dl></> : <p className="text-sm text-[#9cb0a9]">Selecione um boneco para ver tarefa, ferramenta e função.</p>}
+          {selecionada ? <><div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="break-words text-sm font-semibold leading-5 sm:text-base" data-testid="office-agent-name">{selecionada.nome}</h3><p className="mt-0.5 font-mono text-[9px] text-[#718a82]">{selecionada.squadNome}{selecionada.squad === SALA_MISTA ? ' · POSTO COMPARTILHADO' : selecionada.temporaria ? ' · TEMPORÁRIO' : ' · MESA FIXA'}</p></div><span className="shrink-0 font-mono text-[10px] text-[#c1ec86] sm:text-[11px]">{rotuloFase(faseSelecionada, selecionada.ativa)}</span></div><p className="my-2 break-words text-[13px] leading-5 text-[#d4e4dc] sm:my-3 sm:text-sm">{selecionada.execucao.tarefa || selecionada.execucao.descricao || selecionada.execucao.etapa || selecionada.ficha?.papel || 'Sem tarefa no momento'}</p><dl className="grid grid-cols-2 gap-2"><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Ferramenta</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.ferramenta || '—'}>{selecionada.execucao.ferramenta || '—'}</dd></div><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Estado</dt><dd className="mt-1 truncate text-xs">{selecionada.ativa ? 'Trabalhando' : 'Parado'}</dd></div><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Modelo</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}>{selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}</dd></div><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Função</dt><dd className="mt-1 truncate text-xs" title={selecionada.ficha?.papel || selecionada.execucao.papel || '—'}>{selecionada.ficha?.papel || selecionada.execucao.papel || '—'}</dd></div></dl></> : <p className="text-sm text-[#9cb0a9]">A sala mista está disponível; os executores ocupam uma mesa quando começam.</p>}
           <p className="mt-3 font-mono text-[9px] leading-4 text-[#869c94] sm:text-[10px]"><span className="text-[#c1ec86]">●</span> Trabalhando: vai à mesa uma vez e permanece digitando.<br />○ Parado: monitor apagado, sem ciclo automático.</p>
         </aside>
       </div>
-      <footer className="mt-2 font-mono text-[9px] leading-4 text-[#839a90] sm:text-[10px]">{execucoesVisiveis.length} {execucoesVisiveis.length === 1 ? 'agente visível' : 'agentes visíveis'} · {layout.ilhas.length} ilhas · roupas e faixas por squad · padrão “caber tudo”.</footer>
+      <footer className="mt-2 font-mono text-[9px] leading-4 text-[#839a90] sm:text-[10px]">{execucoesVisiveis.length} {execucoesVisiveis.length === 1 ? 'agente visível' : 'agentes visíveis'} · {layout.ilhas.length - 1} ilhas + sala mista · {layout.colunas} colunas · caber tudo em largura e altura.</footer>
       <div className="sr-only" role="region" aria-label="Lista acessível de agentes do escritório"><ul>{execucoesVisiveis.map((execucao) => <li key={execucao.animacaoChave}><button type="button" onClick={() => selecionar(execucao.chave)}>{execucao.nome} — {execucao.ativa ? 'trabalhando' : 'parado'} — {execucao.squadNome}</button></li>)}</ul></div>
       <span className="sr-only" aria-live="polite">{relogioDetalhe ? '' : ''}</span>
     </div>
