@@ -406,6 +406,66 @@ conferir("a frase do [[id]] vira o motivo da aresta",
          "A falha reaparece porque segue o mesmo padrão de [[destino-ficticio]]")
 conferir("o registro fictício em memória não gera recusa", recusadas_memoria, [])
 
+# Regressão: três bullets seguidos são três blocos distintos. Antes deste
+# teste, o bloco de `item-a` engolia os dois seguintes e herdava destino-y;
+# `item-b` também herdava a ligação de `item-c`.
+(tmp_cofre / "LISTA.md").write_text(
+    "- item a relaciona a falha com [[destino-x]].\n"
+    "  Continuação indentada do item a permanece no mesmo bloco.\n"
+    "- item b não declara ligação alguma.\n"
+    "- item c relaciona a falha com [[destino-y]].\n",
+    encoding="utf-8")
+(tmp_cofre / "DESTINOS.md").write_text(
+    "# destinos\n"
+    "Destino x tem âncora suficiente para o teste.\n"
+    "Destino y tem âncora suficiente para o teste.\n",
+    encoding="utf-8")
+LISTA_A = {**BOM, "id": "item-a", "fonte": "LISTA.md", "linha": 1,
+           "ancora": "item a relaciona a falha com", "conecta": []}
+LISTA_B = {**BOM, "id": "item-b", "fonte": "LISTA.md", "linha": 3,
+           "ancora": "item b não declara ligação alguma", "conecta": []}
+LISTA_C = {**BOM, "id": "item-c", "fonte": "LISTA.md", "linha": 4,
+           "ancora": "item c relaciona a falha com", "conecta": []}
+DESTINO_X = {**BOM, "id": "destino-x", "fonte": "DESTINOS.md", "linha": 2,
+             "ancora": "Destino x tem âncora suficiente", "conecta": []}
+DESTINO_Y = {**BOM, "id": "destino-y", "fonte": "DESTINOS.md", "linha": 3,
+             "ancora": "Destino y tem âncora suficiente", "conecta": []}
+cofre = _cofre_de_teste([LISTA_A, LISTA_B, LISTA_C, DESTINO_X, DESTINO_Y])
+conferir("bullets seguidos não vazam [[id]] para o registro vizinho",
+         [(a["de"], a["para"]) for a in cofre["arestas"]],
+         [("item-a", "destino-x"), ("item-c", "destino-y")])
+conferir("continuação indentada continua dentro do bullet de origem",
+         {n["id"]: n["linhas"] for n in cofre["nos"] if n["id"].startswith("item-")},
+         {"item-a": 2, "item-b": 1, "item-c": 1})
+
+# Código é exemplo, não declaração. Os dois formatos Markdown precisam ficar
+# fora da extração, mas a ligação escrita no texto normal do item vizinho fica.
+(tmp_cofre / "CODIGO.md").write_text(
+    "- seguro na cerca não declara ligação.\n"
+    "  ```python\n"
+    "  exemplo [[destino-x]]\n"
+    "  ```\n"
+    "- seguro por recuo não declara ligação.\n"
+    "      exemplo [[destino-x]]\n"
+    "- válido declara [[destino-y]].\n",
+    encoding="utf-8")
+CODIGO_CERCA = {**BOM, "id": "codigo-cerca", "fonte": "CODIGO.md", "linha": 1,
+                "ancora": "seguro na cerca não declara", "conecta": []}
+CODIGO_RECUO = {**BOM, "id": "codigo-recuo", "fonte": "CODIGO.md", "linha": 5,
+                "ancora": "seguro por recuo não declara", "conecta": []}
+CODIGO_VALIDO = {**BOM, "id": "codigo-valido", "fonte": "CODIGO.md", "linha": 7,
+                 "ancora": "válido declara", "conecta": []}
+cofre = _cofre_de_teste([CODIGO_CERCA, CODIGO_RECUO, CODIGO_VALIDO,
+                         DESTINO_X, DESTINO_Y])
+conferir("[[id]] entre cercas de código não vira ligação",
+         [(a["de"], a["para"]) for a in cofre["arestas"]],
+         [("codigo-valido", "destino-y")])
+conferir("[[id]] indentado como código não vira ligação",
+         len([a for a in cofre["arestas"] if a["para"] == "destino-x"]), 0)
+conferir("texto normal no item seguinte continua declarando ligação",
+         {n["id"]: n["linhas"] for n in cofre["nos"] if n["id"].startswith("codigo-")},
+         {"codigo-cerca": 4, "codigo-recuo": 2, "codigo-valido": 1})
+
 # a porta: nome de cliente no texto derruba o registro inteiro.
 guarda = (c.NOMES_CLIENTE, c.NEGACAO)
 c.NOMES_CLIENTE = [("Fulano da Silva", c._padrao_do_nome("Fulano da Silva"))]

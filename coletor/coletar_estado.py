@@ -820,24 +820,93 @@ def _cofre_achar(ancora: str, plano: str, de_que_linha: list):
     return de_que_linha[posicao] if posicao >= 0 else None
 
 
-# Fim de bloco: linha em branco, ou o começo de OUTRO bloco marcado. Só a linha
-# em branco não bastava: bloco aninhado emenda no seguinte e o tamanho saía
-# igual ao TETO em vez de medido, que é o instrumento narrando o próprio limite.
-RE_COFRE_FIM = re.compile(r"^\s*(?:\u203c|\u26a0|#{2,}\s|\d+\.\s+\*\*)")
+# A fonte pode ser uma lista Markdown densa, sem linhas em branco entre itens.
+# Nela, o próximo item no mesmo recuo é outro registro, não continuação do
+# anterior. Já um item mais recuado continua pertencendo ao item de cima.
+RE_COFRE_TITULO = re.compile(r"^[ \t]*#{1,6}(?:[ \t]+|$)")
+RE_COFRE_ITEM = re.compile(r"^(?P<recuo>[ \t]*)(?:[-+*]|\d+[.)])[ \t]+")
 RE_COFRE_LINK = re.compile(r"\[\[([a-z0-9][a-z0-9-]{2,79})\]\]")
+RE_COFRE_CERCA_CODIGO = re.compile(r"^[ \t]*`{3,}")
+
+
+def _cofre_nivel_do_item(linha: str):
+    """Devolve o recuo visual de um item Markdown, ou ``None`` fora de lista."""
+    achado = RE_COFRE_ITEM.match(linha)
+    return len(achado.group("recuo").expandtabs(4)) if achado else None
+
+
+def _cofre_nivel_do_bloco(linhas: list, inicio: int):
+    """Acha o item pai quando a âncora caiu numa continuação indentada."""
+    nivel = _cofre_nivel_do_item(linhas[inicio])
+    if nivel is not None:
+        return nivel
+
+    recuo_da_ancora = len(linhas[inicio]) - len(linhas[inicio].lstrip(" \t"))
+    for linha in reversed(linhas[:inicio]):
+        if not linha.strip() or RE_COFRE_TITULO.match(linha):
+            break
+        candidato = _cofre_nivel_do_item(linha)
+        if candidato is not None and candidato <= recuo_da_ancora:
+            return candidato
+    return None
 
 
 def _cofre_bloco(linhas: list, inicio: int):
-    """Tamanho do bloco de origem, medido a cada coleta. Devolve (linhas, teto),
-    e `teto` diz que a medição BATEU no limite, ou seja: não é o tamanho real."""
+    """Tamanho do bloco de origem, medido a cada coleta.
+
+    O bloco termina na primeira linha em branco, no próximo título ou no
+    próximo item de lista do mesmo nível. Itens mais recuados permanecem como
+    continuação do item de origem. Devolve ``(linhas, teto)``.
+    """
+    nivel_do_item = _cofre_nivel_do_bloco(linhas, inicio)
     total = 0
     for passo, linha in enumerate(linhas[inicio:inicio + COFRE_TETO_BLOCO]):
         if not linha.strip():
             break
-        if passo and RE_COFRE_FIM.match(linha):
-            break
+        if passo:
+            if RE_COFRE_TITULO.match(linha):
+                break
+            if nivel_do_item is not None and _cofre_nivel_do_item(linha) == nivel_do_item:
+                break
         total += 1
     return (total or 1), total >= COFRE_TETO_BLOCO
+
+
+def _cofre_linhas_sem_codigo(linhas: list) -> list[str]:
+    """Substitui blocos de código por fronteiras, sem comer texto Markdown.
+
+    O marcador ``[[id]]`` é linguagem do Cofre, não linguagem de exemplos.
+    Cercas de três crases sempre vencem até a cerca seguinte. Código indentado
+    segue o recuo do Markdown: fora de uma lista, quatro colunas; dentro de um
+    item, quatro colunas depois do marcador do item. Assim uma continuação ou
+    sublista legítima não perde uma ligação só por estar indentada.
+    """
+    if not linhas:
+        return []
+
+    primeiro_item = RE_COFRE_ITEM.match(linhas[0])
+    if primeiro_item:
+        # O fim do marcador já inclui o espaço posterior a ``-``/``1.``.
+        # Código em uma lista exige mais quatro colunas depois dele.
+        recuo_codigo = len(linhas[0][:primeiro_item.end()].expandtabs(4)) + 4
+    else:
+        recuo_codigo = 4
+
+    sem_codigo, em_cerca = [], False
+    for linha in linhas:
+        if RE_COFRE_CERCA_CODIGO.match(linha):
+            em_cerca = not em_cerca
+            sem_codigo.append("")
+            continue
+        if em_cerca:
+            sem_codigo.append("")
+            continue
+        recuo = len(linha) - len(linha.lstrip(" \t"))
+        if len(linha[:recuo].expandtabs(4)) >= recuo_codigo and linha.strip():
+            sem_codigo.append("")
+        else:
+            sem_codigo.append(linha)
+    return sem_codigo
 
 
 def _cofre_ligacoes_no_texto(linhas: list) -> list[tuple[str, str]]:
@@ -847,8 +916,10 @@ def _cofre_ligacoes_no_texto(linhas: list) -> list[tuple[str, str]]:
     podem morar no mesmo Markdown e um não pode herdar a declaração do outro.
     A frase ainda está CRUA nesta etapa; a máscara de saída roda somente depois
     de a ligação ser provada, pelo mesmo caminho das justificativas legadas.
+    Código cercado por três crases ou indentado como código é excluído antes da
+    busca. Ele pode mostrar literalmente ``[[id]]`` sem declarar uma aresta.
     """
-    texto = _cofre_espaco(" ".join(linhas))
+    texto = _cofre_espaco(" ".join(_cofre_linhas_sem_codigo(linhas)))
     ligacoes = []
     for achado in RE_COFRE_LINK.finditer(texto):
         inicio = max(texto.rfind(fim, 0, achado.start()) for fim in ".!?") + 1
