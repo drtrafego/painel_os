@@ -30,6 +30,7 @@ entra no JSON. Nome, telefone e e-mail nao aparecem em tela nenhuma.
 
 import json
 import hashlib
+import html
 import math
 import os
 import re
@@ -823,6 +824,7 @@ def _cofre_achar(ancora: str, plano: str, de_que_linha: list):
 # em branco não bastava: bloco aninhado emenda no seguinte e o tamanho saía
 # igual ao TETO em vez de medido, que é o instrumento narrando o próprio limite.
 RE_COFRE_FIM = re.compile(r"^\s*(?:\u203c|\u26a0|#{2,}\s|\d+\.\s+\*\*)")
+RE_COFRE_LINK = re.compile(r"\[\[([a-z0-9][a-z0-9-]{2,79})\]\]")
 
 
 def _cofre_bloco(linhas: list, inicio: int):
@@ -836,6 +838,79 @@ def _cofre_bloco(linhas: list, inicio: int):
             break
         total += 1
     return (total or 1), total >= COFRE_TETO_BLOCO
+
+
+def _cofre_ligacoes_no_texto(linhas: list) -> list[tuple[str, str]]:
+    """Extrai ``[[id]]`` e a frase que o declara no bloco do próprio nó.
+
+    O bloco, e não o arquivo inteiro, é a fronteira importante: dois registros
+    podem morar no mesmo Markdown e um não pode herdar a declaração do outro.
+    A frase ainda está CRUA nesta etapa; a máscara de saída roda somente depois
+    de a ligação ser provada, pelo mesmo caminho das justificativas legadas.
+    """
+    texto = _cofre_espaco(" ".join(linhas))
+    ligacoes = []
+    for achado in RE_COFRE_LINK.finditer(texto):
+        inicio = max(texto.rfind(fim, 0, achado.start()) for fim in ".!?") + 1
+        fim = re.search(r"[.!?](?=\s|$)", texto[achado.end():])
+        termino = achado.end() + fim.end() if fim else len(texto)
+        frase = texto[inicio:termino].strip()
+        if frase:
+            ligacoes.append((achado.group(1), frase))
+    return ligacoes
+
+
+def _cofre_arestas_declaradas(pendentes: list, ids: set[str]):
+    """Materializa as arestas provadas, sem depender de I/O.
+
+    Manter esta etapa pura permite provar um registro fictício inteiramente em
+    memória, sem tocar no Cofre real nem montar uma segunda fonte de verdade.
+    """
+    arestas, recusadas = [], []
+    vistas = set()
+    for origem, plano, bloco, conexoes in pendentes:
+        # O formato novo mora na fonte e traz a própria justificativa. Ele roda
+        # primeiro para que um `conecta` legado repetido não troque a frase
+        # declarada no próprio registro por uma cópia antiga do JSON.
+        for destino, frase in _cofre_ligacoes_no_texto(bloco):
+            if destino not in ids:
+                recusadas.append(_cofre_recusa(f"{origem} -> {destino}: destino não existe"))
+            elif destino == origem:
+                recusadas.append(_cofre_recusa(f"{origem} -> {destino}: aponta pra si mesmo"))
+            elif (origem, destino) not in vistas:
+                vistas.add((origem, destino))
+                arestas.append({
+                    "de": origem,
+                    "para": destino,
+                    "porque": _cofre_razao(frase),
+                    "tipo": "declarada",
+                })
+
+        if not isinstance(conexoes, list):
+            recusadas.append(_cofre_recusa(f"{origem}: conecta não é lista"))
+            continue
+        for c in conexoes:
+            destino = c.get("para") if isinstance(c, dict) else None
+            porque = _cofre_espaco(str(c.get("porque", ""))) if isinstance(c, dict) else ""
+            if (origem, destino) in vistas:
+                continue
+            if destino not in ids:
+                recusadas.append(_cofre_recusa(f"{origem} -> {destino}: destino não existe"))
+            elif destino == origem:
+                recusadas.append(_cofre_recusa(f"{origem} -> {destino}: aponta pra si mesmo"))
+            elif len(porque) < 8 or porque not in plano:
+                recusadas.append(_cofre_recusa(f"{origem} -> {destino}: ligação não declarada na fonte"))
+            else:
+                vistas.add((origem, destino))
+                # `porque` só é mascarado DEPOIS de casar com o texto cru da
+                # fonte, na linha de cima: a prova precisa do original.
+                arestas.append({
+                    "de": origem,
+                    "para": destino,
+                    "porque": _cofre_razao(porque),
+                    "tipo": "declarada",
+                })
+    return arestas, recusadas, vistas
 
 
 def _cofre_fonte(nome: str, raiz: Path):
@@ -861,6 +936,109 @@ def _cofre_texto(bruto, campo: str, limite: int) -> str:
     return texto
 
 
+# RODADA 4 (27/09/2026, QA rodada 3, item C, MÉDIO): lista de nomes de tag
+# HTML REAIS (padrão HTML5 + obsoletas/depreciadas + raízes SVG/MathML que já
+# foram usadas em payload de XSS). Only estes nomes contam como "tag de
+# verdade" pra remoção — qualquer outra palavra entre '<' e '>' (placeholder
+# de texto em português como `<nome>`, `<email>`, `<x>`, `<y>`) NÃO é uma tag
+# HTML e fica no texto sem alteração. Lista deliberadamente ampla (inclui
+# elementos obscuros/depreciados) porque XSS baseado em atributo funciona em
+# quase qualquer tag (onerror em img, onload em svg/body, onfocus em input
+# autofocus etc.), então a defesa não pode se limitar a uma lista curta de
+# "tags perigosas conhecidas": tem que cobrir os nomes de tag REAIS.
+_HTML5_TAGS = frozenset({
+    "a", "abbr", "address", "applet", "area", "article", "aside", "audio",
+    "b", "base", "basefont", "bdi", "bdo", "bgsound", "big", "blink",
+    "blockquote", "body", "br", "button", "canvas", "caption", "center",
+    "cite", "code", "col", "colgroup", "command", "content", "data",
+    "datalist", "dd", "del", "details", "dfn", "dialog", "dir", "div", "dl",
+    "dt", "element", "em", "embed", "fieldset", "figcaption", "figure",
+    "font", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4",
+    "h5", "h6", "head", "header", "hgroup", "hr", "html", "i", "iframe",
+    "ilayer", "image", "img", "input", "ins", "isindex", "kbd", "keygen",
+    "label", "layer", "legend", "li", "link", "listing", "main", "map",
+    "mark", "marquee", "math", "menu", "menuitem", "meta", "meter",
+    "multicol", "nav", "nextid", "nobr", "noembed", "noframes", "noscript",
+    "object", "ol", "optgroup", "option", "output", "p", "param", "picture",
+    "plaintext", "pre", "progress", "q", "rp", "rt", "ruby", "s", "samp",
+    "script", "section", "select", "shadow", "slot", "small", "source",
+    "spacer", "span", "strike", "strong", "style", "sub", "summary", "sup",
+    "svg", "table", "tbody", "td", "template", "textarea", "tfoot", "th",
+    "thead", "time", "title", "tr", "track", "tt", "u", "ul", "var", "video",
+    "wbr", "xmp",
+})
+# `<[!?]...>` (comentário `<!--...-->`, DOCTYPE `<!...>`, processing
+# instruction `<?...?>`) continua sempre removido, sem checar whitelist —
+# nenhum desses é texto de placeholder legítimo. `</?nome...>` só é removido
+# se `nome` (capturado no grupo 1) bater a whitelist acima.
+_RE_COFRE_TAG_CANDIDATO = re.compile(r"<[!?][^<>]*>|</?\s*([a-zA-Z][a-zA-Z0-9]*)\b[^<>]*>")
+
+
+def _cofre_remover_tag(match: "re.Match[str]") -> str:
+    nome = match.group(1)
+    if nome is None:
+        return ""  # comentário/DOCTYPE/processing instruction: sempre remove
+    return "" if nome.lower() in _HTML5_TAGS else match.group(0)
+
+
+def _cofre_sanitizar_html(texto: str) -> str:
+    """Tira marcação HTML do motivo de uma aresta antes de ir pro JSON.
+
+    CORRIGIDO 27/09/2026 (QA adversarial, item C, MÉDIO): `<script>...</script>`
+    dentro da frase que vira "porque" passava LITERAL, sem escape, pro JSON
+    final. Hoje isso não é explorável (nenhum componente do front usa
+    `dangerouslySetInnerHTML` pra esse campo — ele só entra em JSX puro,
+    `{porqueDoSalto(...)}` em FichaCofre.tsx/PainelInstrumentoCofre.tsx,
+    escapado nativamente pelo React como texto), mas é uma dependência
+    silenciosa do comportamento ATUAL do front, não uma garantia. Sanitizar
+    na ORIGEM é mudança mínima e fecha essa dependência de vez.
+
+    CORRIGIDO DE NOVO 27/09/2026 (QA rodada 2, item C, MÉDIO): a versão
+    anterior usava `<[^>]*>` (qualquer coisa entre o primeiro '<' e o
+    próximo '>') e DEPOIS ainda tirava qualquer '<'/'>' solto que sobrasse.
+    Isso comia texto legítimo com comparação numérica: "custo < 10" virava
+    "custo  10", e "5 < 10 e 20 > 15" virava "comparação: 5  15" porque o
+    regex casava de "< 10 e 20 >" como se fosse uma tag gigante. Como o
+    front só usa este campo como TEXTO puro (React escapa, nunca HTML real),
+    manter '<'/'>' matemáticos literais no resultado é seguro.
+
+    Fix: o regex agora só casa abertura/fechamento de tag REAL — depois do
+    '<' (ou do '</') tem que vir uma letra, '!' (comentário/DOCTYPE) ou '?'
+    (processing instruction), nunca espaço/dígito/etc. "< 10" e "20 >" não
+    batem nunca (não sobra espaço duplo, o texto sai idêntico ao original).
+    E o replace final de '<'/'>' soltos foi REMOVIDO (era ele quem comia o
+    texto matemático mesmo sem bater o regex de tag) e virou um LOOP até
+    ponto fixo: aplica o regex de novo enquanto ainda achar tag, o que fecha
+    o truque de reconstrução de filtro de passada única (`<scr<script>ipt>
+    alert(1)</script>` removeria só as duas tags internas numa passada só e
+    RECONSTRUIRIA "<script>alert(1)" com o pedaço externo — a 2ª passada do
+    loop remove essa reconstrução também). Texto vem sempre truncado a
+    COFRE_LIMITE_CORPO (420 chars) antes de chegar aqui, então o loop é
+    limitado por construção.
+
+    CORRIGIDO DE NOVO 27/09/2026 (QA rodada 3, item C, MÉDIO RESIDUAL): a
+    versão anterior removia qualquer `<palavra>` cuja primeira letra fosse
+    letra, '!' ou '?' — inclusive placeholder de texto em português comum
+    no "porque" de uma aresta, tipo "substitua <nome> e <email> no
+    template" ou "o valor de <x> é maior que <y>", que sumia em silêncio
+    sem nenhuma tag HTML de verdade estar envolvida. Fix: `_RE_COFRE_TAG_
+    CANDIDATO` agora só remove `<!...>`/`<?...?>` (sempre, como antes) e
+    `<nome...>`/`</nome...>` cujo NOME bate `_HTML5_TAGS` (whitelist de tags
+    HTML reais); qualquer outra palavra entre `<` e `>` fica intacta no
+    texto, porque não é tag nenhuma.
+
+    Ordem importa: primeiro decodifica entidade HTML já escapada (`&lt;`,
+    `&gt;`, `&amp;`, `&quot;`, `&#39;`), pra um "&lt;script&gt;" digitado à
+    mão virar "<script>" e cair na mesma regra; só depois remove as tags.
+    """
+    texto = html.unescape(texto)
+    anterior = None
+    while anterior != texto:
+        anterior = texto
+        texto = _RE_COFRE_TAG_CANDIDATO.sub(_cofre_remover_tag, texto)
+    return texto
+
+
 def _cofre_razao(porque: str) -> str:
     """A razão da ligação DEPOIS de provada literal na fonte.
 
@@ -878,7 +1056,7 @@ def _cofre_razao(porque: str) -> str:
     frase seria trocar um vazamento por um zero calado.
     """
     try:
-        return _cofre_texto(porque, "porque", COFRE_LIMITE_CORPO)
+        return _cofre_sanitizar_html(_cofre_texto(porque, "porque", COFRE_LIMITE_CORPO))
     except ValueError:
         return "[razão omitida: não passou na trava de nome de cliente]"
 
@@ -905,12 +1083,17 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
     contagem; ele NÃO some calado, porque cofre que encolhe sozinho é zero de
     ausência com cara de zero de erro.
 
-    Aresta só nasce quando o texto da FONTE declara a ligação: o campo `porque`
-    tem que estar escrito lá. Semelhança que alguém achou nunca vira aresta.
+    Aresta declarada só nasce quando o texto da FONTE prova a ligação: por um
+    ``[[id]]`` no bloco do próprio registro (a frase vira a razão) ou pelo
+    caminho legado, em que o campo `porque` tem que estar escrito na fonte.
+    Arestas dinâmicas de operação continuam existindo, marcadas como
+    ``automatica`` para não serem confundidas com conhecimento declarado.
     """
     vazio = {"nos": [], "arestas": [], "arquivos": None, "conexoes": None,
              "cobertura": None, "arquivo": "painel_os/data/cofre.json",
              "areas": [], "familias": [], "grau_medio": None,
+             "grau_medio_declarado": None, "grau_medio_total": None,
+             "conexoes_declaradas": None, "conexoes_automaticas": None,
              "vencidos": [], "recusados": [], "arestas_recusadas": [], "truncados": [],
              "avisos": []}
 
@@ -945,7 +1128,9 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
 
     fontes: dict = {}
     nos, ids, vencidos, recusados, truncados = [], set(), [], [], []
-    pendentes = []  # (id_de_origem, texto normalizado da fonte, lista de conexões)
+    # (id, texto normalizado da fonte inteira, bloco do próprio registro,
+    # lista legada de conexões)
+    pendentes = []
 
     for i, reg in enumerate(registros):
         try:
@@ -1030,31 +1215,15 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
             if confere and bateu_no_teto:
                 # o número saiu do LIMITE, não do texto: quem lê tem que saber.
                 truncados.append(ident)
-            pendentes.append((ident, plano, reg.get("conecta") or []))
+            # Âncora vencida não autoriza interpretar a linha aproximada do
+            # JSON como se fosse o texto deste registro.
+            bloco = linhas_fonte[indice:indice + tamanho] if confere else []
+            pendentes.append((ident, plano, bloco, reg.get("conecta") or []))
         except (OSError, ValueError, TypeError, KeyError) as e:
             recusados.append(_cofre_recusa(f"registro {i}: {type(e).__name__}: {e}"))
 
-    arestas, arestas_recusadas = [], []
-    vistas = set()
-    for origem, plano, conexoes in pendentes:
-        if not isinstance(conexoes, list):
-            arestas_recusadas.append(_cofre_recusa(f"{origem}: conecta não é lista"))
-            continue
-        for c in conexoes:
-            destino = c.get("para") if isinstance(c, dict) else None
-            porque = _cofre_espaco(str(c.get("porque", ""))) if isinstance(c, dict) else ""
-            if destino not in ids:
-                arestas_recusadas.append(_cofre_recusa(f"{origem} -> {destino}: destino não existe"))
-            elif destino == origem:
-                arestas_recusadas.append(_cofre_recusa(f"{origem} -> {destino}: aponta pra si mesmo"))
-            elif len(porque) < 8 or porque not in plano:
-                # A ligação tem que estar ESCRITA na fonte de quem liga.
-                arestas_recusadas.append(_cofre_recusa(f"{origem} -> {destino}: ligação não declarada na fonte"))
-            elif (origem, destino) not in vistas:
-                vistas.add((origem, destino))
-                # `porque` só é mascarado DEPOIS de casar com o texto cru da
-                # fonte, na linha de cima: a prova precisa do original.
-                arestas.append({"de": origem, "para": destino, "porque": _cofre_razao(porque)})
+    ids_aprendizados = set(ids)
+    arestas, arestas_recusadas, vistas = _cofre_arestas_declaradas(pendentes, ids)
 
 
     # Injeção dinâmica de Nós e Arestas de Skills & Acessos no Cofre
@@ -1203,6 +1372,7 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                             "de": no_agente_id,
                             "para": no_sistema_id,
                             "porque": f"Agente {sa['responsavel']} acessa {sa['sistema']}",
+                            "tipo": "automatica",
                             "ponte": False,
                         })
                         graus_atuais[no_agente_id] = graus_atuais.get(no_agente_id, 0) + 1
@@ -1290,6 +1460,7 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                                 "de": apr["id"],
                                 "para": no_destino,
                                 "porque": f"Aprendizado cita {rotulo_alvo}",
+                                "tipo": "automatica",
                                 "ponte": apr.get("area") != "operacao",
                             })
                             graus_atuais[apr["id"]] = graus_atuais.get(apr["id"], 0) + 1
@@ -1334,6 +1505,14 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
             saida.append({**item, "total": total})
         return saida
 
+    arestas_declaradas = [a for a in arestas if a["tipo"] == "declarada"]
+    arestas_automaticas = [a for a in arestas if a["tipo"] == "automatica"]
+    grau_medio_total = round(2 * len(arestas) / len(nos), 1) if nos else None
+    grau_medio_declarado = (
+        round(2 * len(arestas_declaradas) / len(ids_aprendizados), 1)
+        if ids_aprendizados else None
+    )
+
     return {
         "erro": None,
         "arquivo": "painel_os/data/cofre.json",
@@ -1341,10 +1520,16 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
         "arestas": arestas,
         "arquivos": len({n["arquivo"].split(":")[0].split(" em ")[-1] for n in nos}) or None,
         "conexoes": len(arestas),
+        "conexoes_declaradas": len(arestas_declaradas),
+        "conexoes_automaticas": len(arestas_automaticas),
         "cobertura": cobertura,
         "areas": _agrupar("area", areas),
         "familias": _agrupar("familia", familias),
-        "grau_medio": round(2 * len(arestas) / len(nos), 1) if nos else None,
+        # Compatibilidade com consumidores antigos: `grau_medio` continua
+        # sendo o total. A tela nova usa os dois campos explícitos abaixo.
+        "grau_medio": grau_medio_total,
+        "grau_medio_declarado": grau_medio_declarado,
+        "grau_medio_total": grau_medio_total,
         "vencidos": vencidos,
         "truncados": truncados,
         "recusados": recusados,

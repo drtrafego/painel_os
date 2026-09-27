@@ -80,6 +80,7 @@ CODEX_DA_CASA: dict[str, list[Path]] = {
 }
 _CODEX_PADRAO = object()
 _PROC_PADRAO = object()
+_PROC_CODEX_PADRAO = object()
 
 # Quanto do fim do transcript a gente le pra achar o ultimo tool_use.
 # 256 KB cobre folgado varios turnos; o arquivo pode ter 14 MB.
@@ -95,6 +96,7 @@ RAIZ_CODEX = Path.home() / ".codex-luana" / "sessions"
 # chamava ler_agentes() três vezes e as sessões Codex da Luana apareciam
 # triplicadas, carimbadas como luana, renato e bia.
 JANELA_CODEX_S = 90
+LIMIAR_SESSAO_COORDENADORA_ATIVA_S = 3 * 60
 
 # Identidades operacionais são deliberadamente uma allowlist. O conteúdo de
 # session_meta é não confiável e não deve virar nome arbitrário na interface.
@@ -186,6 +188,63 @@ def _resolver_processos_claude(processos_claude: object) -> tuple[set[str] | Non
         return set(), None
     return set(processos_claude), None
 
+
+def _dono_do_codex_home(valor: str) -> str | None:
+    nome = Path(valor).name.lower()
+    for dono in PROJETOS_DA_CASA:
+        if nome in (f".codex-{dono}", f".codex-{dono}-workers"):
+            return dono
+    return None
+
+
+def _processos_codex_exec(proc: Path = PROC) -> tuple[dict[str, int] | None, str | None]:
+    """Conta `codex exec` vivos por CODEX_HOME, sem ler prompt ou argumentos.
+
+    O transcript pode ficar sem novo mtime durante uma ferramenta longa. Nesse
+    intervalo, o processo é a evidência de vida que impede o card de sumir.
+    """
+    try:
+        entradas = list(Path(proc).iterdir())
+    except OSError as exc:
+        return None, f"falha ao listar processos ({type(exc).__name__})"
+
+    vivos: dict[str, int] = {}
+    candidatos = 0
+    ambientes_lidos = 0
+    for entrada in (item for item in entradas if item.name.isdigit()):
+        try:
+            bruto = (entrada / "cmdline").read_bytes()
+        except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
+            continue
+        args = [parte.decode("utf-8", "replace") for parte in bruto.split(b"\0") if parte]
+        if not args or Path(args[0]).name != "codex" or "exec" not in args[1:4]:
+            continue
+        candidatos += 1
+        try:
+            ambiente = (entrada / "environ").read_bytes()
+        except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
+            continue
+        ambientes_lidos += 1
+        pares = [parte.decode("utf-8", "replace") for parte in ambiente.split(b"\0") if parte]
+        codex_home = next((par.split("=", 1)[1] for par in pares if par.startswith("CODEX_HOME=")), "")
+        dono = _dono_do_codex_home(codex_home)
+        if dono:
+            vivos[dono] = vivos.get(dono, 0) + 1
+    if candidatos and ambientes_lidos == 0:
+        return None, "falha ao ler ambiente dos processos Codex"
+    return vivos, None
+
+
+def _resolver_processos_codex(processos_codex: object) -> tuple[dict[str, int] | None, str | None]:
+    if processos_codex is _PROC_CODEX_PADRAO:
+        return _processos_codex_exec()
+    if isinstance(processos_codex, tuple) and len(processos_codex) == 2:
+        vivos, erro = processos_codex
+        return (dict(vivos) if vivos is not None else None), erro
+    if processos_codex is None:
+        return {}, None
+    return dict(processos_codex), None
+
 # --------------------------------------------------------------------------
 # OS TRES ESTADOS
 # --------------------------------------------------------------------------
@@ -265,6 +324,7 @@ def _analisar_cauda(caminho: Path, n: int = CAUDA_BYTES) -> dict:
     etapa = None
     etapa_medida = False
     ferramenta = None
+    modelo = None
     esforco = None
     ilegiveis = 0
     problema_detectado = None
@@ -287,6 +347,8 @@ def _analisar_cauda(caminho: Path, n: int = CAUDA_BYTES) -> dict:
             esforco = _extrair_esforco_registro(reg)
 
         msg = reg.get("message") if isinstance(reg.get("message"), dict) else {}
+        if modelo is None and isinstance(msg.get("model"), str) and msg["model"].strip():
+            modelo = msg["model"].strip()
         is_api_err = (
             reg.get("isApiErrorMessage") is True
             or (isinstance(msg, dict) and msg.get("isApiErrorMessage") is True)
@@ -317,7 +379,7 @@ def _analisar_cauda(caminho: Path, n: int = CAUDA_BYTES) -> dict:
                     etapa, etapa_medida = _etapa_do_bloco(bloco)
                     ferramenta = bloco.get("name")
                     break
-        if fase != "desconhecida" and etapa is not None and esforco is not None:
+        if fase != "desconhecida" and etapa is not None and esforco is not None and modelo is not None:
             break
 
     return {
@@ -325,6 +387,8 @@ def _analisar_cauda(caminho: Path, n: int = CAUDA_BYTES) -> dict:
         "etapa": etapa if etapa is not None else "nenhuma ferramenta na cauda lida",
         "etapa_e_description": etapa_medida,
         "ferramenta": ferramenta,
+        "modelo": modelo,
+        "modelo_legivel": _formatar_modelo(modelo),
         "ultimo_ts_utc": ultimo_ts,
         "linhas_ilegiveis": ilegiveis,
         "problema_api": problema_detectado,
@@ -663,6 +727,7 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
     etapa_codex = None
     msgs_vistas: set[str] = set()
     tools_vistos: set[str] = set()
+    ferramentas_abertas: dict[str, str] = {}
 
     try:
         with caminho.open("r", encoding="utf-8", errors="replace") as fh:
@@ -749,6 +814,14 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
                     p_tipo = payload.get("type")
                     if p_tipo in ("function_call", "custom_tool_call", "tool_call", "execute_command"):
                         ferramentas_usadas += 1
+                        chamada = payload.get("call_id") or payload.get("id")
+                        nome_ferramenta = payload.get("name") or payload.get("tool_name") or p_tipo
+                        if isinstance(chamada, str) and isinstance(nome_ferramenta, str):
+                            ferramentas_abertas[chamada] = nome_ferramenta
+                    elif p_tipo in ("function_call_output", "custom_tool_call_output", "tool_result"):
+                        chamada = payload.get("call_id") or payload.get("tool_use_id") or payload.get("id")
+                        if isinstance(chamada, str):
+                            ferramentas_abertas.pop(chamada, None)
                     p_content = payload.get("content")
                     if isinstance(p_content, list):
                         for b in p_content:
@@ -765,6 +838,7 @@ def _extrair_metricas_transcript(caminho: Path, agora: float) -> dict:
         "modelo_legivel": _formatar_modelo(modelo),
         "esforco": _formatar_esforco(esforco),
         "ferramentas_usadas": ferramentas_usadas,
+        "ferramenta_atual": next(reversed(ferramentas_abertas.values()), None),
         "tokens_total": tokens_total if tokens_total > 0 else None,
         "tokens_formatado": _formatar_tokens(tokens_total) if tokens_total > 0 else None,
         "rodando_ha_s": round(rodando_s, 1) if rodando_s is not None else None,
@@ -790,7 +864,7 @@ def _identidade_codex(caminho: Path) -> dict:
     O nome da tarefa usa apenas o último componente de agent_path, que é um
     rótulo operacional curto. Nunca devolvemos o caminho bruto.
     """
-    resultado = {"identidade": IDENTIDADE_CODEX_GENERICA, "papel": None,
+    resultado = {"identidade": IDENTIDADE_CODEX_GENERICA, "papel": "Execução técnica (Codex)",
                  "tarefa": None, "pai": None, "profundidade": None}
     try:
         with caminho.open("rb") as arquivo:
@@ -800,8 +874,8 @@ def _identidade_codex(caminho: Path) -> dict:
         if not isinstance(payload, dict):
             return resultado
         papel = _texto_curto(payload.get("agent_role"), 80)
-        resultado["papel"] = papel
         if papel in IDENTIDADES_CODEX:
+            resultado["papel"] = papel
             resultado["identidade"] = IDENTIDADES_CODEX[papel]
         tarefa = _texto_curto(payload.get("agent_path"), 240)
         if tarefa:
@@ -926,11 +1000,12 @@ def _pastas_codex_do_dono(dono: str | None = None, raiz_explicita: object = _COD
 
 def _codex_recentes(agora: float, dono: str | None = None,
                     raiz_codex: object = _CODEX_PADRAO,
-                    coletar_avisos: list[str] | None = None) -> list[dict]:
+                    coletar_avisos: list[str] | None = None,
+                    processos_vivos: int = 0) -> list[dict]:
     """Sessões Codex recentes, incluindo pastas normais e de workers.
     Nunca silencia erro de leitura em pasta existente."""
     pastas = _pastas_codex_do_dono(dono, raiz_explicita=raiz_codex)
-    encontrados = []
+    candidatos = []
     for pasta in pastas:
         try:
             arquivos = list(pasta.rglob("*.jsonl"))
@@ -948,16 +1023,23 @@ def _codex_recentes(agora: float, dono: str | None = None,
                 silencio = max(0.0, agora - caminho.stat().st_mtime)
             except OSError:
                 continue
-            if silencio <= JANELA_CODEX_S:
-                encontrados.append((caminho, silencio))
+            if silencio <= JANELA_CANDIDATO_S:
+                candidatos.append((caminho, silencio))
 
-    encontrados.sort(key=lambda par: par[1])
+    candidatos.sort(key=lambda par: par[1])
+    garantidos_por_processo = {caminho for caminho, _ in candidatos[:max(0, processos_vivos)]}
+    encontrados = [
+        (caminho, silencio)
+        for caminho, silencio in candidatos
+        if silencio <= JANELA_CODEX_S or caminho in garantidos_por_processo
+    ]
     agentes = []
     for caminho, silencio in encontrados[:32]:
         identidade = _identidade_codex(caminho)
         metricas = _extrair_metricas_transcript(caminho, agora)
         quem_mandou = identidade.get("pai") or identidade.get("tarefa")
-        estado_codex = TRABALHANDO if silencio <= LIMIAR_ATIVO_S else SILENCIOSO
+        confirmado_por_processo = caminho in garantidos_por_processo
+        estado_codex = TRABALHANDO if silencio <= LIMIAR_ATIVO_S or confirmado_por_processo else SILENCIOSO
         status_codex = "executando" if estado_codex == TRABALHANDO else "ocioso"
         agentes.append({
             "id": caminho.stem.removeprefix("rollout-")[-36:],
@@ -974,7 +1056,7 @@ def _codex_recentes(agora: float, dono: str | None = None,
             "fase": "atividade_codex",
             "etapa": metricas.get("etapa_codex") or "atividade Codex detectada",
             "etapa_e_description": False,
-            "ferramenta": None,
+            "ferramenta": metricas.get("ferramenta_atual"),
             "silencio_s": round(silencio, 1),
             "ultima_atividade": _hora_br(agora - silencio),
             "inicio": None,
@@ -1097,7 +1179,8 @@ def _agentes_agent_pendentes_do_pai(dir_sessao: Path, dono: str | None, agora: f
     return agentes
 
 
-def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float, processo_vivo: bool) -> dict | None:
+def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float,
+                       processo_vivo: bool, agentes_coordenados: int = 0) -> dict | None:
     """Presença da sessão Claude Code raiz confirmada por processo vivo."""
     if not processo_vivo:
         return None
@@ -1115,7 +1198,9 @@ def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float, process
         return None
 
     estado = _classificar(cauda["fase"], silencio)
-    if estado == PARADO:
+    if silencio <= LIMIAR_SESSAO_COORDENADORA_ATIVA_S or agentes_coordenados > 0:
+        estado = TRABALHANDO
+    elif estado == PARADO:
         estado = SILENCIOSO
 
     item = {
@@ -1130,17 +1215,20 @@ def _agente_sessao_pai(dir_sessao: Path, dono: str | None, agora: float, process
         "pai": None,
         "profundidade": 0,
         "estado": estado,
-        "fase": cauda["fase"],
-        "etapa": cauda["etapa"],
-        "etapa_e_description": cauda["etapa_e_description"],
+        "fase": "coordenando_agentes" if agentes_coordenados > 0 else cauda["fase"],
+        "etapa": (
+            f"coordenando {agentes_coordenados} agente{'s' if agentes_coordenados != 1 else ''}"
+            if agentes_coordenados > 0 else cauda["etapa"]
+        ),
+        "etapa_e_description": False if agentes_coordenados > 0 else cauda["etapa_e_description"],
         "ferramenta": cauda["ferramenta"],
         "silencio_s": round(silencio, 1),
         "ultima_atividade": _hora_br(st.st_mtime),
         "inicio": None,
         "transcript_bytes": st.st_size,
         "problema": cauda.get("problema_api"),
-        "modelo": None,
-        "modelo_legivel": None,
+        "modelo": cauda.get("modelo"),
+        "modelo_legivel": cauda.get("modelo_legivel"),
         "esforco": cauda.get("esforco"),
         "ferramentas_usadas": None,
         "tokens_total": None,
@@ -1186,7 +1274,8 @@ def _finalizar_item_claude(item: dict, metricas: dict | None, agora: float) -> N
 def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                 sessao: str | None = None, dono: str | None = None,
                 raiz_codex: object = _CODEX_PADRAO,
-                processos_claude: object = _PROC_PADRAO) -> dict:
+                processos_claude: object = _PROC_PADRAO,
+                processos_codex: object = _PROC_CODEX_PADRAO) -> dict:
     """Retrato dos agentes desta sessao, agora.
 
     SEMPRE devolve dict com `ok` e `motivo`. Nunca levanta pra quem chama e
@@ -1225,6 +1314,16 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
     claude_motivo = None
     claude_erro = None
     processos_vivos, erro_processos = _resolver_processos_claude(processos_claude)
+    codex_vivos, erro_processos_codex = _resolver_processos_codex(processos_codex)
+    if codex_vivos is None:
+        avisos.append(f"{dono or projeto}: sessões Codex indeterminadas: {erro_processos_codex}")
+    codex = _codex_recentes(
+        agora,
+        dono=dono,
+        raiz_codex=raiz_codex,
+        coletar_avisos=avisos,
+        processos_vivos=(codex_vivos or {}).get(dono or "", 0),
+    )
 
     try:
         dir_projeto = Path(raiz) / projeto
@@ -1278,6 +1377,8 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                                 item["descricao"] = meta.get("description")
                                 item["pai"] = meta.get("parentAgentId")
                                 item["profundidade"] = meta.get("spawnDepth")
+                                if item["profundidade"] == 1 and not item["pai"]:
+                                    item["pai"] = f"sessao-{dir_sessao.name[-8:]}"
                                 item["inicio"] = _hora_br(meta_path.stat().st_mtime)
                                 item["inicio_epoch"] = meta_path.stat().st_mtime
                             except (OSError, ValueError) as e:
@@ -1358,8 +1459,14 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
                     if eh_raiz_mais_recente and processos_vivos is None:
                         avisos.append(f"{dono or projeto}: sessão raiz indeterminada: {erro_processos}")
                     processo_vivo = bool(dono and processos_vivos is not None and dono in processos_vivos)
-                    if eh_raiz_mais_recente and not tem_vivo_sessao:
-                        item_pai = _agente_sessao_pai(dir_sessao, dono, agora, processo_vivo)
+                    if eh_raiz_mais_recente:
+                        agentes_coordenados = sum(
+                            a.get("estado") in (TRABALHANDO, SILENCIOSO)
+                            for a in agentes[inicio_sessao:]
+                        ) + len(codex)
+                        item_pai = _agente_sessao_pai(
+                            dir_sessao, dono, agora, processo_vivo, agentes_coordenados,
+                        )
                         if item_pai:
                             agentes.append(item_pai)
     except PermissionError as e:
@@ -1372,7 +1479,6 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
         avisos.append(claude_erro)
 
     # Leitura Codex sempre executada (não é cancelada por falha do Claude)
-    codex = _codex_recentes(agora, dono=dono, raiz_codex=raiz_codex, coletar_avisos=avisos)
     if codex:
         base["sessao"] = base["sessao"] or "codex"
         pastas_dono = _pastas_codex_do_dono(dono, raiz_explicita=raiz_codex)
@@ -1417,7 +1523,8 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
 def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
                          raiz: Path | None = None,
                          codex: dict[str, Path] | None = None,
-                         processos_claude: object = _PROC_PADRAO) -> dict:
+                         processos_claude: object = _PROC_PADRAO,
+                         processos_codex: object = _PROC_CODEX_PADRAO) -> dict:
     """Agrega ler_agentes() das três sessões da casa em um único retrato.
 
     Nunca deixa uma sessão que falhou apagar as que funcionaram: erro de
@@ -1439,6 +1546,7 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
     indeterminados_total = 0
     algum_ok = False
     processos = _resolver_processos_claude(processos_claude)
+    processos_codex_resolvidos = _resolver_processos_codex(processos_codex)
 
     for dono, projeto in projetos.items():
         try:
@@ -1448,6 +1556,7 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
                 dono=dono,
                 raiz_codex=codex.get(dono) if codex is not None else _CODEX_PADRAO,
                 processos_claude=processos,
+                processos_codex=processos_codex_resolvidos,
             )
             if not r.get("ok"):
                 erro_desc = _sanitizar_caminho(str(r.get("erro") or r.get("motivo")))

@@ -1,5 +1,6 @@
 import type { AgenteVivo } from './tipos.ts'
 import { montarCatalogoPixel, normalizarIdentidadeAgente, PIXEL_AGENTS, PIXEL_AGENT_SQUADS } from './pixel-agents.ts'
+import * as PixelOfficeModulo from '../ui/PixelOffice.tsx'
 import {
   SQUADS_SOB_DEMANDA,
   calcularLayoutSala,
@@ -110,6 +111,30 @@ conferir('estado com serviço ativo reconhece sessão viva', sessoesAtivasNoEsta
 conferir('Luana, Renato e Bia vivos ficam sentados na coordenação', diretoresVivos.length === 3 && diretoresVivos.every((visual) => visual.squad === 'coordenação' && visual.execucao.estado === 'silencioso'))
 conferir('sessão viva do estado nunca é enviada ao descanso', diretoresVivos.every((visual) => visual.execucao.estado !== 'parado'))
 
+const sessoesCoordenadoras: AgenteVivo[] = ['luana', 'renato', 'bia'].map((dono, indice) => ({
+  id: `sessao-${dono}`,
+  dono,
+  identidade: 'sessao-claude',
+  tipo: 'sessao_claude',
+  motor: 'claude',
+  estado: indice === 0 ? 'trabalhando' : 'silencioso',
+  fase: 'sessao_viva',
+  etapa: 'coordenação sintética',
+  ferramenta: indice === 0 ? 'Bash' : null,
+}))
+const layoutDescansoVazio = calcularLayoutSala(
+  filtrarSquadsSobDemanda(montarExecucoesVisuais(sessoesCoordenadoras, PIXEL_AGENTS), new Set()),
+  { larguraDisponivel: 990, alturaDisponivel: 600 },
+)
+const layoutDescansoComOcupante = calcularLayoutSala(
+  filtrarSquadsSobDemanda(montarExecucoesVisuais(sessoesCoordenadoras.slice(0, 2), PIXEL_AGENTS), new Set()),
+  { larguraDisponivel: 990, alturaDisponivel: 600 },
+)
+conferir('descanso vazio fica encolhido', !layoutDescansoVazio.descansoAberto && layoutDescansoVazio.ocupantesDescanso === 0)
+conferir('faixa vazia usa só 30 px da planta', layoutDescansoVazio.altura - layoutDescansoVazio.descansoY === 30)
+conferir('descanso abre quando há ocupante', layoutDescansoComOcupante.descansoAberto && layoutDescansoComOcupante.ocupantesDescanso === 1)
+conferir('descanso ocupado recupera espaço para o boneco', layoutDescansoComOcupante.altura - layoutDescansoComOcupante.descansoY > 30)
+
 const comercialAberto = montarExecucoesVisuais(comerciaisAtivos, PIXEL_AGENTS)
 const comerciaisVisiveis = filtrarSquadsSobDemanda(comercialAberto, new Set(['comercial']))
 conferir('chamar Elza abre a ilha com as oito mesas comerciais', comerciaisVisiveis.filter((item) => item.squad === 'comercial').length === 8)
@@ -166,6 +191,11 @@ const visualCodex = ocupantes.find((item) => item.execucao.id === sessaoCodex.id
 conferir('sessão Codex usa a primeira linha útil do pedido', visualCodex?.nome, 'Codex · GPT-5.6 Sol · Validar sala mista')
 conferir('sessão Codex não usa nome técnico de arquivo', Boolean(visualCodex && !visualCodex.nome.includes('NOME DO ARQUIVO')))
 conferir('ID cru não vira nome primário da sessão Codex', Boolean(visualCodex && !visualCodex.nome.includes(sessaoCodex.id)))
+const funcaoLegivel = (PixelOfficeModulo as typeof PixelOfficeModulo & {
+  funcaoLegivelDaExecucao?: (execucao: AgenteVivo, ficha?: (typeof PIXEL_AGENTS)[number]) => string
+}).funcaoLegivelDaExecucao
+conferir('card Codex genérico nunca mostra Função como traço', Boolean(funcaoLegivel) && funcaoLegivel?.(sessaoCodex, visualCodex?.ficha) !== '—', String(funcaoLegivel?.(sessaoCodex, visualCodex?.ficha)))
+conferir('nenhum card vivo fica sem função legível', Boolean(funcaoLegivel) && globais.every((execucao) => funcaoLegivel?.(execucao) !== '—'))
 
 const codexSemTarefa: AgenteVivo = {
   id: 'sessao-codex-sem-tarefa', tipo: 'codex', motor: 'codex', modelo_legivel: 'GPT-5.6 Sol',

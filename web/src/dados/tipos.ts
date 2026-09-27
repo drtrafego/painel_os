@@ -74,6 +74,7 @@ export type ArestaCofre = {
   para: string
   ponte: boolean
   porque: string
+  tipo?: 'declarada' | 'automatica'
 }
 
 // ---------------------------------------------------------------------------
@@ -421,6 +422,10 @@ export type Estado = {
     arestas_recusadas: string[]
     arquivos: number | null
     grau_medio: number
+    grau_medio_declarado?: number | null
+    grau_medio_total?: number | null
+    conexoes_declaradas?: number | null
+    conexoes_automaticas?: number | null
   } | null
 
   cron: {

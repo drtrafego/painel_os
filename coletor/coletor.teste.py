@@ -366,6 +366,9 @@ conferir("nó vencido não finge endereço",
 cofre = _cofre_de_teste([{**BOM, "conecta": [
     {"para": "padrao-zero-calado", "porque": "É a mesma família do zero calado"}]}, HUB])
 conferir("ligação escrita na fonte vira aresta", cofre["conexoes"], 1)
+conferir("ligação legada é marcada como declarada", cofre["arestas"][0]["tipo"], "declarada")
+conferir("grau declarado separa as ligações provadas",
+         (cofre["grau_medio_declarado"], cofre["grau_medio_total"]), (1.0, 1.0))
 conferir("aresta que troca de área é marcada como PONTE, e o filtro não pode escondê-la",
          cofre["arestas"][0]["ponte"], True)
 conferir("o grau conta os dois sentidos: quem só recebe é tão central quanto quem emite",
@@ -384,6 +387,24 @@ cofre = _cofre_de_teste([{**BOM, "conecta": [
     {"para": "padrao-zero-calado", "porque": "os dois falam de coisa parecida"}]}, HUB])
 conferir("ligação que não está escrita na fonte é RECUSADA", cofre["conexoes"], 0)
 conferir("e a recusa aparece, não some", len(cofre["arestas_recusadas"]), 1)
+
+# Formato novo: o registro fictício fica integralmente em memória. O helper
+# puro é o mesmo que `ler_cofre` usa depois de ler e delimitar os blocos.
+arestas_memoria, recusadas_memoria, _ = c._cofre_arestas_declaradas([
+    (
+        "registro-ficticio",
+        "Este registro explica a relação com outro.",
+        ["A falha reaparece porque segue o mesmo padrão de [[destino-ficticio]]."],
+        [],
+    ),
+], {"registro-ficticio", "destino-ficticio"})
+conferir("[[id]] em registro fictício na memória vira aresta declarada",
+         [(a["de"], a["para"], a["tipo"]) for a in arestas_memoria],
+         [("registro-ficticio", "destino-ficticio", "declarada")])
+conferir("a frase do [[id]] vira o motivo da aresta",
+         arestas_memoria[0]["porque"],
+         "A falha reaparece porque segue o mesmo padrão de [[destino-ficticio]]")
+conferir("o registro fictício em memória não gera recusa", recusadas_memoria, [])
 
 # a porta: nome de cliente no texto derruba o registro inteiro.
 guarda = (c.NOMES_CLIENTE, c.NEGACAO)
@@ -437,6 +458,8 @@ conferir("nó de skill foi injetado", no_skill is not None, True)
 conferir("skill tem grau > 0 amarrada na rede", (no_skill.get("grau") or 0) > 0, True)
 arestas_skill = [a for a in cofre_com_skills["arestas"] if a["de"] == "trava-apify-timeout" or a["para"] == "trava-apify-timeout"]
 conferir("aprendizado que cita Apify ganha aresta para a skill/sistema", len(arestas_skill) > 0, True)
+conferir("arestas dinâmicas ficam marcadas separadamente como automáticas",
+         all(a["tipo"] == "automatica" for a in arestas_skill), True)
 
 # Teste dos 54 nós de skill/sistema: sinônimos ligam à rede e o teste lista os que ficaram sem
 APRENDIZADOS_CONECTADOS = [
@@ -1708,6 +1731,74 @@ res_li_bloqueado = c.ler_linkedin_apify(
 conferir("linkedin bloqueado por teto anterior: status erro sem tentar de novo", res_li_bloqueado["status"], "erro")
 conferir("linkedin bloqueado: motivo vem do arquivo de bloqueio", "teto" in res_li_bloqueado["motivo"], True)
 shutil.rmtree(tmp_bloqueio_persistido.parent, ignore_errors=True)
+
+print("\n--- Cofre: _cofre_sanitizar_html, regressão permanente (QA rodadas 1-3, item C)")
+print("    Metade destes casos existe pra REPROVAR se a tag voltar a passar,")
+print("    a outra metade pra REPROVAR se texto legítimo voltar a ser comido.")
+
+
+def _sem_tag_perigosa(nome, saida):
+    """Nenhuma tag executável pode sobrar: nem <script>, nem atributo tipo
+    onerror/onload colado a um elemento, nem a tag em si."""
+    global falhas
+    vazou = [p for p in ("<script", "onerror", "onload", "<svg", "<img") if p.lower() in saida.lower()]
+    if vazou:
+        falhas += 1
+    print(f"{'ok  ' if not vazou else 'FALHOU'} {nome}\n       obtido={saida!r}"
+          + (f"  <-- VAZOU {vazou}" if vazou else ""))
+
+
+# XSS: tag simples, atributo malicioso em tag "inocente", case, aninhado,
+# evasão dupla (reconstrução no meio do loop), entidade dupla (permanece
+# cosmética: o sink é texto puro, React nunca decodifica um "&amp;lt;" de
+# volta pra HTML real, então o texto sai como string literal segura).
+_sem_tag_perigosa("script simples", c._cofre_sanitizar_html("<script>alert(1)</script>"))
+_sem_tag_perigosa("img com onerror (tag comum, atributo malicioso)", c._cofre_sanitizar_html("<img src=x onerror=alert(1)>"))
+_sem_tag_perigosa("svg com onload", c._cofre_sanitizar_html("<svg onload=alert(1)>"))
+_sem_tag_perigosa("svg/onload sem espaço", c._cofre_sanitizar_html("<svg/onload=alert(1)>"))
+_sem_tag_perigosa("case misturado (ScRiPt)", c._cofre_sanitizar_html("<ScRiPt>alert(1)</script>"))
+_sem_tag_perigosa("evasão por reconstrução (<scr<script>ipt>)", c._cofre_sanitizar_html("<scr<script>ipt>alert(1)</script>"))
+conferir("entidade dupla continua cosmética (texto literal, não tag real)",
+         c._cofre_sanitizar_html("&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;"),
+         "&lt;script&gt;alert(1)&lt;/script&gt;")
+
+# Texto matemático puro (o pedido central da rodada 2): sai IDÊNTICO.
+for matematico in (
+    "custo < 10",
+    "comparação: 5 < 10 e 20 > 15",
+    "tag incompleta < sem fechar",
+    "a<b",
+):
+    conferir(f"matemático fica intacto: {matematico!r}",
+             c._cofre_sanitizar_html(matematico), matematico)
+
+# Placeholder de texto em português (o pedido central da rodada 3, item C):
+# <nome>/<x>/<email>/<y> não são tag HTML real, ficam no texto.
+for placeholder in (
+    "substitua <nome> e <email> no template",
+    "o valor de <x> é maior que <y>",
+):
+    conferir(f"placeholder fica intacto: {placeholder!r}",
+             c._cofre_sanitizar_html(placeholder), placeholder)
+# mas <f> sozinho junto de tag real (<b>...) continua sendo tratado por
+# nome: "f" não é tag, "b" é — cada um segue sua própria regra na mesma
+# string, sem contaminar o outro.
+conferir("placeholder e tag real na mesma string: só a tag real some",
+         c._cofre_sanitizar_html("e<f>g <b>negrito</b> texto"),
+         "e<f>g negrito texto")
+
+# GAP CONHECIDO, documentado e não fechado nesta rodada (fora do pedido
+# central: nome de variável de UMA letra que colide com um nome de tag
+# HTML real — "b", "a", "i", "p", "s", "u", "q" — dentro de um "<...>" que
+# se estende, com espaço, até um "e depois algum '>' mais adiante na
+# mesma frase, ainda é lido como tag e some. Registrado aqui pra não vir
+# a ser "descoberto" de novo sem saber que já é conhecido; NÃO é a mesma
+# classe do placeholder (que é a palavra INTEIRA colada em `<...>` sem
+# espaço, já corrigida acima) nem regressão desta rodada (o comportamento
+# antigo também comia esta mesma frase, só que um pedaço diferente dela).
+conferir("GAP CONHECIDO: variável de 1 letra que é tag real, com espaço até um '>' distante",
+         c._cofre_sanitizar_html("a < b and c > d and e<f>g"),
+         "a  d and e<f>g")
 
 print("\n" + ("TODOS PASSARAM" if falhas == 0 else f"{falhas} FALHA(S)"))
 sys.exit(0 if falhas == 0 else 1)

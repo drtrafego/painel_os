@@ -244,8 +244,9 @@ def testar_agentes_vivos():
 
         transcript_pai = projeto_bia_pai / f"{sessao_bia}.jsonl"
         transcript_pai.write_text(json.dumps({
+            "effort": "high",
             "type": "assistant",
-            "message": {"content": [{
+            "message": {"model": "claude-opus-5-5", "content": [{
                 "type": "tool_use",
                 "id": "toolu_bia_sintetico_abcdefghi",
                 "name": "Agent",
@@ -260,12 +261,22 @@ def testar_agentes_vivos():
         mtime_pai = time.time() - 12
         os.utime(transcript_pai, (mtime_pai, mtime_pai))
 
-        r_bia_pai = ler_agentes("-opt-gastaomatos-bia-pai", raiz=tmp)
+        r_bia_pai = ler_agentes(
+            "-opt-gastaomatos-bia-pai",
+            raiz=tmp,
+            processos_claude=({"bia"}, None),
+        )
         agentes_bia_pai = r_bia_pai["agentes"]
+        sessao_bia_pai_viva = next(a for a in agentes_bia_pai if a.get("tipo") == "sessao_claude")
+        subagente_bia_pendente = next(a for a in agentes_bia_pai if a.get("tipo") != "sessao_claude")
         conferir("transcript pai sintético excede a cauda padrão", transcript_pai.stat().st_size > mod.CAUDA_BYTES, True)
-        conferir("transcript pai recente da Bia vira presença viva", r_bia_pai["contagem"]["vivos"], 1)
-        conferir("registro vivo recebe dono bia", [a.get("dono") for a in agentes_bia_pai], ["bia"])
-        conferir("chamada Agent pendente ganha id sintético", agentes_bia_pai[0]["id"].startswith("agent-tool-"), True)
+        conferir("sessão pai e Agent pendente aparecem juntos", r_bia_pai["contagem"]["vivos"], 2)
+        conferir("registros vivos recebem dono bia", {a.get("dono") for a in agentes_bia_pai}, {"bia"})
+        conferir("chamada Agent pendente ganha id sintético", subagente_bia_pendente["id"].startswith("agent-tool-"), True)
+        conferir("sessão coordenadora recente fica trabalhando", sessao_bia_pai_viva["estado"], TRABALHANDO)
+        conferir("sessão coordenadora expõe ferramenta atual", sessao_bia_pai_viva["ferramenta"], "Agent")
+        conferir("sessão coordenadora expõe modelo real", sessao_bia_pai_viva["modelo_legivel"], "Opus 5.5")
+        conferir("sessão coordenadora expõe esforço real", sessao_bia_pai_viva["esforco"], "alto")
         conferir("prompt do Agent não vaza", "SENTINELA_NAO_SAIR" in json.dumps(agentes_bia_pai, ensure_ascii=False), False)
         conferir("subagent antigo continua só no histórico", r_bia_pai["contagem"]["historico"], 1)
 
@@ -287,9 +298,9 @@ def testar_agentes_vivos():
         conferir("sessão pai recente entregue também aparece", r_bia_sessao["agentes"][0]["id"], f"sessao-{sessao_fallback[-8:]}")
         conferir("fallback da sessão pai mantém dono bia", r_bia_sessao["agentes"][0]["dono"], "bia")
         conferir("sessão Claude raiz expõe esforço real do transcript", r_bia_sessao["agentes"][0]["esforco"], "médio")
-        conferir("fallback da sessão pai entregue fica ocioso", r_bia_sessao["agentes"][0]["estado"], SILENCIOSO)
-        conferir("sessão pai ociosa não conta como trabalhando", r_bia_sessao["contagem"]["trabalhando"], 0)
-        conferir("sessão pai ociosa conta como silenciosa", r_bia_sessao["contagem"]["silencioso"], 1)
+        conferir("sessão pai com atividade recente fica trabalhando", r_bia_sessao["agentes"][0]["estado"], TRABALHANDO)
+        conferir("sessão pai recente conta como trabalhando", r_bia_sessao["contagem"]["trabalhando"], 1)
+        conferir("sessão pai recente não conta como silenciosa", r_bia_sessao["contagem"]["silencioso"], 0)
 
         print("\n--- Teste 4c: Diretora com sessão de hoje e sem subagente vivo continua listada")
         agora_original = mod._agora
@@ -345,14 +356,99 @@ def testar_agentes_vivos():
         )
         conferir("jsonl recente sem processo remoto não vira card raiz", [a for a in r_raiz_sem_proc["agentes"] if a.get("tipo") == "sessao_claude"], [])
 
+        print("\n--- Teste 4d.1: filho direto aponta para a sessão raiz e a mantém trabalhando")
+        projeto_coord = tmp / "-opt-gastaomatos-luana-coordenando"
+        sessao_coord = "sessao-luana-coordenando"
+        subagents_coord = projeto_coord / sessao_coord / "subagents"
+        subagents_coord.mkdir(parents=True, exist_ok=True)
+        (subagents_coord / "agent-filho-direto.meta.json").write_text(json.dumps({
+            "agentType": "dev",
+            "description": "Descrição da tarefa não é o lançador",
+            "parentAgentId": None,
+            "spawnDepth": 1,
+        }), encoding="utf-8")
+        transcript_filho_direto = subagents_coord / "agent-filho-direto.jsonl"
+        transcript_filho_direto.write_text(json.dumps({
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "tool_use", "name": "Bash", "input": {"description": "Implementando"},
+            }]},
+        }) + "\n", encoding="utf-8")
+        (subagents_coord / "agent-neto.meta.json").write_text(json.dumps({
+            "agentType": "qa",
+            "description": "Revisão do filho",
+            "parentAgentId": "filho-direto",
+            "spawnDepth": 2,
+        }), encoding="utf-8")
+        transcript_neto = subagents_coord / "agent-neto.jsonl"
+        transcript_neto.write_text(json.dumps({
+            "type": "assistant",
+            "message": {"content": [{
+                "type": "tool_use", "name": "Read", "input": {"description": "Revisando"},
+            }]},
+        }) + "\n", encoding="utf-8")
+        transcript_coord = projeto_coord / f"{sessao_coord}.jsonl"
+        transcript_coord.write_text(json.dumps({
+            "type": "assistant",
+            "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "aguardando"}]},
+        }) + "\n", encoding="utf-8")
+        agora_coord = time.time()
+        os.utime(transcript_filho_direto, (agora_coord - 10, agora_coord - 10))
+        os.utime(transcript_neto, (agora_coord - 10, agora_coord - 10))
+        os.utime(transcript_coord, (agora_coord - 7 * 60, agora_coord - 7 * 60))
+
+        r_coord = ler_agentes(
+            "-opt-gastaomatos-luana-coordenando",
+            raiz=tmp,
+            processos_claude=({"luana"}, None),
+        )
+        filho_direto = next(a for a in r_coord["agentes"] if a.get("id") == "filho-direto")
+        neto = next(a for a in r_coord["agentes"] if a.get("id") == "neto")
+        raiz_coord = next(a for a in r_coord["agentes"] if a.get("tipo") == "sessao_claude")
+        referencia_raiz = f"sessao-{sessao_coord[-8:]}"
+        conferir("filho direto recebe a referência estável da sessão raiz", filho_direto.get("pai"), referencia_raiz)
+        conferir("quem_mandou do filho direto é a sessão raiz", filho_direto.get("quem_mandou"), referencia_raiz)
+        conferir("descrição da tarefa continua separada do lançador", filho_direto.get("descricao"), "Descrição da tarefa não é o lançador")
+        conferir("neto continua apontando para o agente pai", (neto.get("pai"), neto.get("quem_mandou")), ("filho-direto", "filho-direto"))
+        conferir("coordenadora silenciosa com filho vivo fica trabalhando", raiz_coord.get("estado"), TRABALHANDO)
+        conferir("coordenadora informa quantos agentes coordena", raiz_coord.get("etapa"), "coordenando 2 agentes")
+
+        print("\n--- Teste 4d.2: Codex vivo também mantém a coordenadora trabalhando")
+        projeto_coord_codex = tmp / "-opt-gastaomatos-luana-coordenando-codex"
+        sessao_coord_codex = "sessao-luana-codex"
+        projeto_coord_codex.mkdir(parents=True, exist_ok=True)
+        transcript_coord_codex = projeto_coord_codex / f"{sessao_coord_codex}.jsonl"
+        transcript_coord_codex.write_text(json.dumps({
+            "type": "assistant",
+            "message": {"stop_reason": "end_turn", "content": [{"type": "text", "text": "aguardando Codex"}]},
+        }) + "\n", encoding="utf-8")
+        os.utime(transcript_coord_codex, (agora_coord - 7 * 60, agora_coord - 7 * 60))
+        raiz_codex_coord = tmp / "codex-coordenando" / "2026"
+        raiz_codex_coord.mkdir(parents=True, exist_ok=True)
+        rollout_coord = raiz_codex_coord / "rollout-coordenando.jsonl"
+        rollout_coord.write_text(json.dumps({
+            "type": "session_meta", "payload": {},
+        }) + "\n", encoding="utf-8")
+        os.utime(rollout_coord, (agora_coord - 10, agora_coord - 10))
+        r_coord_codex = ler_agentes(
+            "-opt-gastaomatos-luana-coordenando-codex",
+            raiz=tmp,
+            dono="luana",
+            raiz_codex=tmp / "codex-coordenando",
+            processos_claude=({"luana"}, None),
+        )
+        raiz_com_codex = next(a for a in r_coord_codex["agentes"] if a.get("tipo") == "sessao_claude")
+        conferir("coordenadora silenciosa com Codex vivo fica trabalhando", raiz_com_codex.get("estado"), TRABALHANDO)
+
         print("\n--- Teste 4e: leitura real de /proc não é enganada pelo script-wrapper")
         tmp_proc = tmp / "proc-fake"
         tmp_proc.mkdir(parents=True, exist_ok=True)
 
-        def _pid_fake(pid: int, argv: list[str]):
+        def _pid_fake(pid: int, argv: list[str], ambiente: list[str] | None = None):
             d = tmp_proc / str(pid)
             d.mkdir()
             (d / "cmdline").write_bytes(b"\x00".join(a.encode("utf-8") for a in argv) + b"\x00")
+            (d / "environ").write_bytes(b"\x00".join(a.encode("utf-8") for a in (ambiente or [])) + b"\x00")
 
         # Mesmo padrão real da casa: /usr/bin/script -qfec embrulha o comando
         # inteiro numa ÚNICA string de argv (não casa por espaço), e o
@@ -374,10 +470,22 @@ def testar_agentes_vivos():
             "/home/claude/renato-tty.log",
         ])
         _pid_fake(9104, ["/usr/bin/bash", "-c", "sleep 100"])
+        _pid_fake(9105, ["/opt/codex-luana/bin/codex", "exec", "-m", "gpt-5.6-sol"], [
+            "CODEX_HOME=/home/claude/.codex-luana", "OUTRA=segura",
+        ])
+        _pid_fake(9106, ["/opt/codex-luana/bin/codex", "exec", "-m", "gpt-5.6-terra"], [
+            "CODEX_HOME=/home/claude/.codex-luana-workers",
+        ])
+        _pid_fake(9107, ["/opt/codex-luana/bin/codex", "features"], [
+            "CODEX_HOME=/home/claude/.codex-luana",
+        ])
 
         vivos_fake, erro_fake = mod._processos_claude_remotos(proc=tmp_proc)
         conferir("script-wrapper não confunde: só o processo filho claude real conta", vivos_fake, {"luana"})
         conferir("leitura de /proc fake não erra", erro_fake, None)
+        codex_fake, erro_codex_fake = mod._processos_codex_exec(proc=tmp_proc)
+        conferir("dois codex exec da Luana são contados pelos CODEX_HOME", codex_fake, {"luana": 2})
+        conferir("comando Codex que não é exec fica fora", erro_codex_fake, None)
 
         print("\n--- Teste 5: Agregação resiliente quando uma sessão falha")
         projetos_com_falha = {
@@ -408,6 +516,29 @@ def testar_agentes_vivos():
         conferir("sessão Codex aparece uma vez só (não triplica)", len(sessoes_codex), 1)
         conferir("sessão Codex carimbada com o dono certo", [a.get("dono") for a in sessoes_codex], ["luana"])
         conferir("total = 4 Claude + 1 Codex", len(casa_codex["agentes"]), 5)
+
+        print("\n--- Teste 6b.1: processo vivo sustenta Codex durante ferramenta longa")
+        raiz_codex_longo = tmp / "codex-longo"
+        pasta_codex_longo = raiz_codex_longo / "2026"
+        pasta_codex_longo.mkdir(parents=True)
+        transcript_codex_longo = pasta_codex_longo / "rollout-longo.jsonl"
+        transcript_codex_longo.write_text("\n".join([
+            json.dumps({"type": "session_meta", "payload": {"agent_role": "worker"}}),
+            json.dumps({"type": "turn_context", "payload": {"model": "gpt-5.6-sol", "model_reasoning_effort": "high"}}),
+            json.dumps({"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "call-longo", "name": "exec"}}),
+        ]) + "\n", encoding="utf-8")
+        agora_longo = time.time()
+        os.utime(transcript_codex_longo, (agora_longo - mod.JANELA_CODEX_S - 30, agora_longo - mod.JANELA_CODEX_S - 30))
+        conferir("Codex sem processo some depois da janela curta", mod._codex_recentes(
+            agora_longo, dono="luana", raiz_codex=raiz_codex_longo, processos_vivos=0,
+        ), [])
+        codex_longo = mod._codex_recentes(
+            agora_longo, dono="luana", raiz_codex=raiz_codex_longo, processos_vivos=1,
+        )
+        conferir("Codex com processo vivo continua na sala", len(codex_longo), 1)
+        conferir("Codex sustentado pelo processo fica trabalhando", codex_longo[0]["estado"], TRABALHANDO)
+        conferir("Codex mostra a ferramenta atual", codex_longo[0]["ferramenta"], "exec")
+        conferir("Codex conserva modelo e esforço reais", (codex_longo[0]["modelo_legivel"], codex_longo[0]["esforco"]), ("GPT-5.6 Sol", "alto"))
 
         print("\n--- Teste 6c: Codex usa modelo real e primeira linha útil do pedido")
         raiz_codex_etapa = tmp / "codex-etapa"
@@ -478,6 +609,7 @@ def testar_agentes_vivos():
             raiz_codex=raiz_codex_sem_pedido,
         )[0]
         conferir("sem pedido mantém etapa anterior", card_sem_pedido["etapa"], "atividade Codex detectada")
+        conferir("Codex genérico recebe função legível", card_sem_pedido["papel"], "Execução técnica (Codex)")
 
         print("\n--- Teste 7: Identidade Codex lida só do session_meta, sem vazar agent_path")
         meta_codex = tmp / "rollout-teste.jsonl"

@@ -374,6 +374,15 @@ console.log('\nO QUE TEM QUE CONTINUAR PASSANDO (senao o validador e rigido dema
       ok(`aresta do Cofre sem \`${campo}\` REPROVA`,
         !r.ok && (r.problemas ?? []).some((x) => x.includes(campo)), detalhe(r))
     }
+    {
+      const c = copia(real) as { cofre: { arestas: Record<string, unknown>[] } }
+      if (c.cofre.arestas.length) {
+        c.cofre.arestas[0].tipo = 'inventada'
+        const r = validarEstado(c)
+        ok('aresta do Cofre com `tipo` desconhecido REPROVA',
+          !r.ok && (r.problemas ?? []).some((x) => x.includes('.tipo')), detalhe(r))
+      }
+    }
     for (const eixo of ['areas', 'familias']) {
       for (const campo of ['total', 'nome', 'id']) {
         const c = copia(real) as { cofre: Record<string, Record<string, unknown>[]> }
@@ -395,7 +404,7 @@ console.log('\nO QUE TEM QUE CONTINUAR PASSANDO (senao o validador e rigido dema
       ok(`\`cofre.${conta}\` que não é lista REPROVA`,
         !r.ok && (r.problemas ?? []).some((x) => x.includes(conta)), detalhe(r))
     }
-    for (const campo of ['arquivo', 'erro', 'grau_medio', 'cobertura']) {
+    for (const campo of ['arquivo', 'erro', 'grau_medio', 'grau_medio_declarado', 'grau_medio_total', 'conexoes_declaradas', 'conexoes_automaticas', 'cobertura']) {
       const c = copia(real) as { cofre: Record<string, unknown> }
       // `erro` aceita texto OU nulo, então mandar texto ali não é tipo errado:
       // o caso tem que ser número, senão o teste "reprova" o próprio teste.

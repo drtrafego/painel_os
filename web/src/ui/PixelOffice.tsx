@@ -83,6 +83,8 @@ export interface LayoutSala {
   zoomSugerido: number
   corredorX: number
   descansoY: number
+  descansoAberto: boolean
+  ocupantesDescanso: number
   ilhas: IlhaVisual[]
   mesas: MesaVisual[]
 }
@@ -153,6 +155,50 @@ function misturarHex(noite: string, dia: string, progressoDia: number) {
 
 function normalizarPapel(valor?: string | null) {
   return (valor || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function normalizarReferenciaLancador(valor?: string | null) {
+  return normalizarPapel(valor).replace(/\s*:\s*/g, ':')
+}
+
+function referenciasDoAgente(agente: AgenteVivo) {
+  return new Set([
+    agente.id,
+    agente.nome,
+    agente.identidade,
+    agente.dono && agente.id ? `${agente.dono}:${agente.id}` : null,
+  ].map(normalizarReferenciaLancador).filter(Boolean))
+}
+
+function referenciaDoLancador(agente: AgenteVivo) {
+  return normalizarReferenciaLancador(agente.quem_mandou || agente.pai)
+}
+
+export type NoAgenteLancado = {
+  agente: AgenteVivo
+  filhos: NoAgenteLancado[]
+}
+
+/** Monta a árvore usando somente o vínculo declarado pela sonda, sem inferir pelo squad/dono. */
+export function montarArvoreLancadosPor(agentes: AgenteVivo[], referenciasRaiz: Iterable<string>): NoAgenteLancado[] {
+  const vivos = agentes.filter((agente) => agente.estado === 'trabalhando' || agente.estado === 'silencioso')
+  const raiz = new Set(Array.from(referenciasRaiz, normalizarReferenciaLancador).filter(Boolean))
+  const usados = new Set<AgenteVivo>()
+
+  const montarNivel = (referenciasPai: Set<string>, caminho: Set<AgenteVivo>): NoAgenteLancado[] => {
+    const nivel: NoAgenteLancado[] = []
+    for (const agente of vivos) {
+      if (usados.has(agente) || caminho.has(agente)) continue
+      const lancador = referenciaDoLancador(agente)
+      if (!lancador || !referenciasPai.has(lancador)) continue
+      usados.add(agente)
+      const proximoCaminho = new Set(caminho).add(agente)
+      nivel.push({ agente, filhos: montarNivel(referenciasDoAgente(agente), proximoCaminho) })
+    }
+    return nivel
+  }
+
+  return montarNivel(raiz, new Set())
 }
 
 export function fichaUsaSalaMista(ficha?: PixelAgent) {
@@ -228,6 +274,13 @@ export function nomeLegivelDaExecucao(execucao: AgenteVivo, ficha?: PixelAgent) 
   const tipo = execucao.tipo?.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
   if (tipo && !TIPOS_GENERICOS.has(execucao.tipo?.toLowerCase() || '')) return tipo.charAt(0).toUpperCase() + tipo.slice(1)
   return 'Agente sem identidade'
+}
+
+export function funcaoLegivelDaExecucao(execucao: AgenteVivo, ficha?: PixelAgent) {
+  const cadastrada = textoLegivel(ficha?.papel || execucao.papel)
+  if (cadastrada) return cadastrada
+  if (execucao.motor === 'codex' || execucao.tipo === 'codex') return 'Execução técnica (Codex)'
+  return 'Execução operacional'
 }
 
 function capitalizarNome(valor: string) {
@@ -418,11 +471,12 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
       cursores[coluna] += (alturas.get(squad) || 0) + 16
     })
     const descansoY = Math.max(...cursores, 280) + 8
-    const fixas = execucoes.filter((execucao) => execucao.squad !== SALA_MISTA).length
+    const paradas = execucoes.filter((execucao) => execucao.squad !== SALA_MISTA && execucao.execucao.estado === 'parado').length
     const larguraNatural = margemX * 2 + colunas * larguraIlha + (colunas - 1) * vaoX
     const porLinha = Math.max(8, Math.floor((larguraNatural - 70) / 34))
-    const linhasDescanso = Math.max(1, Math.ceil(fixas / porLinha))
-    return { posicoes, descansoY, larguraNatural, altura: descansoY + 63 + linhasDescanso * 35 }
+    const linhasDescanso = paradas > 0 ? Math.ceil(paradas / porLinha) : 0
+    const alturaDescanso = paradas > 0 ? 63 + linhasDescanso * 35 : 30
+    return { posicoes, descansoY, larguraNatural, altura: descansoY + alturaDescanso }
   }
 
   const larguraDisponivel = Math.max(0, opcoes.larguraDisponivel || 0)
@@ -473,9 +527,13 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   const descansoY = melhor.descansoY
   const porLinha = Math.max(8, Math.floor((largura - 70) / 34))
   const mesasFixas = mesas.filter((mesa) => mesa.execucao.squad !== SALA_MISTA)
-  mesasFixas.forEach((mesa, indice) => {
+  const mesasEmDescanso = mesasFixas.filter((mesa) => mesa.execucao.execucao.estado === 'parado')
+  mesasFixas.forEach((mesa) => {
+    mesa.descanso = { x: largura / 2, y: descansoY + 16 }
+  })
+  mesasEmDescanso.forEach((mesa, indice) => {
     const linha = Math.floor(indice / porLinha)
-    const itensNaLinha = Math.min(porLinha, mesasFixas.length - linha * porLinha)
+    const itensNaLinha = Math.min(porLinha, mesasEmDescanso.length - linha * porLinha)
     const intervalo = Math.min(34, (largura - 76) / Math.max(1, itensNaLinha))
     const inicio = (largura - intervalo * (itensNaLinha - 1)) / 2
     mesa.descanso = { x: inicio + (indice % porLinha) * intervalo, y: descansoY + 36 + linha * 35 }
@@ -484,8 +542,20 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   ilhaMista?.mesas.forEach((mesa, indice) => {
     mesa.descanso = { x: ilhaMista.x + ilhaMista.largura - 12, y: ilhaMista.y + ilhaMista.altura - 18 - (indice % 2) * 9 }
   })
-  const linhasDescanso = Math.max(1, Math.ceil(mesasFixas.length / porLinha))
-  return { largura, altura: descansoY + 63 + linhasDescanso * 35, colunas: melhor.colunas, zoomSugerido, corredorX: largura / 2, descansoY, ilhas, mesas }
+  const linhasDescanso = mesasEmDescanso.length > 0 ? Math.ceil(mesasEmDescanso.length / porLinha) : 0
+  const alturaDescanso = mesasEmDescanso.length > 0 ? 63 + linhasDescanso * 35 : 30
+  return {
+    largura,
+    altura: descansoY + alturaDescanso,
+    colunas: melhor.colunas,
+    zoomSugerido,
+    corredorX: largura / 2,
+    descansoY,
+    descansoAberto: mesasEmDescanso.length > 0,
+    ocupantesDescanso: mesasEmDescanso.length,
+    ilhas,
+    mesas,
+  }
 }
 
 function alvoDaExecucao(execucao: ExecucaoVisual): 'trabalhando' | 'silencioso' | 'parado' {
@@ -609,9 +679,36 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const totalAtivos = todasExecucoes.filter((execucao) => execucao.ativa).length
   const totalFixos = todasExecucoes.filter((execucao) => !execucao.temporaria).length
   const totalExtras = todasExecucoes.filter((execucao) => execucao.temporaria).length
-  const selecionada = execucoesVisiveis.find((execucao) => execucao.chave === agenteSelecionadoId) || execucoesVisiveis[0]
+  const selecionada = todasExecucoes.find((execucao) => execucao.chave === agenteSelecionadoId) || execucoesVisiveis[0]
   const faseSelecionada = selecionada ? fasesRef.current.get(selecionada.animacaoChave) : undefined
   const squadsVisiveis = useMemo(() => PIXEL_AGENT_SQUADS.filter((squad) => layout.ilhas.some((ilha) => ilha.squad === squad.id)), [layout.ilhas])
+  const referenciasSelecionada = useMemo(() => {
+    if (!selecionada) return new Set<string>()
+    return new Set([
+      ...referenciasDoAgente(selecionada.execucao),
+      selecionada.ficha?.id,
+      selecionada.ficha?.nome,
+    ].map(normalizarReferenciaLancador).filter(Boolean))
+  }, [selecionada])
+  const coordenadorSelecionado = selecionada?.ficha && ['luana', 'renato', 'bia'].includes(selecionada.ficha.id)
+  const arvoreLancados = useMemo(
+    () => coordenadorSelecionado ? montarArvoreLancadosPor(agentes, referenciasSelecionada) : [],
+    [agentes, coordenadorSelecionado, referenciasSelecionada],
+  )
+  const lancadorSelecionado = useMemo(() => {
+    if (!selecionada || coordenadorSelecionado) return null
+    const referencia = referenciaDoLancador(selecionada.execucao)
+    if (!referencia) return null
+    return todasExecucoes.find((visual) => {
+      if (visual.execucao === selecionada.execucao) return false
+      const referencias = new Set([
+        ...referenciasDoAgente(visual.execucao),
+        visual.ficha?.id,
+        visual.ficha?.nome,
+      ].map(normalizarReferenciaLancador).filter(Boolean))
+      return referencias.has(referencia)
+    }) || null
+  }, [coordenadorSelecionado, selecionada, todasExecucoes])
 
   useEffect(() => {
     const palco = palcoRef.current
@@ -771,7 +868,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
           }
         })
       })
-      ctx.fillStyle = '#214747'; ctx.fillRect(18, layout.descansoY, largura - 36, layout.altura - layout.descansoY - 10); ctx.fillStyle = '#496b63'; ctx.fillRect(21, layout.descansoY - 2, largura - 42, 5); texto('DESCANSO', largura - 30, layout.descansoY + 17, 6.5, '#e0d5af', 'right', 800)
+      ctx.fillStyle = '#214747'; ctx.fillRect(18, layout.descansoY, largura - 36, layout.altura - layout.descansoY - 10); ctx.fillStyle = '#496b63'; ctx.fillRect(21, layout.descansoY - 2, largura - 42, 5); texto(layout.descansoAberto ? 'DESCANSO' : 'DESCANSO · VAZIO', largura - 30, layout.descansoY + 17, 6.5, '#e0d5af', 'right', 800)
     }
     const desenharBoneco = (mesa: MesaVisual, estadoAnimacao: EstadoAnimacaoBoneco) => {
       const personagem = mesa.execucao; const pose = poseDoEstado(estadoAnimacao, layout.corredorX); const selecionado = personagem.chave === agenteSelecionadoId
@@ -820,7 +917,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
         const ilha = layout.ilhas.find((item) => item.squad === mesa.execucao.squad)
         if (ilha) comTransformacaoDoAmbiente(ilha, () => desenharBoneco(mesa, estado)); else desenharBoneco(mesa, estado)
       })
-      canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0); canvas.dataset.officeEnvironment = ambiente.fase; canvas.dataset.officeDayProgress = ambiente.progressoDia.toFixed(3); canvas.dataset.officeDemandSquads = layout.ilhas.filter((ilha) => SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)).map((ilha) => ilha.squad).join('|')
+      canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0); canvas.dataset.officeRest = layout.descansoAberto ? 'aberto' : 'encolhido'; canvas.dataset.officeResting = String(layout.ocupantesDescanso); canvas.dataset.officeEnvironment = ambiente.fase; canvas.dataset.officeDayProgress = ambiente.progressoDia.toFixed(3); canvas.dataset.officeDemandSquads = layout.ilhas.filter((ilha) => SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)).map((ilha) => ilha.squad).join('|')
       quadro = requestAnimationFrame(desenhar)
     }
     quadro = requestAnimationFrame(desenhar)
@@ -828,6 +925,36 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   }, [agenteSelecionadoId, ambiente, layout, pausado, reduzirMovimento, squadsSobDemandaSaindo, zoom])
 
   const selecionar = (chave: string) => aoSelecionarAgente?.(chave)
+  const visualDoAgente = (agente: AgenteVivo) => todasExecucoes.find((visual) => visual.execucao === agente)
+  const renderizarArvoreLancados = (nos: NoAgenteLancado[], nivel = 0) => (
+    <ul className={nivel ? 'ml-3 border-l border-[#405655] pl-2' : 'space-y-1.5'} data-testid={nivel ? undefined : 'office-launched-tree'}>
+      {nos.map((no) => {
+        const visual = visualDoAgente(no.agente)
+        const nome = visual?.nome || nomeLegivelDaExecucao(no.agente, resolverAgenteNoCatalogo(no.agente, catalogo))
+        const tarefa = no.agente.tarefa || no.agente.descricao || no.agente.etapa || 'Sem tarefa no momento'
+        const modelo = no.agente.modelo_legivel || no.agente.modelo || 'Modelo não informado'
+        const esforco = no.agente.esforco || 'Esforço não informado'
+        return (
+          <li key={chaveAgente(no.agente.dono, no.agente.id)} className={nivel ? 'mt-1.5' : ''} data-testid={`office-launched-node-${no.agente.id}`}>
+            <button
+              type="button"
+              onClick={() => visual && selecionar(visual.chave)}
+              className="block w-full min-w-0 rounded-md border border-[#405655] bg-[#0d1e22] p-2 text-left hover:border-[#c1ec86] focus:outline-none focus:ring-2 focus:ring-[#c1ec86]"
+              data-testid={`office-launched-agent-${no.agente.id}`}
+            >
+              <span className="block truncate text-xs font-semibold text-[#e8f0ec]" title={nome}>{nome}</span>
+              <span className="mt-0.5 block break-words text-[10px] leading-4 text-[#aebfb8]">{tarefa}</span>
+              <span className="mt-1 flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 font-mono text-[9px] text-[#8fa7a1]">
+                <span className="truncate" title={modelo}>{modelo}</span>
+                <span>{esforco}</span>
+              </span>
+            </button>
+            {no.filhos.length > 0 && renderizarArvoreLancados(no.filhos, nivel + 1)}
+          </li>
+        )
+      })}
+    </ul>
+  )
   const tratarClique = (evento: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = evento.currentTarget.getBoundingClientRect(); const x = (evento.clientX - rect.left) / zoom; const y = (evento.clientY - rect.top) / zoom
     const hit = [...hitsRef.current].reverse().find((item) => x >= item.x && x <= item.x + item.largura && y >= item.y && y <= item.y + item.altura); if (hit) selecionar(hit.chave)
@@ -842,7 +969,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const descricaoSonda = statusLeitura === 'confirmado' ? `Leitura ao vivo${recebidoEm ? ` · ${Math.max(0, Math.round((Date.now() - recebidoEm.getTime()) / 1000))}s` : ''}` : statusLeitura === 'consultando' ? 'Consultando dados vivos' : statusLeitura === 'leitura_vencida' ? `Leitura vencida · ${falhouHaSegundos ?? 0}s` : erroSonda || 'Sonda indisponível'
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl bg-[#0a151a] p-3 text-[#e8f0ec] sm:p-5 font-sans" data-testid="pixel-office" data-office-columns={layout.colunas} data-office-environment={ambiente.fase} data-office-day-progress={ambiente.progressoDia.toFixed(3)} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'}>
+    <div className="min-w-0 overflow-hidden rounded-xl bg-[#0a151a] p-3 text-[#e8f0ec] sm:p-5 font-sans" data-testid="pixel-office" data-office-columns={layout.colunas} data-office-environment={ambiente.fase} data-office-day-progress={ambiente.progressoDia.toFixed(3)} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'} data-office-rest={layout.descansoAberto ? 'aberto' : 'encolhido'} data-office-resting={layout.ocupantesDescanso}>
       <header className="mb-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="text-[10px] tracking-[0.17em] text-[#b1c2bd]">G4ST4OVIB3 / PAINEL OS</div><h2 className="mt-1 text-[23px] font-bold leading-none tracking-[-0.04em] sm:text-2xl">O escritório inteiro, ao vivo.</h2></div><div className="flex shrink-0 items-center gap-1.5"><span className="rounded border border-[#6d8577] px-2 py-1 font-mono text-[9px] text-[#d8e7c1] sm:text-[10px]" data-testid="office-environment">{ambiente.rotulo}</span><span className={`rounded border px-2 py-1 font-mono text-[9px] sm:text-[10px] ${statusLeitura === 'confirmado' ? 'border-[#63735e] text-[#c6e98a]' : 'border-[#785f45] text-[#e8c575]'}`} title={descricaoSonda}>{statusLeitura === 'confirmado' ? 'AO VIVO' : 'SONDA'}</span></div></header>
       <div className="mb-2.5 flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
         <button type="button" onClick={() => aoAlternarSoAtivos?.(!soAtivos)} aria-pressed={soAtivos} className={`min-h-11 rounded-lg border px-3 text-xs font-semibold ${soAtivos ? 'border-[#c1ec86] bg-[#c1ec86] text-[#1a2a1b]' : 'border-[#42534f] bg-[#162a2a] text-[#e7f0e7]'}`}>Só ativos</button>
@@ -857,7 +984,43 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
           <div ref={palcoRef} className="h-[420px] w-full overflow-auto overscroll-contain sm:h-[600px]" data-testid="office-scroll-room"><canvas ref={canvasRef} tabIndex={0} role="group" aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`} onClick={tratarClique} onKeyDown={tratarTeclado} className="block max-w-none cursor-pointer touch-pan-x touch-pan-y focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#e8c575]" /></div>
         </section>
         <aside className="min-w-0 self-start rounded-lg border-t-2 border-[#c1ec86] bg-[#142426] p-3 sm:p-4 xl:sticky xl:top-3" aria-label="Detalhe do agente">
-          {selecionada ? <><div className="flex items-start justify-between gap-2"><div className="min-w-0"><h3 className="break-words text-sm font-semibold leading-5 sm:text-base" data-testid="office-agent-name">{selecionada.nome}</h3><p className="mt-0.5 font-mono text-[9px] text-[#718a82]">{selecionada.squadNome}{selecionada.squad === SALA_MISTA ? ' · POSTO COMPARTILHADO' : selecionada.temporaria ? ' · TEMPORÁRIO' : ' · MESA FIXA'}</p></div><span className="shrink-0 font-mono text-[10px] text-[#c1ec86] sm:text-[11px]">{rotuloFase(faseSelecionada, selecionada.ativa)}</span></div><p className="my-2 break-words text-[13px] leading-5 text-[#d4e4dc] sm:my-3 sm:text-sm">{selecionada.execucao.tarefa || selecionada.execucao.descricao || selecionada.execucao.etapa || selecionada.ficha?.papel || 'Sem tarefa no momento'}</p><dl className="grid grid-cols-2 gap-2"><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Ferramenta</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.ferramenta || '—'}>{selecionada.execucao.ferramenta || '—'}</dd></div><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Estado</dt><dd className="mt-1 truncate text-xs">{selecionada.ativa ? 'Trabalhando' : 'Parado'}</dd></div><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Modelo</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}>{selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}</dd></div><div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Função</dt><dd className="mt-1 truncate text-xs" title={selecionada.ficha?.papel || selecionada.execucao.papel || '—'}>{selecionada.ficha?.papel || selecionada.execucao.papel || '—'}</dd></div></dl></> : <p className="text-sm text-[#9cb0a9]">A sala mista está disponível; os executores ocupam uma mesa quando começam.</p>}
+          {selecionada ? <>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="break-words text-sm font-semibold leading-5 sm:text-base" data-testid="office-agent-name">{selecionada.nome}</h3>
+                <p className="mt-0.5 font-mono text-[9px] text-[#718a82]">{selecionada.squadNome}{selecionada.squad === SALA_MISTA ? ' · POSTO COMPARTILHADO' : selecionada.temporaria ? ' · TEMPORÁRIO' : ' · MESA FIXA'}</p>
+              </div>
+              <span className="shrink-0 font-mono text-[10px] text-[#c1ec86] sm:text-[11px]">{rotuloFase(faseSelecionada, selecionada.ativa)}</span>
+            </div>
+            <p className="my-2 break-words text-[13px] leading-5 text-[#d4e4dc] sm:my-3 sm:text-sm">{selecionada.execucao.tarefa || selecionada.execucao.descricao || selecionada.execucao.etapa || selecionada.ficha?.papel || 'Sem tarefa no momento'}</p>
+            <dl className="grid grid-cols-2 gap-2">
+              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Ferramenta</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.ferramenta || '—'}>{selecionada.execucao.ferramenta || '—'}</dd></div>
+              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Estado</dt><dd className="mt-1 truncate text-xs">{selecionada.ativa ? 'Trabalhando' : 'Parado'}</dd></div>
+              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Modelo</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}>{selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}</dd></div>
+              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Esforço</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.esforco || '—'}>{selecionada.execucao.esforco || '—'}</dd></div>
+              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Função</dt><dd className="mt-1 truncate text-xs" title={funcaoLegivelDaExecucao(selecionada.execucao, selecionada.ficha)}>{funcaoLegivelDaExecucao(selecionada.execucao, selecionada.ficha)}</dd></div>
+            </dl>
+
+            {coordenadorSelecionado && (
+              <section className="mt-3 rounded-md border border-[#405655] bg-[#102124] p-2" aria-label={`Lançados por ${selecionada.nome}`} data-testid="office-launched-section">
+                <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#c1ec86]">Lançados por {selecionada.nome}</h4>
+                {arvoreLancados.length > 0
+                  ? renderizarArvoreLancados(arvoreLancados)
+                  : <p className="text-[10px] italic text-[#8fa7a1]">Nenhum agente vivo lançado por esta coordenação.</p>}
+              </section>
+            )}
+
+            {!coordenadorSelecionado && lancadorSelecionado && (
+              <button
+                type="button"
+                onClick={() => selecionar(lancadorSelecionado.chave)}
+                className="mt-3 w-full rounded-md border border-[#405655] bg-[#102124] p-2 text-left text-[10px] uppercase tracking-wide text-[#8fa7a1] hover:border-[#c1ec86] focus:outline-none focus:ring-2 focus:ring-[#c1ec86]"
+                data-testid="office-launched-by"
+              >
+                Lançado por <strong className="text-[#c1ec86]">{lancadorSelecionado.nome}</strong>
+              </button>
+            )}
+          </> : <p className="text-sm text-[#9cb0a9]">A sala mista está disponível; os executores ocupam uma mesa quando começam.</p>}
           <p className="mt-3 font-mono text-[9px] leading-4 text-[#869c94] sm:text-[10px]"><span className="text-[#c1ec86]">●</span> Trabalhando: vai à mesa uma vez e permanece digitando.<br />○ Parado: monitor apagado, sem ciclo automático.</p>
         </aside>
       </div>

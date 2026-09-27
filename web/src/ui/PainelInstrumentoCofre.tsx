@@ -32,12 +32,19 @@ export function PainelInstrumentoCofre({
   const conferenciaId = useId()
   const conferir = cofre.vencidos.length > 0 || cofre.recusados.length > 0
     || cofre.truncados.length > 0 || cofre.arestas_recusadas.length > 0
+  const declaradas = cofre.conexoes_declaradas
+    ?? cofre.arestas.filter((a) => a.tipo !== 'automatica').length
+  const automaticas = cofre.conexoes_automaticas
+    ?? cofre.arestas.filter((a) => a.tipo === 'automatica').length
+  const grauDeclarado = cofre.grau_medio_declarado ?? cofre.grau_medio
+  const grauTotal = cofre.grau_medio_total ?? cofre.grau_medio
   const divisoria = modoComando ? 'border-sky-500/20' : 'border-linha'
   const secundario = modoComando ? 'text-slate-400' : 'text-tinta-2'
   const indicadores = [
     { rotulo: 'aprendizados', valor: nos.length, nota: cofre.arquivos === null ? undefined : `de ${cofre.arquivos} arquivo(s) de origem` },
-    { rotulo: 'ligações', valor: cofre.conexoes, nota: `declaradas na fonte · ${cofre.arestas.filter((a) => a.ponte).length} atravessam áreas` },
-    { rotulo: 'grau médio', valor: cofre.grau_medio, nota: 'ligações por aprendizado' },
+    { rotulo: 'ligações', valor: cofre.conexoes, nota: `${declaradas} declaradas · ${automaticas} automáticas · ${cofre.arestas.filter((a) => a.ponte).length} atravessam áreas` },
+    { rotulo: 'grau declarado', valor: grauDeclarado, nota: 'somente ligações declaradas entre aprendizados' },
+    { rotulo: 'grau total', valor: grauTotal, nota: 'inclui ligações automáticas de operação' },
     { rotulo: 'famílias', valor: cofre.familias.length, nota: `${cofre.areas.length} áreas` },
     { rotulo: 'amarrados', valor: cofre.cobertura === null ? null : `${cofre.cobertura}%`, nota: 'têm ao menos uma ligação', cor: baixa ? (modoComando ? 'text-amber-300' : 'text-ambar') : (modoComando ? 'text-emerald-400' : 'text-verde') },
   ]
@@ -56,7 +63,7 @@ export function PainelInstrumentoCofre({
           {fps} <span className={`text-[9px] ${secundario}`}>FPS</span>
         </span>
         <span className={`font-mono text-[10px] ${secundario}`}>
-          {nos.length} NÓS VISÍVEIS · {cofre.conexoes} ARESTAS · GRAU MÉDIO {cofre.grau_medio}
+          {nos.length} NÓS VISÍVEIS · {declaradas} DECLARADAS · {automaticas} AUTOMÁTICAS · GRAU DECLARADO {grauDeclarado} · TOTAL {grauTotal}
         </span>
 
         <dl className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]">
