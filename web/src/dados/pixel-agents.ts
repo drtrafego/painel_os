@@ -70,7 +70,7 @@ export const PIXEL_AGENTS: PixelAgent[] = [
   { id: 'caio', nome: 'Caio', papel: 'Operador de envio', squad: 'comercial', área: 'Operação', abreviação: 'CA', cor: '#b45309', aliases: ['caio-envio'] },
   { id: 'hugo', nome: 'Hugo', papel: 'Analista e métricas', squad: 'comercial', área: 'Métricas', abreviação: 'HU', cor: '#92400e', aliases: ['hugo-analista'] },
   { id: 'nova-mineradora', nome: 'Nova Mineradora', papel: 'Descoberta multicanal', squad: 'radar', área: 'Mineração', abreviação: 'NM', cor: '#38bdf8', aliases: ['nova_mineradora', 'nova', 'mineradora'] },
-  { id: 'vega', nome: 'Vega', papel: 'Síntese editorial de radar', squad: 'radar', área: 'Radar', abreviação: 'VE', cor: '#60a5fa' },
+  { id: 'vega', nome: 'Vega', papel: 'Síntese editorial de radar', squad: 'conteúdo', área: 'Radar', abreviação: 'VE', cor: '#60a5fa', aliases: ['vega-radar'] },
   { id: 'suri', nome: 'Suri', papel: 'Estrategista', squad: 'conteúdo', área: 'Estratégia', abreviação: 'SU', cor: '#a3e635', aliases: ['estrategia', 'suri-estrategista'] },
   { id: 'theo', nome: 'Theo', papel: 'Conceito e roteiro', squad: 'conteúdo', área: 'Roteiro', abreviação: 'TH', cor: '#bef264', aliases: ['conceito_roteiro', 'theo-criador'] },
   { id: 'cleo', nome: 'Cleo', papel: 'Copywriter', squad: 'conteúdo', área: 'Copy', abreviação: 'CL', cor: '#84cc16', aliases: ['copy', 'cleo-produtor'] },
@@ -79,12 +79,51 @@ export const PIXEL_AGENTS: PixelAgent[] = [
   { id: 'guardiao', nome: 'Guardião', papel: 'QA e validação', squad: 'conteúdo', área: 'Qualidade', abreviação: 'GU', cor: '#15803d', aliases: ['qa', 'guardiao'] },
   { id: 'publicador', nome: 'Publicador', papel: 'Publicação orgânica', squad: 'destinos', área: 'Distribuição', abreviação: 'PU', cor: '#fb923c', aliases: ['organico'] },
   { id: 'gestor', nome: 'Gestor', papel: 'Anúncios', squad: 'destinos', área: 'Mídia paga', abreviação: 'GE', cor: '#f97316', aliases: ['anuncio'] },
-  { id: 'analista-conteudo', nome: 'Analista de Conteúdo', papel: 'Análise orgânica', squad: 'análise', área: 'Métricas', abreviação: 'AC', cor: '#facc15', aliases: ['analista_conteudo'] },
+  { id: 'analista-conteudo', nome: 'Analista de Conteúdo', papel: 'Análise orgânica', squad: 'conteúdo', área: 'Métricas', abreviação: 'AC', cor: '#facc15', aliases: ['analista_conteudo'] },
   { id: 'analista', nome: 'Analista', papel: 'Análise de anúncios', squad: 'análise', área: 'Mídia paga', abreviação: 'AN', cor: '#eab308', aliases: ['analise'] },
 ]
 
 export function normalizarId(valor: string) {
-  return valor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[_\s]+/g, '-')
+  return valor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+const PREFIXOS_SQUAD = new Set([
+  'analise', 'bots', 'comercial', 'conteudo', 'destinos', 'global', 'globais', 'radar', 'trafego',
+])
+const SUFIXOS_SQUAD = PREFIXOS_SQUAD
+
+/** Canonicaliza a identidade pública do subagent_type para o slug do catálogo. */
+export function normalizarIdentidadeAgente(valor: string) {
+  const normalizada = normalizarId(valor)
+  const partes = normalizada.split('-')
+  return PREFIXOS_SQUAD.has(partes[0]) ? partes.slice(1).join('-') : normalizada
+}
+
+function chavesDeIdentidade(valor?: string | null) {
+  if (!valor) return []
+  const normalizada = normalizarId(valor)
+  const semPrefixo = normalizarIdentidadeAgente(valor)
+  const partes = semPrefixo.split('-')
+  const semSufixo = SUFIXOS_SQUAD.has(partes[partes.length - 1]) ? partes.slice(0, -1).join('-') : semPrefixo
+  return [...new Set([normalizada, semPrefixo, semSufixo].filter(Boolean))]
+}
+
+const IDENTIDADES_GENERICAS = new Set([
+  'agent', 'arquiteto', 'codex', 'copy', 'designer', 'dev', 'explore', 'frank', 'general-purpose',
+  'lex', 'qa', 'sessao-claude', 'sessao-claude-code', 'sessao-codex', 'social', 'subagente',
+])
+
+function identidadeOperacional(agente: { identidade?: string | null; tipo?: string | null }) {
+  return [agente.identidade, agente.tipo]
+    .filter((valor): valor is string => Boolean(valor))
+    .filter((valor) => !IDENTIDADES_GENERICAS.has(normalizarId(valor)))
+}
+
+function correspondeIdentidade(item: PixelAgent, valor: string) {
+  const alvo = new Set(chavesDeIdentidade(valor))
+  return [item.id, ...(item.aliases || [])].some((candidato) =>
+    chavesDeIdentidade(candidato).some((chave) => alvo.has(chave)),
+  )
 }
 
 export function encontrarPixelAgent(id: string) {
@@ -155,20 +194,21 @@ export function resolverAgenteNoCatalogo(
     if (porIdESquad) return porIdESquad
   }
 
-  // 3. Fallback geral por ID ou aliases
-  return (
-    catalogoVisual.find((item) => item.aliases?.includes(chave)) ??
-    catalogoVisual.find(
-      (item) =>
-        item.id === agente.id ||
-        item.aliases?.includes(agente.id) ||
-        (agente.identidade &&
-          agente.identidade !== 'sessao-codex' &&
-          agente.identidade !== 'sessao-claude' &&
-          (normalizarId(item.id) === normalizarId(agente.identidade ?? '') ||
-            item.aliases?.some((alias) => normalizarId(alias) === normalizarId(agente.identidade ?? ''))))
-    )
-  )
+  // 3. A sonda Claude expõe o subagent_type em `tipo` e usa um ID opaco. A
+  // identidade pode ainda vir em `identidade`; ambos passam pela mesma lista
+  // de candidatos, sem deixar papéis genéricos (copy/dev/QA etc.) herdarem
+  // por acidente uma ficha catalogada.
+  const porChaveAlias = catalogoVisual.find((item) => item.aliases?.includes(chave))
+  if (porChaveAlias) return porChaveAlias
+  const candidatos = identidadeOperacional(agente)
+  const porIdentidadeExata = candidatos
+    .map((candidato) => {
+      const chaveExata = normalizarId(candidato)
+      return catalogoVisual.find((item) => [item.id, ...(item.aliases || [])].some((valor) => normalizarId(valor) === chaveExata))
+    })
+    .find(Boolean)
+  if (porIdentidadeExata) return porIdentidadeExata
+  return candidatos.map((candidato) => catalogoVisual.find((item) => correspondeIdentidade(item, candidato))).find(Boolean)
 }
 
 export function construirMapaAgentesPorCatalogo<T extends { id: string; dono?: string | null; identidade?: string | null }>(
@@ -343,7 +383,16 @@ export function montarCatalogoPixel(agentes: Array<{ id: string; nome: string; d
   const catalogo = PIXEL_AGENTS.map((agente) => ({ ...agente }))
   const inserir = (item: PixelAgent) => {
     const existente = catalogo.find((agente) => normalizarId(agente.id) === normalizarId(item.id) || agente.aliases?.some((alias) => normalizarId(alias) === normalizarId(item.id)))
-    if (existente) { existente.descricao ??= item.descricao; existente.aliases = [...new Set([...(existente.aliases ?? []), item.id])]; return }
+    if (existente) {
+      existente.descricao ??= item.descricao
+      existente.aliases = [...new Set([...(existente.aliases ?? []), item.id])]
+      // O estado coletado é a fonte vigente do squad; o catálogo visual é
+      // apenas o fallback para agentes ainda ausentes na coleta.
+      existente.squad = item.squad
+      existente.área = item.área
+      existente.papel = item.papel
+      return
+    }
     catalogo.push(item)
   }
   agentes.forEach((agente, index) => inserir({ id: agente.id, nome: agente.nome || agente.id, papel: agente.descricao?.split(':')[0] || 'Agente operacional', squad: normalizarSquad(agente.squad), área: agente.squad, abreviação: (agente.nome || agente.id).slice(0, 2).toUpperCase(), cor: PIXEL_AGENT_SQUADS[index % PIXEL_AGENT_SQUADS.length].cor, descricao: agente.descricao }))

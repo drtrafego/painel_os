@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AgenteVivo, Estado } from '../dados/tipos'
+import type { AgenteSessao, AgenteVivo, Estado } from '../dados/tipos'
 import {
   chaveAgente,
   formatarRotulo,
@@ -286,9 +286,46 @@ function criarVisual(execucao: AgenteVivo, ficha: PixelAgent | undefined, squad:
   }
 }
 
+type EstadoSessoes = { sessao: Array<Pick<AgenteSessao, 'id' | 'nome' | 'papel' | 'resumo' | 'estado' | 'motores'>> }
+
+export function sessaoEstáNoAr(sessao: Pick<AgenteSessao, 'estado' | 'motores'>) {
+  return sessao.estado === 'ativo' || Boolean(
+    sessao.motores?.servicos?.some((servico) =>
+      servico.ativo === true || servico.estado === 'active' || servico.sub === 'running',
+    ) || (sessao.motores?.situacao === 'um_ativo' && (sessao.motores.ativos?.length || 0) > 0),
+  )
+}
+
+function completarSessoesVivas(agentes: AgenteVivo[], catalogo: PixelAgent[], estado?: EstadoSessoes) {
+  const diretores = new Set(['luana', 'renato', 'bia'])
+  const presentes = new Set(
+    agentes
+      .map((agente) => resolverAgenteNoCatalogo(agente, catalogo)?.id)
+      .filter((id): id is string => Boolean(id && diretores.has(id))),
+  )
+  const complementos = (estado?.sessao || [])
+    .filter((sessao) => diretores.has(sessao.id) && sessaoEstáNoAr(sessao) && !presentes.has(sessao.id))
+    .map((sessao): AgenteVivo => ({
+      id: `sessao-estado-${sessao.id}`,
+      nome: sessao.nome,
+      dono: sessao.id,
+      identidade: 'sessao-claude',
+      papel: sessao.papel,
+      descricao: sessao.resumo,
+      tipo: 'sessao_claude',
+      estado: 'silencioso',
+      fase: 'sessao_viva',
+      etapa: 'sessão viva · aguardando ferramenta',
+      ferramenta: null,
+      silencio_s: null,
+      status: 'executando',
+    }))
+  return [...agentes, ...complementos]
+}
+
 /** Materializa ilhas fixas e manda executores sem squad próprio para o coworking. */
-export function montarExecucoesVisuais(agentes: AgenteVivo[], catalogo: PixelAgent[]): ExecucaoVisual[] {
-  const runtimes = agentes.filter((execucao, indice, todos) => {
+export function montarExecucoesVisuais(agentes: AgenteVivo[], catalogo: PixelAgent[], estado?: EstadoSessoes): ExecucaoVisual[] {
+  const runtimes = completarSessoesVivas(agentes, catalogo, estado).filter((execucao, indice, todos) => {
     const chave = chaveAgente(execucao.dono, execucao.id)
     return todos.findIndex((item) => chaveAgente(item.dono, item.id) === chave) === indice
   })
@@ -510,7 +547,7 @@ function useSquadsSobDemanda(execucoes: ExecucaoVisual[]) {
   return { abertos, saindo }
 }
 
-export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos }: PixelOfficeProps) {
+export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos }: PixelOfficeProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const palcoRef = useRef<HTMLDivElement | null>(null)
   const hitsRef = useRef<Array<{ chave: string; x: number; y: number; largura: number; altura: number }>>([])
@@ -542,7 +579,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
     return () => media.removeEventListener('change', atualizar)
   }, [])
 
-  const todasExecucoes = useMemo(() => montarExecucoesVisuais(agentes, catalogo), [agentes, catalogo])
+  const todasExecucoes = useMemo(() => montarExecucoesVisuais(agentes, catalogo, estado), [agentes, catalogo, estado])
   const { abertos: squadsSobDemandaAbertos, saindo: squadsSobDemandaSaindo } = useSquadsSobDemanda(todasExecucoes)
   const execucoesVisiveis = useMemo(() => {
     const porAtividade = soAtivos ? todasExecucoes.filter((execucao) => execucao.ativa) : todasExecucoes
@@ -625,6 +662,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
       bloco(x, y, 48, 27, 6, '#ceac7b', '#9a7650', '#755435'); bloco(x - 3, y - 8, 23, 4, 20, '#516e72', '#1b303b', '#10232b')
       ctx.fillStyle = execucao?.ativa ? '#163d48' : '#112328'; ctx.fillRect(x - 13, y - 27, 20, 13)
       if (execucao?.ativa) { ctx.shadowColor = execucao.cor; ctx.shadowBlur = 8; ctx.fillStyle = execucao.cor; ctx.fillRect(x - 10, y - 24, 12, 2); ctx.shadowBlur = 0; ctx.fillStyle = '#82aaa5'; ctx.fillRect(x - 10, y - 20, 8, 1) }
+      else if (execucao?.execucao.estado === 'silencioso' && Math.floor(tempoRef.current * 2) % 2 === 0) { ctx.fillStyle = '#82aaa5'; ctx.fillRect(x - 10, y - 20, 2, 2) }
       bloco(x - 2, y + 4, 17, 8, 2, '#c1cfb9', '#7a8d84', '#4d655f'); if (execucao) desenharObjeto(mesa as MesaVisual); cadeira(x, y + 24)
       if (execucao) {
         execucao.rotulos.forEach((rotulo, indice) => texto(rotulo, x, y + 42 + indice * 7, 5.8, indice === 0 ? '#f4ead0' : '#c7d5cf', 'center', 700))

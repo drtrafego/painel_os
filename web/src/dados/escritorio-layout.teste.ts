@@ -1,12 +1,14 @@
 import type { AgenteVivo } from './tipos.ts'
-import { PIXEL_AGENTS, PIXEL_AGENT_SQUADS } from './pixel-agents.ts'
+import { montarCatalogoPixel, normalizarIdentidadeAgente, PIXEL_AGENTS, PIXEL_AGENT_SQUADS } from './pixel-agents.ts'
 import {
   SQUADS_SOB_DEMANDA,
   calcularLayoutSala,
+  execucaoUsaSalaMista,
   fichaUsaSalaMista,
   filtrarSquadsSobDemanda,
   montarExecucoesVisuais,
   nomeLegivelDaExecucao,
+  sessaoEstáNoAr,
 } from '../ui/PixelOffice.tsx'
 
 let falhas = 0
@@ -59,6 +61,55 @@ const comerciaisAtivos: AgenteVivo[] = [{
   id: 'exec-elza', identidade: 'elza', tipo: 'diretora-comercial', estado: 'trabalhando',
   fase: 'execução', etapa: 'qualificando conta', ferramenta: 'Read',
 }]
+
+// Valores de subagent_type observados na sonda; o teste guarda somente os
+// nomes, nunca IDs, tarefas, timestamps ou qualquer outro dado vivo.
+const subagentTypesReais = ['vega-radar', 'vega-radar', 'tereza', 'tereza', 'elza', 'analista-conteudo', 'cleo-produtor', 'dani-designer'] as const
+const execucoesPorSubagentType: AgenteVivo[] = subagentTypesReais.map((tipo, indice) => ({
+  id: `fixture-${indice + 1}`,
+  tipo,
+  estado: 'trabalhando',
+  fase: 'execução',
+  etapa: 'teste de alocação',
+  ferramenta: 'Read',
+}))
+const visuaisPorSubagentType = montarExecucoesVisuais(execucoesPorSubagentType, PIXEL_AGENTS)
+const vivosCatalogados = visuaisPorSubagentType.filter((visual) => visual.execucao.id.startsWith('fixture-'))
+conferir('normalização remove prefixo de squad e usa hífen', normalizarIdentidadeAgente('Radar / Vega'), 'vega')
+conferir('duas execuções Vega-radar ficam na ilha conteúdo', vivosCatalogados.filter((visual) => visual.ficha?.id === 'vega' && visual.squad === 'conteúdo').length === 2)
+conferir('duas execuções Tereza ficam na ilha tráfego', vivosCatalogados.filter((visual) => visual.ficha?.id === 'tereza' && visual.squad === 'tráfego').length === 2)
+conferir('Elza fica na ilha comercial', vivosCatalogados.filter((visual) => visual.ficha?.id === 'elza' && visual.squad === 'comercial').length === 1)
+conferir('analista-conteudo fica na ilha conteúdo', vivosCatalogados.filter((visual) => visual.ficha?.id === 'analista-conteudo' && visual.squad === 'conteúdo').length === 1)
+conferir('cleo-produtor fica na ilha conteúdo', vivosCatalogados.filter((visual) => visual.ficha?.id === 'cleo' && visual.squad === 'conteúdo').length === 1)
+conferir('dani-designer fica na ilha conteúdo', vivosCatalogados.filter((visual) => visual.ficha?.id === 'dani' && visual.squad === 'conteúdo').length === 1)
+conferir('nenhum dos subagent_types catalogados cai na sala mista', vivosCatalogados.every((visual) => !execucaoUsaSalaMista(visual.execucao, visual.ficha)))
+
+const catalogoDoEstado = montarCatalogoPixel([
+  { id: 'analista-conteudo', nome: 'analista-conteudo', squad: 'conteudo', descricao: 'agente do estado' },
+], [])
+conferir('squad do estado vigente corrige a ficha do analista-conteudo', catalogoDoEstado.find((item) => item.id === 'analista-conteudo')?.squad, 'conteúdo')
+
+const servicoAtivo = (id: string) => ({
+  id,
+  nome: id,
+  papel: 'sessão orquestradora',
+  camada: 'Coordenação',
+  cor: 'lima',
+  resumo: 'orquestração',
+  estado: 'ativo' as const,
+  verificador: { checagens: 0, reprovadas: 0, indeterminadas: 0, vencido: false, falhas: [], arquivo: 'teste' },
+  motores: { situacao: 'um_ativo' as const, ativos: [`${id}.service`], servicos: [{ service: `${id}.service`, ativo: true, estado: 'active', sub: 'running', motor: 'teste', motor_fonte: 'teste' }] },
+  memoria: { linhas: 0, arquivos: 0 },
+  diario: { arquivos: 0 },
+  cron_linhas: 0,
+})
+const sessoesAtivasNoEstado = { sessao: ['luana', 'renato', 'bia'].map(servicoAtivo) }
+const visuaisComSessoesDoEstado = montarExecucoesVisuais([], PIXEL_AGENTS, sessoesAtivasNoEstado)
+const diretoresVivos = visuaisComSessoesDoEstado.filter((visual) => ['luana', 'renato', 'bia'].includes(visual.ficha?.id || ''))
+conferir('estado com serviço ativo reconhece sessão viva', sessoesAtivasNoEstado.sessao.every(sessaoEstáNoAr), true)
+conferir('Luana, Renato e Bia vivos ficam sentados na coordenação', diretoresVivos.length === 3 && diretoresVivos.every((visual) => visual.squad === 'coordenação' && visual.execucao.estado === 'silencioso'))
+conferir('sessão viva do estado nunca é enviada ao descanso', diretoresVivos.every((visual) => visual.execucao.estado !== 'parado'))
+
 const comercialAberto = montarExecucoesVisuais(comerciaisAtivos, PIXEL_AGENTS)
 const comerciaisVisiveis = filtrarSquadsSobDemanda(comercialAberto, new Set(['comercial']))
 conferir('chamar Elza abre a ilha com as oito mesas comerciais', comerciaisVisiveis.filter((item) => item.squad === 'comercial').length === 8)
