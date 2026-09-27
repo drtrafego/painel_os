@@ -826,7 +826,7 @@ def _cofre_achar(ancora: str, plano: str, de_que_linha: list):
 RE_COFRE_TITULO = re.compile(r"^[ \t]*#{1,6}(?:[ \t]+|$)")
 RE_COFRE_ITEM = re.compile(r"^(?P<recuo>[ \t]*)(?:[-+*]|\d+[.)])[ \t]+")
 RE_COFRE_LINK = re.compile(r"\[\[([a-z0-9][a-z0-9-]{2,79})\]\]")
-RE_COFRE_CERCA_CODIGO = re.compile(r"^[ \t]*`{3,}")
+RE_COFRE_CERCA_CODIGO = re.compile(r"^[ \t]*(?:`{3,}|~{3,})")
 
 
 def _cofre_nivel_do_item(linha: str):
@@ -851,6 +851,26 @@ def _cofre_nivel_do_bloco(linhas: list, inicio: int):
     return None
 
 
+def _cofre_recuo_codigo(linhas: list, inicio: int) -> int:
+    """Devolve a coluna onde começa código no bloco que contém ``inicio``.
+
+    A âncora pode cair na continuação de um item, quando o trecho entregue à
+    leitura começa depois do marcador ``1. ``. Nesse caso o recuo de quatro
+    colunas é relativo ao item pai, não ao começo artificial do trecho.
+    """
+    if not linhas:
+        return 4
+
+    prefixo = linhas[inicio][:len(linhas[inicio]) - len(linhas[inicio].lstrip(" \t"))]
+    recuo_da_ancora = len(prefixo.expandtabs(4))
+    for linha in reversed(linhas[:inicio + 1]):
+        item = RE_COFRE_ITEM.match(linha)
+        if item and len(item.group("recuo").expandtabs(4)) <= recuo_da_ancora:
+            # O fim do marcador já inclui o espaço posterior a ``-``/``1.``.
+            return len(linha[:item.end()].expandtabs(4)) + 4
+    return 4
+
+
 def _cofre_bloco(linhas: list, inicio: int):
     """Tamanho do bloco de origem, medido a cada coleta.
 
@@ -872,11 +892,11 @@ def _cofre_bloco(linhas: list, inicio: int):
     return (total or 1), total >= COFRE_TETO_BLOCO
 
 
-def _cofre_linhas_sem_codigo(linhas: list) -> list[str]:
+def _cofre_linhas_sem_codigo(linhas: list, recuo_codigo: int = None) -> list[str]:
     """Substitui blocos de código por fronteiras, sem comer texto Markdown.
 
     O marcador ``[[id]]`` é linguagem do Cofre, não linguagem de exemplos.
-    Cercas de três crases sempre vencem até a cerca seguinte. Código indentado
+    Cercas de três crases ou tildes sempre vencem até a cerca seguinte. Código indentado
     segue o recuo do Markdown: fora de uma lista, quatro colunas; dentro de um
     item, quatro colunas depois do marcador do item. Assim uma continuação ou
     sublista legítima não perde uma ligação só por estar indentada.
@@ -884,13 +904,14 @@ def _cofre_linhas_sem_codigo(linhas: list) -> list[str]:
     if not linhas:
         return []
 
-    primeiro_item = RE_COFRE_ITEM.match(linhas[0])
-    if primeiro_item:
-        # O fim do marcador já inclui o espaço posterior a ``-``/``1.``.
-        # Código em uma lista exige mais quatro colunas depois dele.
-        recuo_codigo = len(linhas[0][:primeiro_item.end()].expandtabs(4)) + 4
-    else:
-        recuo_codigo = 4
+    if recuo_codigo is None:
+        primeiro_item = RE_COFRE_ITEM.match(linhas[0])
+        if primeiro_item:
+            # O fim do marcador já inclui o espaço posterior a ``-``/``1.``.
+            # Código em uma lista exige mais quatro colunas depois dele.
+            recuo_codigo = len(linhas[0][:primeiro_item.end()].expandtabs(4)) + 4
+        else:
+            recuo_codigo = 4
 
     sem_codigo, em_cerca = [], False
     for linha in linhas:
@@ -909,17 +930,17 @@ def _cofre_linhas_sem_codigo(linhas: list) -> list[str]:
     return sem_codigo
 
 
-def _cofre_ligacoes_no_texto(linhas: list) -> list[tuple[str, str]]:
+def _cofre_ligacoes_no_texto(linhas: list, recuo_codigo: int = None) -> list[tuple[str, str]]:
     """Extrai ``[[id]]`` e a frase que o declara no bloco do próprio nó.
 
     O bloco, e não o arquivo inteiro, é a fronteira importante: dois registros
     podem morar no mesmo Markdown e um não pode herdar a declaração do outro.
     A frase ainda está CRUA nesta etapa; a máscara de saída roda somente depois
     de a ligação ser provada, pelo mesmo caminho das justificativas legadas.
-    Código cercado por três crases ou indentado como código é excluído antes da
+    Código cercado por crases, tildes ou indentado como código é excluído antes da
     busca. Ele pode mostrar literalmente ``[[id]]`` sem declarar uma aresta.
     """
-    texto = _cofre_espaco(" ".join(_cofre_linhas_sem_codigo(linhas)))
+    texto = _cofre_espaco(" ".join(_cofre_linhas_sem_codigo(linhas, recuo_codigo)))
     ligacoes = []
     for achado in RE_COFRE_LINK.finditer(texto):
         inicio = max(texto.rfind(fim, 0, achado.start()) for fim in ".!?") + 1
@@ -939,11 +960,13 @@ def _cofre_arestas_declaradas(pendentes: list, ids: set[str]):
     """
     arestas, recusadas = [], []
     vistas = set()
-    for origem, plano, bloco, conexoes in pendentes:
+    for pendente in pendentes:
+        origem, plano, bloco, conexoes, *contexto = pendente
+        recuo_codigo = contexto[0] if contexto else None
         # O formato novo mora na fonte e traz a própria justificativa. Ele roda
         # primeiro para que um `conecta` legado repetido não troque a frase
         # declarada no próprio registro por uma cópia antiga do JSON.
-        for destino, frase in _cofre_ligacoes_no_texto(bloco):
+        for destino, frase in _cofre_ligacoes_no_texto(bloco, recuo_codigo):
             if destino not in ids:
                 recusadas.append(_cofre_recusa(f"{origem} -> {destino}: destino não existe"))
             elif destino == origem:
@@ -1289,7 +1312,8 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
             # Âncora vencida não autoriza interpretar a linha aproximada do
             # JSON como se fosse o texto deste registro.
             bloco = linhas_fonte[indice:indice + tamanho] if confere else []
-            pendentes.append((ident, plano, bloco, reg.get("conecta") or []))
+            pendentes.append((ident, plano, bloco, reg.get("conecta") or [],
+                              _cofre_recuo_codigo(linhas_fonte, indice)))
         except (OSError, ValueError, TypeError, KeyError) as e:
             recusados.append(_cofre_recusa(f"registro {i}: {type(e).__name__}: {e}"))
 

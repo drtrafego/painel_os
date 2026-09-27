@@ -438,33 +438,52 @@ conferir("continuação indentada continua dentro do bullet de origem",
          {n["id"]: n["linhas"] for n in cofre["nos"] if n["id"].startswith("item-")},
          {"item-a": 2, "item-b": 1, "item-c": 1})
 
-# Código é exemplo, não declaração. Os dois formatos Markdown precisam ficar
-# fora da extração, mas a ligação escrita no texto normal do item vizinho fica.
+# Código é exemplo, não declaração. Crases, tildes e recuo Markdown precisam
+# ficar fora da extração, mas a ligação escrita no texto normal fica.
 (tmp_cofre / "CODIGO.md").write_text(
     "- seguro na cerca não declara ligação.\n"
     "  ```python\n"
     "  exemplo [[destino-x]]\n"
     "  ```\n"
+    "- seguro na cerca com til não declara ligação.\n"
+    "  ~~~python\n"
+    "  exemplo [[destino-x]]\n"
+    "  ~~~\n"
     "- seguro por recuo não declara ligação.\n"
     "      exemplo [[destino-x]]\n"
     "- válido declara [[destino-y]].\n",
     encoding="utf-8")
 CODIGO_CERCA = {**BOM, "id": "codigo-cerca", "fonte": "CODIGO.md", "linha": 1,
                 "ancora": "seguro na cerca não declara", "conecta": []}
-CODIGO_RECUO = {**BOM, "id": "codigo-recuo", "fonte": "CODIGO.md", "linha": 5,
+CODIGO_TIL = {**BOM, "id": "codigo-til", "fonte": "CODIGO.md", "linha": 5,
+              "ancora": "seguro na cerca com til não declara", "conecta": []}
+CODIGO_RECUO = {**BOM, "id": "codigo-recuo", "fonte": "CODIGO.md", "linha": 9,
                 "ancora": "seguro por recuo não declara", "conecta": []}
-CODIGO_VALIDO = {**BOM, "id": "codigo-valido", "fonte": "CODIGO.md", "linha": 7,
+CODIGO_VALIDO = {**BOM, "id": "codigo-valido", "fonte": "CODIGO.md", "linha": 11,
                  "ancora": "válido declara", "conecta": []}
-cofre = _cofre_de_teste([CODIGO_CERCA, CODIGO_RECUO, CODIGO_VALIDO,
+cofre = _cofre_de_teste([CODIGO_CERCA, CODIGO_TIL, CODIGO_RECUO, CODIGO_VALIDO,
                          DESTINO_X, DESTINO_Y])
-conferir("[[id]] entre cercas de código não vira ligação",
+conferir("[[id]] entre cercas de código com crase ou til não vira ligação",
          [(a["de"], a["para"]) for a in cofre["arestas"]],
          [("codigo-valido", "destino-y")])
 conferir("[[id]] indentado como código não vira ligação",
          len([a for a in cofre["arestas"] if a["para"] == "destino-x"]), 0)
 conferir("texto normal no item seguinte continua declarando ligação",
          {n["id"]: n["linhas"] for n in cofre["nos"] if n["id"].startswith("codigo-")},
-         {"codigo-cerca": 4, "codigo-recuo": 2, "codigo-valido": 1})
+         {"codigo-cerca": 4, "codigo-til": 4, "codigo-recuo": 2, "codigo-valido": 1})
+
+# A âncora pode cair na continuação de uma lista numerada. Quatro espaços
+# ainda são prosa do item "1. "; código só começa quatro colunas após ele.
+(tmp_cofre / "NUMERADA.md").write_text(
+    "1. registro pai de uma lista numerada.\n"
+    "    A continuação normal declara [[destino-x]].\n",
+    encoding="utf-8")
+NUMERADA = {**BOM, "id": "lista-numerada", "fonte": "NUMERADA.md", "linha": 2,
+            "ancora": "continuação normal declara", "conecta": []}
+cofre = _cofre_de_teste([NUMERADA, DESTINO_X])
+conferir("[[id]] em continuação de lista numerada vira ligação",
+         [(a["de"], a["para"]) for a in cofre["arestas"]],
+         [("lista-numerada", "destino-x")])
 
 # a porta: nome de cliente no texto derruba o registro inteiro.
 guarda = (c.NOMES_CLIENTE, c.NEGACAO)
