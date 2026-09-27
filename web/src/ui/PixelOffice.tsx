@@ -17,6 +17,7 @@ import {
   type FaseBoneco,
 } from '../dados/escritorio-animacao'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
+import { ambienteForcadoDaUrl, resolverAmbiente, type AmbienteVisual } from '../dados/ambiente'
 
 export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, obterAtivosNoCatalogo }
 
@@ -96,7 +97,14 @@ export const SQUADS_SOB_DEMANDA: ReadonlyArray<{
   id: PixelAgentSquad
   permanenciaAposUltimoAtivoMs: number
 }> = [
+  { id: 'bots', permanenciaAposUltimoAtivoMs: 3 * 60 * 1000 },
+  { id: 'tráfego', permanenciaAposUltimoAtivoMs: 3 * 60 * 1000 },
+  { id: 'radar', permanenciaAposUltimoAtivoMs: 3 * 60 * 1000 },
+  { id: 'conteúdo', permanenciaAposUltimoAtivoMs: 3 * 60 * 1000 },
   { id: 'comercial', permanenciaAposUltimoAtivoMs: 3 * 60 * 1000 },
+  { id: 'destinos', permanenciaAposUltimoAtivoMs: 3 * 60 * 1000 },
+  { id: 'análise', permanenciaAposUltimoAtivoMs: 3 * 60 * 1000 },
+  { id: 'sala mista', permanenciaAposUltimoAtivoMs: 3 * 60 * 1000 },
 ]
 
 const IDS_CATALOGO_SALA_MISTA = new Set(['dev', 'qa', 'explore'])
@@ -134,6 +142,15 @@ function rgba(hex: string, alfa: number) {
   return `rgba(${r}, ${g}, ${b}, ${alfa})`
 }
 
+function misturarHex(noite: string, dia: string, progressoDia: number) {
+  const ler = (hex: string) => {
+    const limpo = hex.replace('#', '')
+    return [0, 2, 4].map((i) => Number.parseInt(limpo.slice(i, i + 2), 16))
+  }
+  const a = ler(noite); const b = ler(dia); const t = limitar(progressoDia)
+  return `#${a.map((canal, indice) => Math.round(canal + (b[indice] - canal) * t).toString(16).padStart(2, '0')).join('')}`
+}
+
 function normalizarPapel(valor?: string | null) {
   return (valor || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
 }
@@ -145,6 +162,12 @@ export function fichaUsaSalaMista(ficha?: PixelAgent) {
 
 /** Execuções genéricas nunca "herdam" por alias a mesa fixa de uma pessoa. */
 export function execucaoUsaSalaMista(execucao: AgenteVivo, ficha?: PixelAgent) {
+  // Uma execução reconhecida no catálogo conserva a ilha do próprio squad.
+  // Só a execução sem identidade catalogada, ou os papéis globais/dev/qa,
+  // cai no coworking. Assim uma Copy da ilha de conteúdo não some para a
+  // sala mista apenas porque a API também informa `tipo: copy`.
+  if (ficha && !fichaUsaSalaMista(ficha)) return false
+  if (ficha && fichaUsaSalaMista(ficha)) return true
   const identidade = normalizarPapel(execucao.identidade)
   const tipo = normalizarPapel(execucao.tipo)
   const papel = normalizarPapel(execucao.papel)
@@ -315,7 +338,7 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   execucoes.forEach((execucao) => grupos.set(execucao.squad, [...(grupos.get(execucao.squad) || []), execucao]))
   const ordemSquads = [
     ...PIXEL_AGENT_SQUADS.map((squad) => squad.id).filter((id) => id !== SALA_MISTA && grupos.has(id)),
-    SALA_MISTA,
+    ...(grupos.has(SALA_MISTA) ? [SALA_MISTA] : []),
   ]
   const larguraIlha = 282
   const margemX = 24
@@ -501,7 +524,16 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   const [pausado, setPausado] = useState(false)
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
   const [relogioDetalhe, setRelogioDetalhe] = useState(0)
+  const [agoraAmbiente, setAgoraAmbiente] = useState(() => new Date())
   const { statusLeitura, recebidoEm, falhouHaSegundos, erro: erroSonda } = useAgentesVivos()
+
+  const modoAmbienteForcado = typeof window === 'undefined' ? 'auto' : ambienteForcadoDaUrl(window.location.search)
+  const ambiente = useMemo<AmbienteVisual>(() => resolverAmbiente(agoraAmbiente, modoAmbienteForcado), [agoraAmbiente, modoAmbienteForcado])
+
+  useEffect(() => {
+    const id = window.setInterval(() => setAgoraAmbiente(new Date()), 15000)
+    return () => window.clearInterval(id)
+  }, [])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -611,14 +643,61 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
       ctx.save(); ctx.globalAlpha *= 0.12 + progresso * 0.88; ctx.translate(centroX, baseY); ctx.scale(escalaX, escalaY); ctx.translate(-centroX, -baseY)
       desenharConteudo(); ctx.restore()
     }
+    const desenharPlanta = (x: number, y: number, escala = 1) => {
+      ctx.save(); ctx.translate(x, y); ctx.scale(escala, escala)
+      ctx.fillStyle = '#a98157'; ctx.fillRect(-7, 12, 14, 10); ctx.fillStyle = '#6b4633'; ctx.fillRect(-5, 22, 10, 3)
+      ctx.strokeStyle = '#5c8c64'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, 13); ctx.lineTo(0, -13); ctx.stroke()
+      for (const [folhaX, folhaY, rotacao] of [[-7, -6, -0.4], [7, -2, 0.4], [-6, 3, -0.8], [6, 8, 0.7]] as Array<[number, number, number]>) {
+        ctx.save(); ctx.translate(folhaX, folhaY); ctx.rotate(rotacao); ctx.fillStyle = '#5e9a62'; ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+      }
+      ctx.restore()
+    }
     const desenharSala = () => {
       const { largura, altura } = layout
-      ctx.fillStyle = '#183237'; ctx.fillRect(0, 0, largura, altura); ctx.fillStyle = '#244249'; ctx.fillRect(8, 10, largura - 16, 62)
-      ctx.fillStyle = '#2b4a4d'; ctx.fillRect(10, 11, largura - 20, 3)
-      for (let x = 18; x < largura; x += 43) { ctx.fillStyle = '#1f393e'; ctx.fillRect(x, 17, 1, 50) }
-      texto('G4ST4OVIB3', largura / 2, 38, 16, '#dfd6b4', 'center', 900); texto('SQUADS NAS ILHAS · EXECUTORES GLOBAIS NO COWORKING', largura / 2, 55, 6.5, '#a9bbb0', 'center', 650)
-      ctx.fillStyle = '#947951'; ctx.fillRect(8, 72, largura - 16, altura - 80)
-      for (let y = 72; y < altura - 7; y += 18) { ctx.fillStyle = Math.round(y / 18) % 2 ? '#a78b60' : '#aa916c'; ctx.fillRect(10, y, largura - 20, 16); ctx.fillStyle = '#846c49'; for (let x = 10 + (Math.round(y / 18) % 2) * 27; x < largura - 10; x += 54) ctx.fillRect(x, y, 1, 16) }
+      const t = ambiente.progressoDia
+      const parede = misturarHex('#071a21', '#c9a77b', t)
+      const piso = misturarHex('#303943', '#a9bec7', t)
+      ctx.fillStyle = piso; ctx.fillRect(0, 0, largura, altura)
+      ctx.fillStyle = parede; ctx.fillRect(8, 10, largura - 16, 62)
+
+      // Noite: janelões, cidade iluminada e concreto polido.
+      ctx.save(); ctx.globalAlpha = 1 - t
+      ctx.fillStyle = '#08131c'; ctx.fillRect(10, 14, largura - 20, 55)
+      for (let x = 12; x < largura - 10; x += 70) {
+        const alturaPredio = 13 + (hashTexto(`predio:${x}`) % 27)
+        ctx.fillStyle = '#122b3c'; ctx.fillRect(x, 68 - alturaPredio, 48, alturaPredio)
+        for (let janelaY = 68 - alturaPredio + 6; janelaY < 66; janelaY += 8) for (let janelaX = x + 7; janelaX < x + 42; janelaX += 12) {
+          ctx.fillStyle = (hashTexto(`${x}:${janelaY}:${janelaX}`) % 3 === 0) ? '#f6c765' : '#467ba0'; ctx.fillRect(janelaX, janelaY, 4, 3)
+        }
+      }
+      ctx.strokeStyle = '#294555'; ctx.lineWidth = 3
+      for (let x = 10; x < largura; x += 82) { ctx.beginPath(); ctx.moveTo(x, 13); ctx.lineTo(x, 69); ctx.stroke() }
+      ctx.beginPath(); ctx.moveTo(10, 67); ctx.lineTo(largura - 10, 67); ctx.stroke(); ctx.restore()
+
+      // Dia: lambris de madeira clara, prateleiras, plantas e lousa.
+      ctx.save(); ctx.globalAlpha = t
+      ctx.fillStyle = '#d4b285'; ctx.fillRect(10, 14, largura - 20, 55)
+      for (let x = 12; x < largura - 10; x += 18) { ctx.fillStyle = x % 36 ? '#bd986b' : '#e0c395'; ctx.fillRect(x, 15, 2, 52) }
+      for (const shelfX of [44, largura / 2 - 150, largura / 2 + 110, largura - 115]) {
+        ctx.fillStyle = '#906843'; ctx.fillRect(shelfX, 30, 74, 4); ctx.fillStyle = '#ecd9b5'; ctx.fillRect(shelfX + 4, 25, 12, 5); ctx.fillStyle = '#6f9d68'; ctx.fillRect(shelfX + 24, 21, 12, 9); ctx.fillStyle = '#a57843'; ctx.fillRect(shelfX + 50, 22, 15, 8)
+      }
+      const lousaX = largura / 2 - 76; ctx.fillStyle = '#eee6d5'; ctx.fillRect(lousaX, 18, 152, 28); ctx.strokeStyle = '#a68b68'; ctx.lineWidth = 2; ctx.strokeRect(lousaX, 18, 152, 28)
+      for (const [x, y, cor] of [[lousaX + 16, 25, '#ef8d61'], [lousaX + 42, 34, '#62a9ca'], [lousaX + 72, 24, '#f0bf3e'], [lousaX + 104, 34, '#e86fa2'], [lousaX + 126, 24, '#83bd68']] as Array<[number, number, string]>) { ctx.fillStyle = cor; ctx.fillRect(x, y, 9, 7) }
+      ctx.restore()
+
+      // O piso também troca de material, sem a antiga madeira alaranjada.
+      ctx.fillStyle = rgba(t > 0.5 ? '#d6e7eb' : '#7f8c96', 0.23); ctx.fillRect(10, 72, largura - 20, altura - 80)
+      ctx.strokeStyle = rgba(t > 0.5 ? '#718f9b' : '#69747d', 0.45); ctx.lineWidth = 1
+      for (let y = 78; y < altura - 8; y += 24) { ctx.beginPath(); ctx.moveTo(10, y); ctx.lineTo(largura - 10, y); ctx.stroke() }
+      for (let x = 20; x < largura - 10; x += 54) { ctx.beginPath(); ctx.moveTo(x, 72); ctx.lineTo(x, altura - 8); ctx.stroke() }
+      for (const ilha of layout.ilhas) {
+        ctx.save(); ctx.globalAlpha = t * 0.32; ctx.fillStyle = '#d9eef0'; ctx.fillRect(ilha.x - 9, ilha.y - 8, ilha.largura + 18, ilha.altura + 17); ctx.restore()
+      }
+      desenharPlanta(28, altura - 37, 1.1); desenharPlanta(largura - 28, altura - 37, 1.1)
+      const corNeon = misturarHex('#59b9ff', '#51412a', t)
+      if (t < 0.9) { ctx.save(); ctx.shadowColor = '#47b8ff'; ctx.shadowBlur = 10 * (1 - t); texto('G4ST4OVIB3', largura / 2, 38, 16, corNeon, 'center', 900); ctx.restore() }
+      else texto('G4ST4OVIB3', largura / 2, 38, 16, '#51412a', 'center', 900)
+      texto('SQUADS NAS ILHAS · EXECUTORES NO DESCANSO', largura / 2, 55, 6.5, misturarHex('#9eb9ba', '#6e5b43', t), 'center', 650)
       layout.ilhas.forEach((ilha) => {
         comTransformacaoDoAmbiente(ilha, () => {
           const alfa = ilha.compacta ? 0.1 : 0.23
@@ -683,16 +762,15 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
       if (canvas.width !== Math.round(larguraCss * dpr) || canvas.height !== Math.round(alturaCss * dpr)) { canvas.width = Math.round(larguraCss * dpr); canvas.height = Math.round(alturaCss * dpr); canvas.style.width = `${larguraCss}px`; canvas.style.height = `${alturaCss}px` }
       ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, 0, 0); ctx.clearRect(0, 0, layout.largura, layout.altura); desenharSala(); hitsRef.current = []
       const estados = layout.mesas.map((mesa) => ({ mesa, estado: estadoDaMesa(mesa, agoraAnimacaoMs) })); estados.sort((a, b) => a.estado.y - b.estado.y).forEach(({ mesa, estado }) => {
-        if (SQUADS_SOB_DEMANDA.some((item) => item.id === mesa.execucao.squad) && !mesa.execucao.ativa && estado.fase === 'descanso') return
         const ilha = layout.ilhas.find((item) => item.squad === mesa.execucao.squad)
         if (ilha) comTransformacaoDoAmbiente(ilha, () => desenharBoneco(mesa, estado)); else desenharBoneco(mesa, estado)
       })
-      canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0)
+      canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0); canvas.dataset.officeEnvironment = ambiente.fase; canvas.dataset.officeDayProgress = ambiente.progressoDia.toFixed(3); canvas.dataset.officeDemandSquads = layout.ilhas.filter((ilha) => SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)).map((ilha) => ilha.squad).join('|')
       quadro = requestAnimationFrame(desenhar)
     }
     quadro = requestAnimationFrame(desenhar)
     return () => { ativo = false; cancelAnimationFrame(quadro) }
-  }, [agenteSelecionadoId, layout, pausado, reduzirMovimento, squadsSobDemandaSaindo, zoom])
+  }, [agenteSelecionadoId, ambiente, layout, pausado, reduzirMovimento, squadsSobDemandaSaindo, zoom])
 
   const selecionar = (chave: string) => aoSelecionarAgente?.(chave)
   const tratarClique = (evento: React.MouseEvent<HTMLCanvasElement>) => {
@@ -709,8 +787,8 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, aoSelecionarAgen
   const descricaoSonda = statusLeitura === 'confirmado' ? `Leitura ao vivo${recebidoEm ? ` · ${Math.max(0, Math.round((Date.now() - recebidoEm.getTime()) / 1000))}s` : ''}` : statusLeitura === 'consultando' ? 'Consultando dados vivos' : statusLeitura === 'leitura_vencida' ? `Leitura vencida · ${falhouHaSegundos ?? 0}s` : erroSonda || 'Sonda indisponível'
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl bg-[#0a151a] p-3 text-[#e8f0ec] sm:p-5 font-sans" data-testid="pixel-office" data-office-columns={layout.colunas} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'}>
-      <header className="mb-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="text-[10px] tracking-[0.17em] text-[#b1c2bd]">G4ST4OVIB3 / PAINEL OS</div><h2 className="mt-1 text-[23px] font-bold leading-none tracking-[-0.04em] sm:text-2xl">O escritório inteiro, ao vivo.</h2></div><span className={`shrink-0 rounded border px-2 py-1 font-mono text-[9px] sm:text-[10px] ${statusLeitura === 'confirmado' ? 'border-[#63735e] text-[#c6e98a]' : 'border-[#785f45] text-[#e8c575]'}`} title={descricaoSonda}>{statusLeitura === 'confirmado' ? 'AO VIVO' : 'SONDA'}</span></header>
+    <div className="min-w-0 overflow-hidden rounded-xl bg-[#0a151a] p-3 text-[#e8f0ec] sm:p-5 font-sans" data-testid="pixel-office" data-office-columns={layout.colunas} data-office-environment={ambiente.fase} data-office-day-progress={ambiente.progressoDia.toFixed(3)} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'}>
+      <header className="mb-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="text-[10px] tracking-[0.17em] text-[#b1c2bd]">G4ST4OVIB3 / PAINEL OS</div><h2 className="mt-1 text-[23px] font-bold leading-none tracking-[-0.04em] sm:text-2xl">O escritório inteiro, ao vivo.</h2></div><div className="flex shrink-0 items-center gap-1.5"><span className="rounded border border-[#6d8577] px-2 py-1 font-mono text-[9px] text-[#d8e7c1] sm:text-[10px]" data-testid="office-environment">{ambiente.rotulo}</span><span className={`rounded border px-2 py-1 font-mono text-[9px] sm:text-[10px] ${statusLeitura === 'confirmado' ? 'border-[#63735e] text-[#c6e98a]' : 'border-[#785f45] text-[#e8c575]'}`} title={descricaoSonda}>{statusLeitura === 'confirmado' ? 'AO VIVO' : 'SONDA'}</span></div></header>
       <div className="mb-2.5 flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
         <button type="button" onClick={() => aoAlternarSoAtivos?.(!soAtivos)} aria-pressed={soAtivos} className={`min-h-11 rounded-lg border px-3 text-xs font-semibold ${soAtivos ? 'border-[#c1ec86] bg-[#c1ec86] text-[#1a2a1b]' : 'border-[#42534f] bg-[#162a2a] text-[#e7f0e7]'}`}>Só ativos</button>
         <button type="button" onClick={() => setPausado((valor) => !valor)} aria-pressed={pausado} className="min-h-11 rounded-lg border border-[#42534f] bg-[#162a2a] px-3 text-xs font-semibold text-[#e7f0e7]">{pausado ? 'Retomar' : 'Pausar'}</button>

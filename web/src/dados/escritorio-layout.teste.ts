@@ -26,10 +26,10 @@ const celular = calcularLayoutSala(escritorioSemComercial, { larguraDisponivel: 
 
 conferir('papéis globais não ganham mesa fixa', catalogoVisual.length === fichasFixas.length)
 conferir('Dev, QA e Explore saem das ilhas fixas', ['dev', 'qa', 'explore'].every((id) => !catalogoVisual.some((item) => item.ficha?.id === id)))
-conferir('a sala mista existe vazia e compacta', Boolean(desktop.ilhas.find((ilha) => ilha.squad === 'sala mista')?.compacta))
-conferir('a sala mista vazia oferece poucos postos compartilhados', desktop.ilhas.find((ilha) => ilha.squad === 'sala mista')?.postos.length === 3)
+conferir('sala mista e demais setores começam escondidos sem ativos', desktop.ilhas.every((ilha) => ilha.squad === 'coordenação'))
+conferir('coordenação continua no centro quando tudo está parado', Boolean(desktop.ilhas.find((ilha) => ilha.squad === 'coordenação')))
 conferir('comercial começa escondido', !desktop.ilhas.some((ilha) => ilha.squad === 'comercial'))
-conferir('configuração sob demanda começa somente no comercial', SQUADS_SOB_DEMANDA.length === 1 && SQUADS_SOB_DEMANDA[0].id === 'comercial')
+conferir('todos os setores operacionais são sob demanda', SQUADS_SOB_DEMANDA.length === 8 && SQUADS_SOB_DEMANDA.every((item) => item.permanenciaAposUltimoAtivoMs === 3 * 60 * 1000))
 conferir('comercial permanece alguns minutos depois do último ativo', SQUADS_SOB_DEMANDA[0].permanenciaAposUltimoAtivoMs >= 2 * 60 * 1000)
 conferir('nomes aparecem sob todas as mesas ocupadas', catalogoVisual.every((item) => item.rotulos.length > 0))
 
@@ -63,6 +63,31 @@ const comercialAberto = montarExecucoesVisuais(comerciaisAtivos, PIXEL_AGENTS)
 const comerciaisVisiveis = filtrarSquadsSobDemanda(comercialAberto, new Set(['comercial']))
 conferir('chamar Elza abre a ilha com as oito mesas comerciais', comerciaisVisiveis.filter((item) => item.squad === 'comercial').length === 8)
 conferir('fechar o ambiente remove toda a ilha comercial', filtrarSquadsSobDemanda(comercialAberto, new Set()).every((item) => item.squad !== 'comercial'))
+
+const umAtivo = montarExecucoesVisuais([{ id: 'exec-suri', identidade: 'suri', tipo: 'copy', estado: 'trabalhando', fase: 'execução', etapa: 'roteiro', ferramenta: 'Write' }], PIXEL_AGENTS)
+const tresAtivos = montarExecucoesVisuais([
+  { id: 'exec-suri', identidade: 'suri', tipo: 'copy', estado: 'trabalhando', fase: 'execução', etapa: 'roteiro', ferramenta: 'Write' },
+  { id: 'exec-vitor', identidade: 'vitor', tipo: 'fiscal', estado: 'trabalhando', fase: 'execução', etapa: 'testes', ferramenta: 'Read' },
+  { id: 'exec-analista', identidade: 'analista', tipo: 'analista', estado: 'trabalhando', fase: 'execução', etapa: 'métricas', ferramenta: 'Read' },
+], PIXEL_AGENTS)
+const todosSetores = montarExecucoesVisuais([
+  { id: 'exec-suri', identidade: 'suri', tipo: 'copy', estado: 'trabalhando', fase: 'execução', etapa: 'roteiro', ferramenta: 'Write' },
+  { id: 'exec-vitor', identidade: 'vitor', tipo: 'fiscal', estado: 'trabalhando', fase: 'execução', etapa: 'testes', ferramenta: 'Read' },
+  { id: 'exec-tereza', identidade: 'tereza', tipo: 'tráfego', estado: 'trabalhando', fase: 'execução', etapa: 'campanha', ferramenta: 'Edit' },
+  { id: 'exec-nova', identidade: 'nova-mineradora', tipo: 'radar', estado: 'trabalhando', fase: 'execução', etapa: 'sinais', ferramenta: 'Search' },
+  { id: 'exec-elza', identidade: 'elza', tipo: 'comercial', estado: 'trabalhando', fase: 'execução', etapa: 'conta', ferramenta: 'Read' },
+  { id: 'exec-publicador', identidade: 'publicador', tipo: 'publicador', estado: 'trabalhando', fase: 'execução', etapa: 'envio', ferramenta: 'Run' },
+  { id: 'exec-analista', identidade: 'analista', tipo: 'analista', estado: 'trabalhando', fase: 'execução', etapa: 'métricas', ferramenta: 'Read' },
+  { id: 'exec-arquiteto', identidade: 'arquiteto', tipo: 'arquiteto', motor: 'claude', estado: 'trabalhando', fase: 'execução', etapa: 'arquitetura', ferramenta: 'Read' },
+], PIXEL_AGENTS)
+const demandas = new Set(SQUADS_SOB_DEMANDA.map((item) => item.id))
+conferir('cenário com 0 ativos mantém somente coordenação', filtrarSquadsSobDemanda(catalogoVisual, new Set()).every((item) => item.squad === 'coordenação'))
+conferir('cenário com 1 ativo abre somente uma ilha', new Set(filtrarSquadsSobDemanda(umAtivo, new Set(['conteúdo'])).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === 1)
+conferir('cenário com 3 ativos abre exatamente três ilhas', new Set(filtrarSquadsSobDemanda(tresAtivos, new Set(['conteúdo', 'bots', 'análise'])).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === 3)
+conferir('cenário com todos os setores abre todas as ilhas sob demanda', new Set(filtrarSquadsSobDemanda(todosSetores, demandas).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === demandas.size)
+const zoomUm = calcularLayoutSala(filtrarSquadsSobDemanda(umAtivo, new Set(['conteúdo'])), { larguraDisponivel: 990, alturaDisponivel: 600 }).zoomSugerido
+const zoomTodos = calcularLayoutSala(filtrarSquadsSobDemanda(todosSetores, demandas), { larguraDisponivel: 990, alturaDisponivel: 600 }).zoomSugerido
+conferir('com poucos setores ativos o caber-tudo aproxima mais', zoomUm > zoomTodos, `${zoomUm}/${zoomTodos}`)
 
 const globais: AgenteVivo[] = [
   ...Array.from({ length: 3 }, (_, indice) => ({
