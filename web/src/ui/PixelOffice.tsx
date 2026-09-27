@@ -179,14 +179,28 @@ export function execucaoUsaSalaMista(execucao: AgenteVivo, ficha?: PixelAgent) {
 
 const IDENTIDADES_GENERICAS = new Set(['sessao-codex', 'sessao-claude', 'sessão codex', 'sessão claude code'])
 const TIPOS_GENERICOS = new Set(['codex', 'subagente', 'sessao_claude', 'sessão claude code'])
+const ETAPAS_CODEX_SEM_TAREFA = new Set([
+  'atividade codex detectada',
+  'nenhuma ferramenta na cauda lida',
+  'nunca escreveu no transcript',
+  'fora da janela de leitura (historico)',
+  'nao foi possivel ler',
+])
 
 function textoLegivel(valor?: string | null) {
   const limpo = valor?.replace(/\s+/g, ' ').trim()
   return limpo && !IDENTIDADES_GENERICAS.has(limpo.toLowerCase()) ? limpo : null
 }
 
-function encurtarTarefa(valor?: string | null, limite = 28) {
-  const limpo = valor?.replace(/\s+/g, ' ').trim() || 'tarefa em andamento'
+function primeiraLinhaUtilDoPedido(valor?: string | null) {
+  return valor
+    ?.split(/\r?\n/)
+    .map((linha) => linha.replace(/\s+/g, ' ').trim())
+    .find((linha) => linha && !ETAPAS_CODEX_SEM_TAREFA.has(normalizarPapel(linha))) || null
+}
+
+function encurtarTarefa(valor: string, limite = 28) {
+  const limpo = valor.replace(/\s+/g, ' ').trim()
   if (limpo.length <= limite) return limpo
   const trecho = limpo.slice(0, limite - 1)
   const ultimoEspaco = trecho.lastIndexOf(' ')
@@ -195,17 +209,20 @@ function encurtarTarefa(valor?: string | null, limite = 28) {
 
 /** Nome humano em primeiro plano; IDs técnicos ficam apenas no detalhe. */
 export function nomeLegivelDaExecucao(execucao: AgenteVivo, ficha?: PixelAgent) {
+  const ehCodex = execucao.motor === 'codex' || execucao.tipo === 'codex'
   const identidade = textoLegivel(execucao.identidade)
   if (identidade) return ficha?.nome || identidade
   const papel = textoLegivel(execucao.papel)
-  if (papel) return papel
-  if (ficha) return ficha.nome
-  const ehCodex = execucao.motor === 'codex' || execucao.tipo === 'codex'
+  if (papel && !(ehCodex && normalizarPapel(papel) === 'sessao codex')) return papel
+  if (ficha && !(ehCodex && ficha.squad === 'pipeline Codex')) return ficha.nome
   if (ehCodex) {
-    const modelo = execucao.modelo_legivel?.replace(/\s+/g, ' ').trim() || 'modelo indisponível'
-    const tarefa = encurtarTarefa(execucao.tarefa || execucao.descricao || execucao.etapa)
-    return `Codex · ${modelo} · ${tarefa}`
+    const modelo = execucao.modelo_legivel?.replace(/\s+/g, ' ').trim() || execucao.modelo?.replace(/\s+/g, ' ').trim() || 'modelo indisponível'
+    // No Codex, `tarefa`/`descricao` podem ser o nome técnico do arquivo de
+    // sessão. `etapa` é a primeira linha útil do pedido já extraída pela sonda.
+    const tarefa = execucao.etapa_e_description ? null : primeiraLinhaUtilDoPedido(execucao.etapa)
+    return tarefa ? `Codex · ${modelo} · ${encurtarTarefa(tarefa)}` : `Codex · ${modelo}`
   }
+  if (ficha) return ficha.nome
   const nome = textoLegivel(execucao.nome)
   if (nome && nome !== execucao.id) return nome
   const tipo = execucao.tipo?.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()

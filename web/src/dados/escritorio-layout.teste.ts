@@ -146,8 +146,8 @@ const globais: AgenteVivo[] = [
     fase: 'execução', etapa: `implementando módulo ${indice + 1}`, tarefa: `Tarefa independente do Dev ${indice + 1}`, ferramenta: 'Edit',
   })),
   { id: 'execucao-arquiteto-1', identidade: 'arquiteto', tipo: 'arquiteto', motor: 'claude', estado: 'trabalhando', fase: 'execução', etapa: 'desenhando arquitetura', tarefa: 'Definir fronteiras do serviço', ferramenta: 'Read' },
-  { id: 'sessao-codex-1', identidade: 'sessao-codex', tipo: 'codex', motor: 'codex', modelo_legivel: 'GPT-5.6 Sol', estado: 'trabalhando', fase: 'execução', etapa: 'teste visual', tarefa: 'Validar sala mista', ferramenta: 'Playwright' },
-  { id: 'sessao-codex-2', identidade: 'sessao-codex', tipo: 'codex', motor: 'codex', modelo_legivel: 'GPT-5.6 Sol', estado: 'trabalhando', fase: 'execução', etapa: 'build', tarefa: 'Preparar o patch público', ferramenta: 'Terminal' },
+  { id: 'sessao-codex-1', identidade: 'sessao-codex', tipo: 'codex', motor: 'codex', modelo_legivel: 'GPT-5.6 Sol', estado: 'trabalhando', fase: 'execução', etapa: 'Validar sala mista\nA segunda linha não entra', tarefa: 'NOME DO ARQUIVO DA SESSÃO', ferramenta: 'Playwright' },
+  { id: 'sessao-codex-2', identidade: 'sessao-codex', tipo: 'codex', motor: 'codex', modelo_legivel: 'GPT-5.6 Sol', estado: 'trabalhando', fase: 'execução', etapa: 'Preparar o patch público', tarefa: 'outro arquivo técnico', ferramenta: 'Terminal' },
 ]
 const comGlobais = montarExecucoesVisuais(globais, PIXEL_AGENTS)
 const ocupantes = comGlobais.filter((item) => item.squad === 'sala mista')
@@ -163,8 +163,25 @@ for (let restantes = globais.length - 1; restantes >= 0; restantes -= 1) {
 
 const sessaoCodex = globais[4]
 const visualCodex = ocupantes.find((item) => item.execucao.id === sessaoCodex.id)
-conferir('sessão Codex desconhecida tem nome legível', Boolean(visualCodex?.nome.startsWith('Codex · GPT-5.6 Sol')))
+conferir('sessão Codex usa a primeira linha útil do pedido', visualCodex?.nome, 'Codex · GPT-5.6 Sol · Validar sala mista')
+conferir('sessão Codex não usa nome técnico de arquivo', Boolean(visualCodex && !visualCodex.nome.includes('NOME DO ARQUIVO')))
 conferir('ID cru não vira nome primário da sessão Codex', Boolean(visualCodex && !visualCodex.nome.includes(sessaoCodex.id)))
+
+const codexSemTarefa: AgenteVivo = {
+  id: 'sessao-codex-sem-tarefa', tipo: 'codex', motor: 'codex', modelo_legivel: 'GPT-5.6 Sol',
+  estado: 'silencioso', fase: 'atividade_codex', etapa: 'fora da janela de leitura (histórico)', tarefa: 'NOME DO ARQUIVO',
+}
+conferir('sessão Codex sem tarefa usa somente o modelo', nomeLegivelDaExecucao(codexSemTarefa), 'Codex · GPT-5.6 Sol')
+
+const codexTarefaLonga: AgenteVivo = {
+  id: 'sessao-codex-tarefa-longa', tipo: 'codex', motor: 'codex', modelo_legivel: 'GPT-5.6 Sol',
+  estado: 'trabalhando', fase: 'atividade_codex', etapa: '\n  Primeira linha útil do pedido que passa do limite\nsegunda linha ignorada',
+  tarefa: 'NOME DO ARQUIVO',
+}
+const rotuloCodexLongo = nomeLegivelDaExecucao(codexTarefaLonga)
+const tarefaDoRotulo = rotuloCodexLongo.slice(rotuloCodexLongo.lastIndexOf(' · ') + 3)
+conferir('tarefa do Codex é a primeira linha útil e cabe em 28 caracteres', tarefaDoRotulo, 'Primeira linha útil do…')
+conferir('tarefa longa do Codex respeita o limite', tarefaDoRotulo.length <= 28, String(tarefaDoRotulo.length))
 
 const cleo: AgenteVivo = { ...sessaoCodex, id: 'rollout-cleo', identidade: 'cleo', tipo: 'copy' }
 conferir('nome catalogado continua humano no detalhe', nomeLegivelDaExecucao(cleo, PIXEL_AGENTS.find((item) => item.id === 'cleo')) === 'Cleo')
