@@ -234,7 +234,7 @@ export function Diretores({
         <Secao>camada de comando · roda no systemd, fala pelo telegram</Secao>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        {estado.sessao.map((s) => <CardComando key={s.id} agente={s} />)}
+        {estado.sessao.map((s) => <CardComando key={s.id} agente={s} agentesVivos={vivos?.agentes} />)}
       </div>
 
       <Conector />

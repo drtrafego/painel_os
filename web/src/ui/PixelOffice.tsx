@@ -18,6 +18,7 @@ import {
 } from '../dados/escritorio-animacao'
 import { useAgentesVivos } from '../dados/useAgentesVivos'
 import { ambienteForcadoDaUrl, resolverAmbiente, type AmbienteVisual } from '../dados/ambiente'
+import { agruparAgentesAtivosPorLancador, totalDeAgentesAgrupados, type GrupoLancador } from '../dados/lancadores'
 
 export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, obterAtivosNoCatalogo }
 
@@ -201,6 +202,77 @@ export function montarArvoreLancadosPor(agentes: AgenteVivo[], referenciasRaiz: 
   }
 
   return montarNivel(raiz, new Set())
+}
+
+function rotuloEstadoAgente(estado: AgenteVivo['estado']) {
+  if (estado === 'trabalhando') return 'Trabalhando'
+  if (estado === 'silencioso') return 'Silencioso'
+  return 'Encerrado'
+}
+
+function nomeParaListaDeLancador(agente: AgenteVivo, visual?: ExecucaoVisual, ficha?: PixelAgent) {
+  const nome = agente.nome?.replace(/\s+/g, ' ').trim()
+  if (nome && nome !== agente.id) return nome
+  const identidade = agente.identidade?.replace(/\s+/g, ' ').trim()
+  const identidadeGenerica = !identidade || ['sessao-codex', 'sessao-claude', 'sessão codex', 'sessão claude'].includes(identidade.toLowerCase())
+  const tarefa = agente.tarefa?.replace(/\s+/g, ' ').trim()
+  if (identidade && !identidadeGenerica) return identidade
+  if (tarefa) return `${identidade || visual?.nome || ficha?.nome || 'Agente'} · ${tarefa}`
+  return visual?.nome || ficha?.nome || identidade || agente.tipo || 'Agente sem identidade'
+}
+
+function ListaDeLancadores({ grupos, catalogo, execucoes, aoSelecionar }: {
+  grupos: GrupoLancador[]
+  catalogo: PixelAgent[]
+  execucoes: ExecucaoVisual[]
+  aoSelecionar: (chave: string) => void
+}) {
+  const total = totalDeAgentesAgrupados(grupos)
+  const visualDoAgente = (agente: AgenteVivo) => execucoes.find((visual) => visual.execucao === agente)
+  return (
+    <section className="mt-3 rounded-md border border-[#405655] bg-[#102124] p-2" aria-label="Agentes ativos por lançador" data-testid="office-launchers-overview">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h4 className="text-[10px] font-bold uppercase tracking-wide text-[#c1ec86]">Agentes ativos por lançador</h4>
+        <span className="shrink-0 font-mono text-[9px] text-[#8fa7a1]" data-testid="office-launchers-total">{total} vivos</span>
+      </div>
+      <div className="max-h-80 space-y-1.5 overflow-y-auto pr-0.5">
+        {grupos.map((grupo) => (
+          <details key={grupo.id} open={grupo.agentes.length > 0 && grupo.id !== 'nao-identificada'} className="rounded-md border border-[#405655] bg-[#0d1e22]">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 text-[10px] font-semibold text-[#e8f0ec] [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0 truncate">{grupo.nome}</span>
+              <span className="shrink-0 font-mono text-[#c1ec86]">{grupo.agentes.length}</span>
+            </summary>
+            {grupo.agentes.length > 0 && (
+              <ul className="space-y-1 border-t border-[#405655] p-1.5">
+                {grupo.agentes.map((agente) => {
+                  const visual = visualDoAgente(agente)
+                  const ficha = resolverAgenteNoCatalogo(agente, catalogo)
+                  const nome = nomeParaListaDeLancador(agente, visual, ficha)
+                  const tarefa = agente.tarefa || agente.descricao || agente.etapa || 'Sem tarefa no momento'
+                  return (
+                    <li key={`${grupo.id}:${agente.id}`} data-testid={`office-launcher-agent-${grupo.id}-${agente.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => visual && aoSelecionar(visual.chave)}
+                        className="block w-full min-w-0 rounded border border-transparent p-1.5 text-left hover:border-[#c1ec86] focus:outline-none focus:ring-1 focus:ring-[#c1ec86]"
+                      >
+                        <span className="flex min-w-0 items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-[10px] font-semibold text-[#e8f0ec]" title={nome}>{nome}</span>
+                          <span className={`shrink-0 font-mono text-[8px] uppercase ${agente.estado === 'trabalhando' ? 'text-[#c1ec86]' : 'text-[#e8c575]'}`}>{rotuloEstadoAgente(agente.estado)}</span>
+                        </span>
+                        <span className="mt-0.5 block truncate text-[9px] leading-4 text-[#aebfb8]" title={tarefa}>{tarefa}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </details>
+        ))}
+      </div>
+      <p className="mt-2 font-mono text-[8px] leading-3.5 text-[#718a82]">Cada agente vivo aparece uma vez. A origem vem do campo operacional dono.</p>
+    </section>
+  )
 }
 
 export function fichaUsaSalaMista(ficha?: PixelAgent) {
@@ -717,33 +789,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const selecionada = todasExecucoes.find((execucao) => execucao.chave === agenteSelecionadoId) || execucoesVisiveis[0]
   const faseSelecionada = selecionada ? fasesRef.current.get(selecionada.animacaoChave) : undefined
   const squadsVisiveis = useMemo(() => PIXEL_AGENT_SQUADS.filter((squad) => layout.ilhas.some((ilha) => ilha.squad === squad.id)), [layout.ilhas])
-  const referenciasSelecionada = useMemo(() => {
-    if (!selecionada) return new Set<string>()
-    return new Set([
-      ...referenciasDoAgente(selecionada.execucao),
-      selecionada.ficha?.id,
-      selecionada.ficha?.nome,
-    ].map(normalizarReferenciaLancador).filter(Boolean))
-  }, [selecionada])
-  const coordenadorSelecionado = selecionada?.ficha && ['luana', 'renato', 'bia'].includes(selecionada.ficha.id)
-  const arvoreLancados = useMemo(
-    () => coordenadorSelecionado ? montarArvoreLancadosPor(agentes, referenciasSelecionada) : [],
-    [agentes, coordenadorSelecionado, referenciasSelecionada],
-  )
-  const lancadorSelecionado = useMemo(() => {
-    if (!selecionada || coordenadorSelecionado) return null
-    const referencia = referenciaDoLancador(selecionada.execucao)
-    if (!referencia) return null
-    return todasExecucoes.find((visual) => {
-      if (visual.execucao === selecionada.execucao) return false
-      const referencias = new Set([
-        ...referenciasDoAgente(visual.execucao),
-        visual.ficha?.id,
-        visual.ficha?.nome,
-      ].map(normalizarReferenciaLancador).filter(Boolean))
-      return referencias.has(referencia)
-    }) || null
-  }, [coordenadorSelecionado, selecionada, todasExecucoes])
+  const gruposLancadores = useMemo(() => agruparAgentesAtivosPorLancador(agentes), [agentes])
 
   useEffect(() => {
     const palco = palcoRef.current
@@ -1071,25 +1117,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Função</dt><dd className="mt-1 truncate text-xs" title={funcaoLegivelDaExecucao(selecionada.execucao, selecionada.ficha)}>{funcaoLegivelDaExecucao(selecionada.execucao, selecionada.ficha)}</dd></div>
             </dl>
 
-            {coordenadorSelecionado && (
-              <section className="mt-3 rounded-md border border-[#405655] bg-[#102124] p-2" aria-label={`Lançados por ${selecionada.nome}`} data-testid="office-launched-section">
-                <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#c1ec86]">Lançados por {selecionada.nome}</h4>
-                {arvoreLancados.length > 0
-                  ? renderizarArvoreLancados(arvoreLancados)
-                  : <p className="text-[10px] italic text-[#8fa7a1]">Nenhum agente vivo lançado por esta coordenação.</p>}
-              </section>
-            )}
-
-            {!coordenadorSelecionado && lancadorSelecionado && (
-              <button
-                type="button"
-                onClick={() => selecionar(lancadorSelecionado.chave)}
-                className="mt-3 w-full rounded-md border border-[#405655] bg-[#102124] p-2 text-left text-[10px] uppercase tracking-wide text-[#8fa7a1] hover:border-[#c1ec86] focus:outline-none focus:ring-2 focus:ring-[#c1ec86]"
-                data-testid="office-launched-by"
-              >
-                Lançado por <strong className="text-[#c1ec86]">{lancadorSelecionado.nome}</strong>
-              </button>
-            )}
+            <ListaDeLancadores grupos={gruposLancadores} catalogo={catalogo} execucoes={todasExecucoes} aoSelecionar={selecionar} />
           </> : <p className="text-sm text-[#9cb0a9]">A sala mista está disponível; os executores ocupam uma mesa quando começam.</p>}
           <p className="mt-3 font-mono text-[9px] leading-4 text-[#869c94] sm:text-[10px]"><span className="text-[#c1ec86]">●</span> Trabalhando: vai à mesa uma vez e permanece digitando.<br />○ Parado: monitor apagado, sem ciclo automático.</p>
         </aside>

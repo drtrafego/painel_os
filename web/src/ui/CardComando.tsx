@@ -1,14 +1,15 @@
 import { Icone } from './Icone'
 import { Barra, Numero, Pilula, TEXTO_DO_TOM } from './primitivos'
 import { lerMotores } from '../dados/motores'
-import type { AgenteSessao } from '../dados/tipos'
-import { corDoCardComando, leituraEstadoSessao } from './card-comando-modelo'
+import type { AgenteSessao, AgenteVivo } from '../dados/tipos'
+import { corDoCardComando, leituraEstadoSessaoComPresencaAoVivo, llmDoCardComando } from './card-comando-modelo'
 
-export function CardComando({ agente }: { agente: AgenteSessao }) {
+export function CardComando({ agente, agentesVivos }: { agente: AgenteSessao; agentesVivos?: AgenteVivo[] | null }) {
   const v = agente.verificador
   const motor = lerMotores(agente.motores)
+  const llm = llmDoCardComando(agentesVivos, agente.id)
   const cor = corDoCardComando(agente.id)
-  const leituraSessao = leituraEstadoSessao(agente.estado, agente.ultima_atividade, agente.id)
+  const leituraSessao = leituraEstadoSessaoComPresencaAoVivo(agente.estado, agente.ultima_atividade, agente.id, agentesVivos)
   // Indeterminada NAO passou: o verificador nao conseguiu medir aquela. Sair
   // da conta dos verdes era contar como aprovada a checagem que nao olhou.
   const verdes =
@@ -39,7 +40,10 @@ export function CardComando({ agente }: { agente: AgenteSessao }) {
             <h2 className="font-serif text-[26px] leading-none text-tinta">{agente.nome}</h2>
             <span className="rotulo">{agente.papel}</span>
             <Pilula tom={leituraSessao.tom} ponto={false}>
-              <span title={leituraSessao.titulo} data-estado-sessao={agente.estado ?? 'sem_leitura'}>
+              <span
+                title={leituraSessao.titulo}
+                data-estado-sessao={leituraSessao.tom === 'verde' ? 'ativo' : leituraSessao.tom === 'ambar' ? 'ocioso' : 'sem_leitura'}
+              >
                 {leituraSessao.texto}
               </span>
             </Pilula>
@@ -122,12 +126,23 @@ export function CardComando({ agente }: { agente: AgenteSessao }) {
         </div>
       )}
 
-      <div className="mt-auto flex items-center gap-3 border-t border-linha pt-3">
-        <span className="rotulo whitespace-nowrap" title={motor.detalhe} data-motor data-motor-tom={motor.tom}>
-          motor <span className={TEXTO_DO_TOM[motor.tom]}>{motor.rotulo}</span>
-        </span>
-        <span className="min-w-[70px] flex-1"><Barra fracao={fracao} cor={cor} /></span>
-        <span className="rotulo whitespace-nowrap">rodada {v.rodada?.slice(11, 16) ?? '—'} utc</span>
+      <div className="mt-auto border-t border-linha pt-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[10px]" data-llm-card={agente.id}>
+          <span className="rotulo shrink-0">LLM</span>
+          <span className={llm.modelo ? 'truncate text-tinta-2' : 'text-tinta-3'} title={llm.modelo ?? (llm.medido ? 'o motor não expôs o modelo' : 'a sonda ao vivo ainda não trouxe o modelo')}>
+            {llm.modelo ?? (llm.medido ? 'modelo não exposto' : 'modelo não medido')}
+          </span>
+          <span className="text-tinta-3" aria-label={llm.esforco ? `esforço ${llm.esforco}` : 'esforço não exposto'}>
+            · esforço {llm.esforco ?? 'não exposto'}
+          </span>
+        </div>
+        <div className="mt-2 flex items-center gap-3">
+          <span className="rotulo whitespace-nowrap" title={motor.detalhe} data-motor data-motor-tom={motor.tom}>
+            motor <span className={TEXTO_DO_TOM[motor.tom]}>{motor.rotulo}</span>
+          </span>
+          <span className="min-w-[70px] flex-1"><Barra fracao={fracao} cor={cor} /></span>
+          <span className="rotulo whitespace-nowrap">rodada {v.rodada?.slice(11, 16) ?? '—'} utc</span>
+        </div>
       </div>
     </article>
   )

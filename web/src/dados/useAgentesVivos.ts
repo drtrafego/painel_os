@@ -10,6 +10,11 @@ import type { AgenteVivo, AgentesVivos } from './tipos'
 
 export type EstadoSonda = 'consultando' | 'confirmado' | 'leitura_vencida' | 'indisponivel'
 
+// A sonda mede os três donos e pode atravessar vários transcripts. O tempo
+// real medido em produção passa de 20s em cache frio; abortar em 8s fazia a
+// Camada de Comando ficar sem LLM justamente na primeira abertura da página.
+const TIMEOUT_SONDA_MS = 30_000
+
 export type HookAgentesVivos = {
   dados: AgentesVivos | null
   carregando: boolean
@@ -165,7 +170,7 @@ async function buscarSonda() {
 
   const timeoutId = setTimeout(() => {
     controller.abort()
-  }, 8000)
+  }, TIMEOUT_SONDA_MS)
 
   try {
     const r = await fetch('/api/agentes-vivos', {
@@ -220,7 +225,7 @@ async function buscarSonda() {
     // React StrictMode monta, desmonta e monta novamente em desenvolvimento.
     // O cancelamento desse primeiro ciclo não é falha da sonda nem timeout.
     if (isAbort && ouvintes.size === 0) return
-    const msg = isAbort ? 'Tempo limite da sonda esgotado (8s)' : e instanceof Error ? e.message : String(e)
+    const msg = isAbort ? 'Tempo limite da sonda esgotado (30s)' : e instanceof Error ? e.message : String(e)
     const decorrido = ultimoSucessoTimestamp ? Math.round((Date.now() - ultimoSucessoTimestamp) / 1000) : 0
 
     estadoCompartilhado = {
