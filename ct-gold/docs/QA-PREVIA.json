@@ -1,0 +1,113 @@
+{
+  "environment": "Chromium local + React 18.2 da prévia; não React 19/Vite de produção",
+  "checks": [
+    "TSX real atualizado montado na prévia com 24 agentes simulados",
+    "Pausa congela o relógio de animação",
+    "75 cenários gráficos: fases, dia/noite, movimento reduzido e transições; sem mutações",
+    "14 testes dos adaptadores: nulo ≠ zero, moedas separadas e lançador declarado",
+    "24 etiquetas clicadas no canvas e associadas ao agente correto",
+    "Seleção pelo teclado",
+    "Filtro Só ativos usa as regras existentes",
+    "Tarefa na parede seleciona a execução sem alterar o trabalho",
+    "Mudança de estado: trabalhar → levantar/caminhar → descansar → voltar à mesa",
+    "Falha da sonda é exibida; não aparece saúde operacional inventada",
+    "Dia/noite continua ligado ao ambiente",
+    "0, 12, 24, 48 e 96 agentes; expansão do coworking sem limite fixo de 40",
+    "42 comparações das funções do original e novo: mesmos agentes e coordenadas",
+    "7 larguras de tela sem overflow horizontal da página",
+    "Preferência de movimento reduzido chega ao renderer"
+  ],
+  "viewports": [
+    {
+      "width": 320,
+      "scroll": 320,
+      "canvas": 538,
+      "internalScroll": true
+    },
+    {
+      "width": 390,
+      "scroll": 390,
+      "canvas": 538,
+      "internalScroll": true
+    },
+    {
+      "width": 768,
+      "scroll": 768,
+      "canvas": 740,
+      "internalScroll": false
+    },
+    {
+      "width": 1100,
+      "scroll": 1100,
+      "canvas": 842,
+      "internalScroll": false
+    },
+    {
+      "width": 1440,
+      "scroll": 1440,
+      "canvas": 1150,
+      "internalScroll": false
+    },
+    {
+      "width": 1672,
+      "scroll": 1672,
+      "canvas": 1382,
+      "internalScroll": false
+    },
+    {
+      "width": 1920,
+      "scroll": 1920,
+      "canvas": 1454,
+      "internalScroll": false
+    }
+  ],
+  "errors": [],
+  "renderer": {
+    "calls": 75,
+    "phases": 7,
+    "reducedMotion": true,
+    "inputMutation": false,
+    "canvasStateRestored": true,
+    "emptyAndHidden": "passed"
+  },
+  "adapters": {
+    "tests": 14,
+    "result": "passed"
+  },
+  "populations": [
+    {
+      "input": 0,
+      "visible": 0,
+      "coworking": "0"
+    },
+    {
+      "input": 12,
+      "visible": 12,
+      "coworking": "0"
+    },
+    {
+      "input": 24,
+      "visible": 24,
+      "coworking": "0"
+    },
+    {
+      "input": 48,
+      "visible": 48,
+      "coworking": "24"
+    },
+    {
+      "input": 96,
+      "visible": 96,
+      "coworking": "72"
+    }
+  ],
+  "regression": {
+    "comparisons": 42,
+    "result": "iguais ao componente original; catálogo simulado da prévia"
+  },
+  "rendererTiming96": {
+    "medianMs": 27.100000000093132,
+    "p95Ms": 37.59999999962747,
+    "note": "Somente renderer na máquina de QA; não mede FPS nem servidor do usuário"
+  }
+}

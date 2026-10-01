@@ -1,0 +1,177 @@
+--- a/web/src/ui/PixelOffice.tsx
++++ b/web/src/ui/PixelOffice.tsx
+@@ -1,4 +1,9 @@
+ import { useEffect, useMemo, useRef, useState } from 'react'
++import { desenharEscritorioGold } from './PixelOffice.gold'
++import { ParedeEscritorio } from './PixelOffice.wall'
++import { montarTarefasParede, type GastosIA } from './PixelOffice.wall-data'
++import logoCasal from '../assets/casal-do-trafego.png'
++import './PixelOffice.gold.css'
+ import type { AgenteSessao, AgenteVivo, Estado } from '../dados/tipos'
+ import {
+   chaveAgente,
+@@ -31,6 +36,8 @@
+   soAtivos?: boolean
+   aoAlternarSoAtivos?: (soAtivos: boolean) => void
+   aoAbrirCerebro?: () => void
++  /** Opcional: valores monetários reais. Nunca derivados de tokens ou da despesa geral. */
++  gastosIA?: GastosIA | null
+ }
+ 
+ type ObjetoMesa = 'codigo' | 'texto' | 'arte' | 'radar' | 'metricas' | 'qualidade' | 'envio' | 'cafe'
+@@ -730,7 +737,7 @@
+   return { abertos, saindo }
+ }
+ 
+-export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos }: PixelOfficeProps) {
++export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos, aoAbrirCerebro, gastosIA }: PixelOfficeProps) {
+   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+   const palcoRef = useRef<HTMLDivElement | null>(null)
+   const hitsRef = useRef<Array<{ chave: string; x: number; y: number; largura: number; altura: number }>>([])
+@@ -790,6 +797,7 @@
+   const faseSelecionada = selecionada ? fasesRef.current.get(selecionada.animacaoChave) : undefined
+   const squadsVisiveis = useMemo(() => PIXEL_AGENT_SQUADS.filter((squad) => layout.ilhas.some((ilha) => ilha.squad === squad.id)), [layout.ilhas])
+   const gruposLancadores = useMemo(() => agruparAgentesAtivosPorLancador(agentes), [agentes])
++  const tarefasDaParede = useMemo(() => montarTarefasParede(gruposLancadores, (agente) => todasExecucoes.find((v) => v.execucao === agente)), [gruposLancadores, todasExecucoes])
+ 
+   useEffect(() => {
+     const palco = palcoRef.current
+@@ -845,6 +853,7 @@
+     let anterior = performance.now()
+     let ultimoDetalhe = 0
+     let ativo = true
++    let goldDisponivel = true
+ 
+     const poligono = (pontos: number[][], preenchimento: string) => {
+       ctx.fillStyle = preenchimento; ctx.beginPath()
+@@ -1030,11 +1039,35 @@
+       if (canvas.height !== alturaBacking) canvas.height = alturaBacking
+       if (canvas.style.width !== `${larguraCss}px`) canvas.style.width = `${larguraCss}px`
+       if (canvas.style.height !== `${alturaCss}px`) canvas.style.height = `${alturaCss}px`
+-      ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, 0, 0); ctx.clearRect(0, 0, layout.largura, layout.altura); desenharSala(); hitsRef.current = []
+-      const estados = layout.mesas.map((mesa) => ({ mesa, estado: estadoDaMesa(mesa, agoraAnimacaoMs) })); estados.sort((a, b) => a.estado.y - b.estado.y).forEach(({ mesa, estado }) => {
+-        const ilha = layout.ilhas.find((item) => item.squad === mesa.execucao.squad)
+-        if (ilha) comTransformacaoDoAmbiente(ilha, () => desenharBoneco(mesa, estado)); else desenharBoneco(mesa, estado)
+-      })
++      ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, 0, 0); ctx.clearRect(0, 0, layout.largura, layout.altura)
++      const estados = layout.mesas.map((mesa) => ({ mesa, estado: estadoDaMesa(mesa, agoraAnimacaoMs) }))
++      estados.sort((a, b) => a.estado.y - b.estado.y)
++      if (goldDisponivel) {
++        try {
++          hitsRef.current = desenharEscritorioGold(ctx, {
++            layout,
++            personagens: estados.map(({ mesa, estado }) => ({ mesa, pose: poseDoEstado(estado, layout.corredorX) })),
++            progressoDia: ambiente.progressoDia,
++            tempo: tempoRef.current,
++            reduzirMovimento,
++            selecionadoId: agenteSelecionadoId,
++            progressos: progressosDoQuadro,
++          })
++        } catch (erroVisual) {
++          // Falha visual não deve afetar agentes, dados ou a navegação do painel.
++          goldDisponivel = false
++          console.warn('PixelOffice: desenho CT indisponível; usando desenho anterior.', erroVisual)
++        }
++      }
++      if (!goldDisponivel) {
++        ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, 0, 0)
++        ctx.clearRect(0, 0, layout.largura, layout.altura)
++        desenharSala(); hitsRef.current = []
++        estados.forEach(({ mesa, estado }) => {
++          const ilha = layout.ilhas.find((item) => item.squad === mesa.execucao.squad)
++          if (ilha) comTransformacaoDoAmbiente(ilha, () => desenharBoneco(mesa, estado)); else desenharBoneco(mesa, estado)
++        })
++      }
+       canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeNamePx = String((7.5 * zoom * dpr).toFixed(2)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0); canvas.dataset.officeRest = layout.descansoAberto ? 'aberto' : 'encolhido'; canvas.dataset.officeResting = String(layout.ocupantesDescanso); canvas.dataset.officeEnvironment = ambiente.fase; canvas.dataset.officeDayProgress = ambiente.progressoDia.toFixed(3); canvas.dataset.officeDemandSquads = layout.ilhas.filter((ilha) => SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)).map((ilha) => ilha.squad).join('|')
+       quadro = requestAnimationFrame(desenhar)
+     }
+@@ -1087,47 +1120,51 @@
+   const descricaoSonda = statusLeitura === 'confirmado' ? `Leitura ao vivo${recebidoEm ? ` · ${Math.max(0, Math.round((Date.now() - recebidoEm.getTime()) / 1000))}s` : ''}` : statusLeitura === 'consultando' ? 'Consultando dados vivos' : statusLeitura === 'leitura_vencida' ? `Leitura vencida · ${falhouHaSegundos ?? 0}s` : erroSonda || 'Sonda indisponível'
+ 
+   return (
+-    <div className="min-w-0 overflow-hidden rounded-xl bg-[#0a151a] p-3 text-[#e8f0ec] sm:p-5 font-sans" data-testid="pixel-office" data-office-columns={layout.colunas} data-office-environment={ambiente.fase} data-office-day-progress={ambiente.progressoDia.toFixed(3)} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'} data-office-rest={layout.descansoAberto ? 'aberto' : 'encolhido'} data-office-resting={layout.ocupantesDescanso}>
+-      <header className="mb-3 flex items-center justify-between gap-3"><div className="min-w-0"><div className="text-[10px] tracking-[0.17em] text-[#b1c2bd]">G4ST4OVIB3 / PAINEL OS</div><h2 className="mt-1 text-[23px] font-bold leading-none tracking-[-0.04em] sm:text-2xl">O escritório inteiro, ao vivo.</h2></div><div className="flex shrink-0 items-center gap-1.5"><span className="rounded border border-[#6d8577] px-2 py-1 font-mono text-[9px] text-[#d8e7c1] sm:text-[10px]" data-testid="office-environment">{ambiente.rotulo}</span><span className={`rounded border px-2 py-1 font-mono text-[9px] sm:text-[10px] ${statusLeitura === 'confirmado' ? 'border-[#63735e] text-[#c6e98a]' : 'border-[#785f45] text-[#e8c575]'}`} title={descricaoSonda}>{statusLeitura === 'confirmado' ? 'AO VIVO' : 'SONDA'}</span></div></header>
+-      <div className="mb-2.5 flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+-        <button type="button" onClick={() => aoAlternarSoAtivos?.(!soAtivos)} aria-pressed={soAtivos} className={`min-h-11 rounded-lg border px-3 text-xs font-semibold ${soAtivos ? 'border-[#c1ec86] bg-[#c1ec86] text-[#1a2a1b]' : 'border-[#42534f] bg-[#162a2a] text-[#e7f0e7]'}`}>Só ativos</button>
+-        <button type="button" onClick={() => setPausado((valor) => !valor)} aria-pressed={pausado} className="min-h-11 rounded-lg border border-[#42534f] bg-[#162a2a] px-3 text-xs font-semibold text-[#e7f0e7]">{pausado ? 'Retomar' : 'Pausar'}</button>
+-        <div className="flex items-center overflow-hidden rounded-lg border border-[#42534f] bg-[#162a2a]"><button type="button" aria-label="Afastar sala" onClick={() => setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, zoomMaximoSeguro))} className="min-h-11 min-w-10 px-2 text-base text-[#e7f0e7]">−</button><button type="button" title="Repor enquadramento" onClick={() => setZoom(zoomAutomaticoRef.current)} className="min-h-11 border-x border-[#42534f] px-2 font-mono text-[10px] text-[#aebfb8]">{Math.round(zoom * 100)}%</button><button type="button" aria-label="Aproximar sala" onClick={() => setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))} className="min-h-11 min-w-10 px-2 text-base text-[#e7f0e7]">+</button></div>
+-        <span className="ml-auto whitespace-nowrap font-mono text-[10px] text-[#aebfb8] sm:text-[11px]"><b className="text-[#c1ec86]">{totalAtivos}</b> trabalhando · {totalFixos} fixos{totalExtras ? ` + ${totalExtras} no coworking/extra` : ''}</span>
+-      </div>
+-      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_270px] xl:gap-4">
+-        <section className="relative min-w-0 overflow-hidden rounded-xl border border-[#405655] bg-[#163032]" aria-label="Sala voxel interativa">
+-          <div ref={palcoRef} className="h-[420px] w-full overflow-auto overscroll-contain sm:h-[600px]" data-testid="office-scroll-room"><canvas ref={canvasRef} tabIndex={0} role="group" aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`} onClick={tratarClique} onKeyDown={tratarTeclado} className="block max-w-none cursor-pointer touch-pan-x touch-pan-y focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#e8c575]" /></div>
+-        </section>
+-        <aside className="min-w-0 self-start rounded-lg border-t-2 border-[#c1ec86] bg-[#142426] p-3 sm:p-4 xl:sticky xl:top-3" aria-label="Detalhe do agente">
+-          {selecionada ? <>
+-            <div className="flex items-start justify-between gap-2">
+-              <div className="min-w-0">
+-                <h3 className="break-words text-sm font-semibold leading-5 sm:text-base" data-testid="office-agent-name">{selecionada.nome}</h3>
+-                <p className="mt-0.5 font-mono text-[9px] text-[#718a82]">{selecionada.squadNome}{selecionada.squad === SALA_MISTA ? ' · POSTO COMPARTILHADO' : selecionada.temporaria ? ' · TEMPORÁRIO' : ' · MESA FIXA'}</p>
+-              </div>
+-              <span className="shrink-0 font-mono text-[10px] text-[#c1ec86] sm:text-[11px]">{rotuloFase(faseSelecionada, selecionada.ativa)}</span>
+-            </div>
+-            <p className="my-2 break-words text-[13px] leading-5 text-[#d4e4dc] sm:my-3 sm:text-sm">{selecionada.execucao.tarefa || selecionada.execucao.descricao || selecionada.execucao.etapa || selecionada.ficha?.papel || 'Sem tarefa no momento'}</p>
+-            <dl className="grid grid-cols-2 gap-2">
+-              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Ferramenta</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.ferramenta || '—'}>{selecionada.execucao.ferramenta || '—'}</dd></div>
+-              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Estado</dt><dd className="mt-1 truncate text-xs">{selecionada.ativa ? 'Trabalhando' : 'Parado'}</dd></div>
+-              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Modelo</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}>{selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}</dd></div>
+-              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Esforço</dt><dd className="mt-1 truncate text-xs" title={selecionada.execucao.esforco || '—'}>{selecionada.execucao.esforco || '—'}</dd></div>
+-              <div className="min-w-0"><dt className="text-[9px] uppercase tracking-wide text-[#8fa7a1]">Função</dt><dd className="mt-1 truncate text-xs" title={funcaoLegivelDaExecucao(selecionada.execucao, selecionada.ficha)}>{funcaoLegivelDaExecucao(selecionada.execucao, selecionada.ficha)}</dd></div>
++    <div className="ct-office" data-testid="pixel-office" data-office-visual="ct-gold" data-office-columns={layout.colunas} data-office-environment={ambiente.fase} data-office-day-progress={ambiente.progressoDia.toFixed(3)} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'} data-office-rest={layout.descansoAberto ? 'aberto' : 'encolhido'} data-office-resting={layout.ocupantesDescanso}>
++      <header className="ct-header">
++        <div className="ct-brand"><img src={logoCasal} alt="Casal do Tráfego — CT" width={54} height={54} /><div><span className="ct-kicker">CASAL DO TRÁFEGO / PAINEL OS</span><h2>O escritório da sua operação.</h2></div></div>
++        <div className="ct-header-status"><span className="ct-tag" data-testid="office-environment">{ambiente.rotulo}</span><span className={`ct-tag ${statusLeitura === 'confirmado' ? 'ct-tag-live' : ''}`} title={descricaoSonda}><i className={`ct-dot ${statusLeitura === 'confirmado' ? 'ct-dot-green' : 'ct-dot-amber'}`} />{statusLeitura === 'confirmado' ? 'AO VIVO' : 'VERIFICAR SONDA'}</span>{aoAbrirCerebro && <button type="button" className="ct-button" onClick={aoAbrirCerebro}>Cérebro ↗</button>}</div>
++      </header>
++      <div className="ct-body">
++        <div role="region" className="ct-main" aria-label="Escritório e painéis operacionais">
++          <ParedeEscritorio uso={estado?.uso_planos} gastos={gastosIA} tarefas={tarefasDaParede} aoSelecionar={selecionar} selecionadoId={agenteSelecionadoId} descricaoSonda={descricaoSonda} leituraConfirmada={statusLeitura === 'confirmado'} />
++          <div className="ct-toolbar" role="toolbar" aria-label="Controles do escritório">
++            <span className="ct-room-label"><i className="ct-dot ct-dot-amber" />Escritório vivo <span className="ct-tag">{execucoesVisiveis.length} visíveis</span></span>
++            <button type="button" className="ct-button" onClick={() => aoAlternarSoAtivos?.(!soAtivos)} aria-pressed={soAtivos}>Só ativos</button>
++            <button type="button" className="ct-button" onClick={() => setPausado((valor) => !valor)} aria-pressed={pausado}>{pausado ? 'Retomar' : 'Pausar'}</button>
++            <div className="ct-zoom"><button type="button" aria-label="Afastar sala" onClick={() => setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, zoomMaximoSeguro))}>−</button><button type="button" title="Repor enquadramento" onClick={() => setZoom(zoomAutomaticoRef.current)}>{Math.round(zoom * 100)}%</button><button type="button" aria-label="Aproximar sala" onClick={() => setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))}>+</button></div>
++          </div>
++          <section className="ct-room" aria-label="Sala interativa em perspectiva">
++            <div ref={palcoRef} className="ct-room-scroll" data-testid="office-scroll-room"><canvas ref={canvasRef} tabIndex={0} role="group" aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`} onClick={tratarClique} onKeyDown={tratarTeclado} /></div>
++          </section>
++          <footer className="ct-room-footer">
++            <span>{layout.ilhas.length} ambientes visíveis · {totalFixos} fixos{totalExtras ? ` · ${totalExtras} extras` : ''} · {layout.colunas} colunas</span>
++            <span className="ct-legend" aria-label="Legenda de cores dos ambientes" data-testid="office-squad-legend">{squadsVisiveis.map((squad) => <span key={squad.id}><i style={{ backgroundColor: squad.cor }} />{squad.nome}</span>)}</span>
++            <span>Selecione pelo nome ou pelo boneco · Aproximar mantém a sala rolável</span>
++          </footer>
++        </div>
++        <aside className="ct-inspector" aria-label="Detalhe do agente">
++          <span className="ct-kicker">OPERAÇÃO / AGENTES</span><h3>Inteligência<br />em movimento.</h3>
++          <div className="ct-stats"><div className="ct-stat"><strong>{totalAtivos}</strong><span>Trabalhando / catálogo vivo</span></div><div className="ct-stat"><strong>{layout.ocupantesDescanso}</strong><span>Descansando / sala visível</span></div><div className="ct-stat"><strong>{execucoesVisiveis.length}</strong><span>Agentes visíveis</span></div><div className="ct-stat"><strong>{layout.ilhas.length}</strong><span>Ambientes abertos</span></div></div>
++          {selecionada ? <div className="ct-selection">
++            <div className="ct-selection-header"><span className="ct-director-avatar" style={{ borderColor: selecionada.cor }} aria-hidden="true">{selecionada.nome.slice(0, 1)}</span><div><h4 data-testid="office-agent-name">{selecionada.nome}</h4><div className="ct-squad">{selecionada.squadNome}{selecionada.squad === SALA_MISTA ? ' · COMPARTILHADO' : selecionada.temporaria ? ' · TEMPORÁRIO' : ' · FIXO'}</div></div></div>
++            <div className="ct-phase">{rotuloFase(faseSelecionada, selecionada.ativa)}</div>
++            <p>{selecionada.execucao.tarefa || selecionada.execucao.descricao || selecionada.execucao.etapa || selecionada.ficha?.papel || 'Sem tarefa no momento'}</p>
++            <dl className="ct-fields">
++              <div><dt>Ferramenta</dt><dd>{selecionada.execucao.ferramenta || '—'}</dd></div>
++              <div><dt>Estado da sonda</dt><dd>{selecionada.execucao.estado === 'trabalhando' ? 'Trabalhando' : selecionada.execucao.estado === 'silencioso' ? 'Silencioso' : 'Parado'}</dd></div>
++              <div><dt>Modelo</dt><dd>{selecionada.execucao.modelo_legivel || selecionada.execucao.modelo || '—'}</dd></div>
++              <div><dt>Esforço</dt><dd>{selecionada.execucao.esforco || '—'}</dd></div>
++              <div><dt>Função</dt><dd>{funcaoLegivelDaExecucao(selecionada.execucao, selecionada.ficha)}</dd></div>
+             </dl>
+-
+-            <ListaDeLancadores grupos={gruposLancadores} catalogo={catalogo} execucoes={todasExecucoes} aoSelecionar={selecionar} />
+-          </> : <p className="text-sm text-[#9cb0a9]">A sala mista está disponível; os executores ocupam uma mesa quando começam.</p>}
+-          <p className="mt-3 font-mono text-[9px] leading-4 text-[#869c94] sm:text-[10px]"><span className="text-[#c1ec86]">●</span> Trabalhando: vai à mesa uma vez e permanece digitando.<br />○ Parado: monitor apagado, sem ciclo automático.</p>
++            <details className="ct-relations"><summary>Agentes lançados por esta execução</summary>{renderizarArvoreLancados(montarArvoreLancadosPor(agentes, referenciasDoAgente(selecionada.execucao)))}</details>
++          </div> : <div className="ct-selection"><p>Nenhum agente visível com os filtros e ambientes atuais. A sala continua acompanhando a operação.</p></div>}
++          <ListaDeLancadores grupos={gruposLancadores} catalogo={catalogo} execucoes={todasExecucoes} aoSelecionar={selecionar} />
++          <p className="ct-inspector-note">Trabalhando: vai à mesa e permanece digitando.<br />Silencioso: permanece na mesa.<br />Parado: segue o descanso configurado.<br />Abertura dos ambientes e presença vêm da operação, não do desenho.</p>
+         </aside>
+       </div>
+-      <footer className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[9px] leading-4 text-[#839a90] sm:text-[10px]">
+-        <span>{execucoesVisiveis.length} {execucoesVisiveis.length === 1 ? 'agente visível' : 'agentes visíveis'} · {layout.ilhas.length - 1} ilhas + sala mista · {layout.colunas} colunas · caber tudo em largura e altura.</span>
+-        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5" aria-label="Legenda de cores dos ambientes" data-testid="office-squad-legend">{squadsVisiveis.map((squad) => <span key={squad.id} className="flex items-center gap-1 whitespace-nowrap"><i className="size-1.5 shrink-0 rounded-[1px]" style={{ backgroundColor: squad.cor }} /><b className="font-medium text-[#c5d2ce]">{squad.nome}</b></span>)}</span>
+-      </footer>
+-      <div className="sr-only" role="region" aria-label="Lista acessível de agentes do escritório"><ul>{execucoesVisiveis.map((execucao) => <li key={execucao.animacaoChave}><button type="button" onClick={() => selecionar(execucao.chave)}>{execucao.nome} — {execucao.ativa ? 'trabalhando' : 'parado'} — {execucao.squadNome}</button></li>)}</ul></div>
+-      <span className="sr-only" aria-live="polite">{relogioDetalhe ? '' : ''}</span>
++      <div className="ct-sr-only" role="region" aria-label="Lista acessível de agentes do escritório"><ul>{execucoesVisiveis.map((execucao) => <li key={execucao.animacaoChave}><button type="button" onClick={() => selecionar(execucao.chave)}>{execucao.nome} — {execucao.execucao.estado} — {execucao.squadNome}</button></li>)}</ul></div>
++      <span className="ct-sr-only" aria-live="polite">{relogioDetalhe ? '' : ''}</span>
+     </div>
+   )
+ }

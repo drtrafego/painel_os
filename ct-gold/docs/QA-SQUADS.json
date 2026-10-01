@@ -1,0 +1,18 @@
+{
+  "environment": "Prévia com relógio virtual do Playwright; dados simulados",
+  "before179s": [
+    "coordenação",
+    "bots",
+    "conteúdo",
+    "comercial"
+  ],
+  "after180sPlus720ms": [
+    "coordenação"
+  ],
+  "reactivated": [
+    "coordenação",
+    "bots"
+  ],
+  "errors": [],
+  "result": "passed"
+}

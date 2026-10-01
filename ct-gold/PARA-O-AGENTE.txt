@@ -1,0 +1,38 @@
+APLICAR A IMPLEMENTAÇÃO PRONTA — ESCRITÓRIO CASAL DO TRÁFEGO
+Repositório: drtrafego/painel_os
+
+Não recrie o layout do zero. Os arquivos finais já estão em web/src deste pacote.
+A referência de comportamento é o PixelOffice original, não os dados fictícios da prévia.
+
+1. Leia LEIA-PRIMEIRO.md e docs/INTEGRACAO-CT.md. Verifique git status e preserve qualquer alteração local. Trabalhe em uma branch separada, sem reset --hard, force-push ou git add .
+2. A partir do pacote extraído, execute:
+   node /caminho/ct-gold/scripts/aplicar-ct.mjs /caminho/painel_os --check
+   node /caminho/ct-gold/scripts/aplicar-ct.mjs /caminho/painel_os --apply
+   No Windows, coloque os caminhos completos entre aspas. O primeiro argumento é a raiz do clone que contém web/package.json.
+3. O aplicador coloca os SEIS arquivos completos. PixelOffice.tsx mantém o mesmo export/import e props anteriores. Tarefas.tsx, tipos.ts, catálogo, APIs e servidor não precisam ser alterados para exibir o escritório novo.
+4. Se o aplicador parar por divergência, NÃO remova a validação. Faça uma conciliação da versão atual com docs/PixelOffice.diff. Preserve integralmente as regras e mudanças posteriores; reporte o conflito antes de mudar comportamento.
+5. Confira o diff e os cinco arquivos novos, e rode o build no ambiente real:
+   git diff --check
+   cd web
+   npm run build
+   Rode também os testes existentes de escritório, animação, catálogo, lançadores e layout de 45 agentes pelo fluxo habitual do projeto. Não mude o package.json/package-lock.json só para adaptar o pacote visual.
+6. Compare usando dados reais: trabalhando/silencioso/parado, descanso, squads sob demanda e seus 3 minutos de permanência, coworking, agentes temporários, sonda vencida, seleção, zoom, celular e movimento reduzido.
+7. Após passar a validação, faça commit SOMENTE dos caminhos:
+   web/src/ui/PixelOffice.tsx
+   web/src/ui/PixelOffice.gold.ts
+   web/src/ui/PixelOffice.gold.css
+   web/src/ui/PixelOffice.wall.tsx
+   web/src/ui/PixelOffice.wall-data.ts
+   web/src/assets/casal-do-trafego.png
+   Envie a branch ao GitHub e abra PR. Não publique no servidor sem autorização para deploy.
+
+CONTRATO INVIOLÁVEL
+- Não mudar quem aparece, os estados, os agentes de catálogo, as sessões, as chaves ou os aliases.
+- Não mudar squads sob demanda, temporizadores, sala mista/coworking, cálculo operacional da planta ou motor de movimento.
+- Não usar a imagem de referência como wallpaper com áreas clicáveis por cima. O canvas deste pacote desenha objetos/personagens e retorna seus alvos de clique.
+- Não copiar as fixtures/React 18 da demonstração para o aplicativo de produção. A aplicação continua com o React e o Vite do projeto.
+- Não criar tarefas artificiais nem controles falsos de conclusão: os dois quadros mostram as execuções atribuídas a Renato/Luana pela sonda existente. Bia e origens adicionais continuam no inspetor/lista.
+- Custo monetário ausente deve continuar como “—”. A prop opcional gastosIA aceita valores medidos e moeda/fonte/período. Não usar estado.financeiro.despesa_mes nem inventar conversão por tokens. A ligação a billing é separada, quando existir uma fonte confirmada.
+
+RETORNO ESPERADO
+Informe branch, commit/PR, resultado real do build e testes, eventuais diferenças e se houve ou não deploy. Há backup local protegido criado pelo aplicador. A prévia é material de comparação, não prova de validação no servidor.

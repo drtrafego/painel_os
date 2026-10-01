@@ -1,0 +1,2 @@
+PASS: PixelOffice.gold.ts — strict / noUnusedLocals / noUnusedParameters, TypeScript 5.8.3.
+Não é o build completo React 19/Vite do projeto.

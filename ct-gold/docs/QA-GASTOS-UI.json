@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "checks": [
+    "prop opcional renderiza total R$ 3.800 com fonte fictícia explícita",
+    "sem prop custo volta a não informado"
+  ],
+  "errors": []
+}

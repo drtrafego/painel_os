@@ -1,0 +1,11 @@
+OK checagem não grava
+OK dependência divergente bloqueia
+OK código concorrente bloqueia
+OK CRLF da cópia Windows é aceito
+OK instalação completa de seis arquivos
+OK aplicação é idempotente
+OK backup exato e fora dos arquivos versionados
+OK reversão protege edição posterior
+OK reversão integral
+OK nova edição entre checar e aplicar bloqueia
+{"checks":10,"sourcePreservation":"exact original Git blob","base":"86282b346ed24540a4fdf53461ef51da55597710","result":"passed"}

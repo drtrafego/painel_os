@@ -1,0 +1,58 @@
+{
+  "version": "ct-gold-1",
+  "repository": "drtrafego/painel_os",
+  "baseCommit": "565c2977807cbc3099c36bf88afd17afd50f6740",
+  "files": [
+    {
+      "path": "web/src/assets/casal-do-trafego.png",
+      "sha256": "a13a74812187a0707ecb4626001ac2b496c5954bb7395bc1ccf4322206796092"
+    },
+    {
+      "path": "web/src/ui/PixelOffice.gold.css",
+      "sha256": "9307a682c76d46d7cb953413acd5fa66dce9991961c88567b8b47fea8fb80823"
+    },
+    {
+      "path": "web/src/ui/PixelOffice.gold.ts",
+      "sha256": "b84a31bceef5ff94dde453af629454cfd69b6adc83ba35660b62ccf4b0d2e21b"
+    },
+    {
+      "path": "web/src/ui/PixelOffice.tsx",
+      "sha256": "df3c29a4aee932914a63d80d1b6e3a7e95a08e6e6d28fcc288477d4cee10070a",
+      "beforeGitBlob": "86282b346ed24540a4fdf53461ef51da55597710"
+    },
+    {
+      "path": "web/src/ui/PixelOffice.wall-data.ts",
+      "sha256": "51c353b59f8c2f0e34300013a07f1389e974f44dd8c22f91d2df90cb3de774b8"
+    },
+    {
+      "path": "web/src/ui/PixelOffice.wall.tsx",
+      "sha256": "3eb86f1f224135ef80d863c556cb3024f0a23204cee9c3c99391e064b79766e7"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "web/src/dados/pixel-agents.ts",
+      "gitBlob": "3ca9bcc372e301dc5b5c68226514f2acce75be2d"
+    },
+    {
+      "path": "web/src/dados/escritorio-animacao.ts",
+      "gitBlob": "9ff12e1f7afc8c5c00bb74ac7d3d849658cbe728"
+    },
+    {
+      "path": "web/src/dados/lancadores.ts",
+      "gitBlob": "817796035e7ba45720570c248cb9d45b95367894"
+    },
+    {
+      "path": "web/src/dados/tipos.ts",
+      "gitBlob": "0e7ec4b0b3d53a75df67ac7d8b165f01eef9bc41"
+    },
+    {
+      "path": "web/src/dados/ambiente.ts",
+      "gitBlob": "ec8f36ec4f9e97a169ab915e655925b76c0b9e57"
+    },
+    {
+      "path": "web/src/dados/useAgentesVivos.ts",
+      "gitBlob": "a84178efb6db2b36bc738a6a55e584c46f16ebbf"
+    }
+  ]
+}
