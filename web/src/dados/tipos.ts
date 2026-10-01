@@ -53,6 +53,8 @@ export type DadosFiscalComercial = {
 // ---------------------------------------------------------------------------
 
 export type NoMemoria = {
+  /** Extensão não confiável: validada por lerMetadados, sem aprovar legado. */
+  semantica_v2?: unknown
   id: string
   area: string
   rotulo: string
@@ -70,6 +72,8 @@ export type NoMemoria = {
 }
 
 export type ArestaCofre = {
+  id?: string
+  semantica_v2?: unknown
   de: string
   para: string
   ponte: boolean
@@ -442,6 +446,9 @@ export type Estado = {
   sops: { status: string; itens: Sop[] } | null
 
   cofre: {
+    /** Só telemetria sanitizada enviada pelo runtime; ausência não é zero eventos. */
+    auditoria_v2?: unknown
+    avisos?: string[]
     nos: NoMemoria[]
     arestas: ArestaCofre[]
     erro?: string

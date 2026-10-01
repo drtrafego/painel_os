@@ -1183,6 +1183,15 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
     Arestas dinâmicas de operação continuam existindo, marcadas como
     ``automatica`` para não serem confundidas com conhecimento declarado.
     """
+    # Extensão aditiva: erros V2 não apagam o registro legado válido.
+    try:
+        from cofre_v2 import projetar_metadados_publicos, anexar_semantica_arestas
+    except ModuleNotFoundError:
+        from coletor.cofre_v2 import projetar_metadados_publicos, anexar_semantica_arestas
+    avisos_v2, fontes_v2 = [], {}
+    def sanitizar_v2(valor):
+        return _cofre_texto(valor, "metadado V2", 16000)
+
     vazio = {"nos": [], "arestas": [], "arquivos": None, "conexoes": None,
              "cobertura": None, "arquivo": "painel_os/data/cofre.json",
              "areas": [], "familias": [], "grau_medio": None,
@@ -1303,6 +1312,18 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                 "peso": peso,
                 "vencido": not confere,
             })
+            if reg.get("semantica_v2") is not None or bruto.get("relacoes_v2"):
+                try:
+                    bytes_fonte = caminho.read_bytes()
+                    fonte_id_v2 = reg.get("fonte_id", reg["fonte"])
+                    fontes_v2[ident] = (fonte_id_v2, bytes_fonte)
+                    if reg.get("semantica_v2") is not None:
+                        nos[-1]["semantica_v2"] = projetar_metadados_publicos(
+                            reg["semantica_v2"], "no", fonte_id_v2, bytes_fonte,
+                            sanitizar_v2, datetime.now(timezone.utc),
+                        )
+                except (OSError, ValueError, TypeError, KeyError, UnicodeError):
+                    avisos_v2.append("metadados V2 recusados; registro legado preservado sem aprovação inferida")
             ids.add(ident)
             if not confere:
                 vencidos.append(ident)
@@ -1554,14 +1575,19 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
                             arestas.append({
                                 "de": apr["id"],
                                 "para": no_destino,
-                                "porque": f"Aprendizado cita {rotulo_alvo}",
+                                "porque": f"Associação sugerida por termo com {rotulo_alvo}; não comprova uso ou sustentação",
                                 "tipo": "automatica",
                                 "ponte": apr.get("area") != "operacao",
                             })
                             graus_atuais[apr["id"]] = graus_atuais.get(apr["id"], 0) + 1
                             graus_atuais[no_destino] = graus_atuais.get(no_destino, 0) + 1
     except Exception:
-        pass
+        avisos_v2.append("expansão automática do Cofre parcial: verificar a coleta; nenhuma relação ausente foi inferida")
+
+    arestas, avisos_relacoes_v2 = anexar_semantica_arestas(
+        arestas, bruto.get("relacoes_v2"), fontes_v2, sanitizar_v2, datetime.now(timezone.utc),
+    )
+    avisos_v2.extend(avisos_relacoes_v2)
 
     # A PONTE: aresta que sai de uma área e cai em outra. Atualizado com todos os nós.
     area_de = {n["id"]: n.get("area") for n in nos}
@@ -1582,7 +1608,7 @@ def ler_cofre(arquivo: Path = COFRE_JSON, raiz_fonte: Path = COFRE_RAIZ_FONTE, s
     ligados = {i for i, g in grau.items() if g}
     cobertura = round(len(ligados) / len(nos) * 100, 1) if nos else None
 
-    avisos = []
+    avisos = list(avisos_v2)
 
     def _agrupar(campo, catalogo):
         contagem = {}

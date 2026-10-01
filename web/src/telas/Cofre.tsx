@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { buscarNos, chaveRelacao, descreverRelacao, relacoesDoCaminho } from '../dados/cofre-confianca'
+import { CofreConfianca } from '../ui/CofreConfianca'
 import {
-  arestasDoCaminho, caminhoMaisCurto, corDaArea, corDaAreaEscuro, encurtar, escolherRotulos,
+  caminhoMaisCurto, corDaArea, corDaAreaEscuro, encurtar, escolherRotulos,
   posicionarCofre, raioDeToque, CAIXA_CELULAR, CAIXA_MESA, FONTE_ROTULO, type Caixa, type Posto,
 } from '../dados/cofre'
 import type { ArestaCofre, Estado, NoMemoria } from '../dados/tipos'
@@ -119,8 +121,8 @@ function Mapa({
   }, [arestas, mapaPostos])
 
   const arestasDoSalto = useMemo(
-    () => (caminho ? arestasDoCaminho(caminho) : new Set<string>()),
-    [caminho],
+    () => relacoesDoCaminho(caminho, arestas),
+    [caminho, arestas],
   )
 
   const rotulos = useMemo(
@@ -150,7 +152,7 @@ function Mapa({
         >
           <g className="arestas" strokeLinecap="round">
             {arestasVisiveis.map(({ de, para, a }) => {
-              const chave = `${a.de}->${a.para}`
+              const chave = chaveRelacao(a)
               const noSalto = arestasDoSalto.has(chave)
               const tocaEscolhido = a.de === escolhido || a.para === escolhido
               const tocaAlvo = alvo !== null && (a.de === alvo || a.para === alvo)
@@ -168,7 +170,7 @@ function Mapa({
                   x1={de.x} y1={de.y} x2={para.x} y2={para.y}
                   stroke={cor}
                   strokeWidth={noSalto ? 2.5 : destaque ? 1.8 : 1}
-                  strokeDasharray={a.ponte && !destaque ? '3 3' : undefined}
+                  strokeDasharray={descreverRelacao(a).sugerida ? '4 4' : a.ponte && !destaque ? '3 3' : undefined}
                 />
               )
             })}
@@ -493,7 +495,7 @@ function VisaoOperacao({
   )
 }
 
-export function Cofre({ estado, medidoEm, vista }: PropsTela) {
+export function Cofre({ estado, medidoEm, vista, agora }: PropsTela) {
   const { rota, ir } = useRota()
   const cofre = estado.cofre
   const estreito = usarEstreito()
@@ -523,7 +525,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
   const [termoBusca, setTermoBusca] = useState('')
   const [modoComando, setModoComando] = useState(true)
   const [modoLayout, setModoLayout] = useState<ModoLayout>('multi-anel')
-  const [animarSinal, setAnimarSinal] = useState(true)
+  const [animarSinal, setAnimarSinal] = useState(false)
   const [areasAbertas, setAreasAbertas] = useState(false)
 
   const alternarAreasAbertas = () => setAreasAbertas((prev) => !prev)
@@ -546,13 +548,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
 
   const nosFiltradosBusca = useMemo(() => {
     if (!termoBusca.trim()) return []
-    const q = termoBusca.toLowerCase()
-    return nos.filter((n) =>
-      n.rotulo.toLowerCase().includes(q)
-      || n.autor.toLowerCase().includes(q)
-      || n.especie.toLowerCase().includes(q)
-      || n.caso.toLowerCase().includes(q)
-    ).slice(0, 6)
+    return buscarNos(nos, termoBusca)
   }, [nos, termoBusca])
 
   const atual = nos.find((n) => n.id === escolhido) ?? nos[0]
@@ -642,6 +638,10 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
           Não consegui medir o Cofre de conhecimento. {cofre?.erro ?? 'Fonte indisponível.'}
         </div>
       ) : (
+        <CofreConfianca
+          nos={nos} arestas={cofre.arestas} escolhido={atual.id}
+          aoEscolher={escolher} agora={agora.getTime()} auditoria={cofre.auditoria_v2} avisos={cofre.avisos}
+        >
         <PainelInstrumentoCofre
           fps={fps}
           cofre={cofre}
@@ -707,6 +707,7 @@ export function Cofre({ estado, medidoEm, vista }: PropsTela) {
             </>
           }
         />
+        </CofreConfianca>
       )}
 
       <Parcial dado={vista.dado} />
