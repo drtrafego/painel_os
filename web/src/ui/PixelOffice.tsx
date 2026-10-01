@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { desenharEscritorioGold } from './PixelOffice.gold'
 import { ParedeEscritorio } from './PixelOffice.wall'
 import { montarTarefasParede, type GastosIA } from './PixelOffice.wall-data'
+import type { QuadroTarefasSolicitadas } from './nucleo/dados'
+import { useRota } from '../nav/useRota'
+import { POR_ID, type VistaId } from '../nav/rotas'
 import logoCasal from '../assets/casal-do-trafego.png'
 import './PixelOffice.gold.css'
 import type { AgenteSessao, AgenteVivo, Estado, TarefasDiretores } from '../dados/tipos'
@@ -36,9 +39,11 @@ interface PixelOfficeProps {
   soAtivos?: boolean
   aoAlternarSoAtivos?: (soAtivos: boolean) => void
   aoAbrirCerebro?: () => void
-  /** Opcional: valores monetários reais. Nunca derivados de tokens ou da despesa geral. */
+  /** Compatibilidade do pacote anterior. A parede de cotas desta versão não usa este campo. */
   gastosIA?: GastosIA | null
   tarefasDiretores?: TarefasDiretores | null
+  /** Solicitações reais. Ausência nunca é preenchida com execução técnica da sonda. */
+  tarefasSolicitadas?: QuadroTarefasSolicitadas | null
 }
 
 type ObjetoMesa = 'codigo' | 'texto' | 'arte' | 'radar' | 'metricas' | 'qualidade' | 'envio' | 'cafe'
@@ -738,10 +743,11 @@ function useSquadsSobDemanda(execucoes: ExecucaoVisual[]) {
   return { abertos, saindo }
 }
 
-export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos, aoAbrirCerebro, gastosIA, tarefasDiretores }: PixelOfficeProps) {
+export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos, aoAbrirCerebro, gastosIA, tarefasDiretores, tarefasSolicitadas }: PixelOfficeProps) {
+  const { ir: abrirModulo } = useRota()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const palcoRef = useRef<HTMLDivElement | null>(null)
-  const hitsRef = useRef<Array<{ chave: string; x: number; y: number; largura: number; altura: number }>>([])
+  const hitsRef = useRef<Array<{ chave: string; x: number; y: number; largura: number; altura: number; modulo?: string }>>([])
   const animacoesRef = useRef(new Map<string, EstadoAnimacaoBoneco>())
   const fasesRef = useRef(new Map<string, FaseBoneco>())
   const progressoIlhasRef = useRef(new Map<PixelAgentSquad, number>())
@@ -1109,7 +1115,9 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   )
   const tratarClique = (evento: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = evento.currentTarget.getBoundingClientRect(); const x = (evento.clientX - rect.left) / zoom; const y = (evento.clientY - rect.top) / zoom
-    const hit = [...hitsRef.current].reverse().find((item) => x >= item.x && x <= item.x + item.largura && y >= item.y && y <= item.y + item.altura); if (hit) selecionar(hit.chave)
+    const hit = [...hitsRef.current].reverse().find((item) => x >= item.x && x <= item.x + item.largura && y >= item.y && y <= item.y + item.altura)
+    if (hit?.modulo && hit.modulo in POR_ID) { abrirModulo(hit.modulo as VistaId); return }
+    if (hit) selecionar(hit.chave)
   }
   const tratarTeclado = (evento: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Enter', ' '].includes(evento.key) || execucoesVisiveis.length === 0) return
@@ -1128,7 +1136,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       </header>
       <div className="ct-body">
         <div role="region" className="ct-main" aria-label="Escritório e painéis operacionais">
-          <ParedeEscritorio uso={estado?.uso_planos} gastos={gastosIA} tarefas={tarefasDaParede} descricaoSonda={descricaoSonda} leituraConfirmada={statusLeitura === 'confirmado'} />
+          <ParedeEscritorio uso={estado?.uso_planos} gastos={gastosIA} tarefas={tarefasDaParede} tarefasSolicitadas={tarefasSolicitadas} descricaoSonda={descricaoSonda} leituraConfirmada={statusLeitura === 'confirmado'} />
           <div className="ct-toolbar" role="toolbar" aria-label="Controles do escritório">
             <span className="ct-room-label"><i className="ct-dot ct-dot-amber" />Escritório vivo <span className="ct-tag">{execucoesVisiveis.length} visíveis</span></span>
             <button type="button" className="ct-button" onClick={() => aoAlternarSoAtivos?.(!soAtivos)} aria-pressed={soAtivos}>Só ativos</button>
@@ -1147,7 +1155,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
         <aside className="ct-inspector" aria-label="Detalhe do agente">
           <span className="ct-kicker">OPERAÇÃO / AGENTES</span><h3>Inteligência<br />em movimento.</h3>
           <div className="ct-stats"><div className="ct-stat"><strong>{totalAtivos}</strong><span>Trabalhando / catálogo vivo</span></div><div className="ct-stat"><strong>{layout.ocupantesDescanso}</strong><span>Descansando / sala visível</span></div><div className="ct-stat"><strong>{execucoesVisiveis.length}</strong><span>Agentes visíveis</span></div><div className="ct-stat"><strong>{layout.ilhas.length}</strong><span>Ambientes abertos</span></div></div>
-          {selecionada ? <div className="ct-selection">
+          {selecionada && agenteSelecionadoId ? <div className="ct-selection">
             <div className="ct-selection-header"><span className="ct-director-avatar" style={{ borderColor: selecionada.cor }} aria-hidden="true">{selecionada.nome.slice(0, 1)}</span><div><h4 data-testid="office-agent-name">{selecionada.nome}</h4><div className="ct-squad">{selecionada.squadNome}{selecionada.squad === SALA_MISTA ? ' · COMPARTILHADO' : selecionada.temporaria ? ' · TEMPORÁRIO' : ' · FIXO'}</div></div></div>
             <div className="ct-phase">{rotuloFase(faseSelecionada, selecionada.ativa)}</div>
             <p>{selecionada.execucao.tarefa || selecionada.execucao.descricao || selecionada.execucao.etapa || selecionada.ficha?.papel || 'Sem tarefa no momento'}</p>
@@ -1159,8 +1167,9 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               <div><dt>Função</dt><dd>{funcaoLegivelDaExecucao(selecionada.execucao, selecionada.ficha)}</dd></div>
             </dl>
             <details className="ct-relations"><summary>Agentes lançados por esta execução</summary>{renderizarArvoreLancados(montarArvoreLancadosPor(agentes, referenciasDoAgente(selecionada.execucao)))}</details>
-          </div> : <div className="ct-selection"><p>Nenhum agente visível com os filtros e ambientes atuais. A sala continua acompanhando a operação.</p></div>}
-          <ListaDeLancadores grupos={gruposLancadores} catalogo={catalogo} execucoes={todasExecucoes} aoSelecionar={selecionar} />
+          </div> : <div className="ct-selection"><p>Selecione um boneco para ver sua execução aqui. Os detalhes aparecem uma única vez, sem substituir as tarefas solicitadas.</p></div>}
+          <details className="nx-launchers"><summary>Execuções por lançador</summary><ListaDeLancadores grupos={gruposLancadores} catalogo={catalogo} execucoes={todasExecucoes} aoSelecionar={selecionar} /></details>
+          <div className="nx-squad-list"><h4>Ambientes abertos</h4>{layout.ilhas.map(ilha => <div key={ilha.squad}><span><i style={{ backgroundColor: ilha.cor }} />{ilha.nome}</span><b>{ilha.mesas.length}</b></div>)}</div>
           <p className="ct-inspector-note">Trabalhando: vai à mesa e permanece digitando.<br />Silencioso: permanece na mesa.<br />Parado: segue o descanso configurado.<br />Abertura dos ambientes e presença vêm da operação, não do desenho.</p>
         </aside>
       </div>

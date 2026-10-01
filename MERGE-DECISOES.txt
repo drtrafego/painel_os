@@ -1,0 +1,11 @@
+Merge integracao-0110 com origin/main faba9d3
+
+web/src/ui/PixelOffice.tsx
+- Imports e navegacao: mantida a estrutura do dono com useRota, POR_ID e props de modulo para a perspectiva/NucleoShell; reaplicado o import local de montarTarefasParede.
+- Props: mantidas as props novas tarefasSolicitadas e a compatibilidade local com gastosIA/tarefasDiretores.
+- Parede: chamada integrada passa uso_planos, gastosIA, tarefasDiretores convertido para ColunaTarefas e tarefasSolicitadas como fallback.
+
+web/src/ui/PixelOffice.wall.tsx
+- Consumo/Gastos de IAs: mantido o desenho novo do dono com montarCotas e duas janelas, incluindo Semanal 7 dias do Claude; preservada compatibilidade local para valores monetarios reais quando gastosIA existir.
+- Tarefas: mantida a fila local lida de tarefas_diretores, com ordem, dependencia, prioridade, data, estado bloqueado/em andamento e linha compacta controlada pelo CSS local.
+- Fallback: mantido o contrato novo tarefasSolicitadas para chamadas futuras sem tarefas_diretores, sem misturar execucoes tecnicas da sonda com solicitacoes.

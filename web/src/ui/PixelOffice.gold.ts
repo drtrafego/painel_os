@@ -32,7 +32,7 @@ export interface QuadroGold {
   progressoDia: number; tempo: number; reduzirMovimento: boolean
   selecionadoId?: string | null; progressos?: ReadonlyMap<string, number>
 }
-export interface HitGold { chave: string; x: number; y: number; largura: number; altura: number }
+export interface HitGold { chave: string; x: number; y: number; largura: number; altura: number; modulo?: string }
 type Ponto = { x: number; y: number }
 type Objeto = { ordem: number; desenhar: () => void; ilha?: IlhaGold }
 const clamp = (n: number, a = 0, b = 1) => Math.max(a, Math.min(b, n))
@@ -313,6 +313,28 @@ export function desenharEscritorioGold(ctx: CanvasRenderingContext2D, quadro: Qu
     texto('CT / OPERAÇÕES', { x: 0, y: 0 }, 22, '#f4ce4b', 800, 'center')
     texto('C A S A L  D O  T R Á F E G O', { x: 0, y: 18 * escala }, 7.5, '#c6c2b4', 650, 'center'); ctx.restore()
     linha(p(centro - painelW / 2 + 10, 40, 24), p(centro + painelW / 2 - 10, 40, 24), '#f4ce4b', 1.6)
+    // Estações fixas de navegação, não squads nem agentes. Mesmo escritório,
+    // mesmos destinos de rota. Não interferem no cálculo operacional da planta.
+    const estacoes = [
+      ['diretores', 'AGENTES / SQUADS'], ['estudio', 'CONTEÚDO'],
+      ['pipeline', 'COMERCIAL'], ['financeiro', 'FINANCEIRO'],
+      ['cofre', 'CONHECIMENTO'], ['ferramentas', 'OPERAÇÃO'],
+    ]
+    const colunasEstacao = w < 850 ? 3 : 6
+    const larguraEstacao = (w - 60) / colunasEstacao
+    estacoes.forEach(([modulo, nome], indice) => {
+      const x = 30 + (indice % colunasEstacao) * larguraEstacao
+      const z = w < 850 ? 62 + Math.floor(indice / colunasEstacao) * 34 : 84
+      const a = larguraEstacao - 10
+      caixa(x, z, a, 7, 5, 22, '#30382e')
+      poly([p(x+3,z+7,7),p(x+a-3,z+7,7),p(x+a-3,z+7,25),p(x+3,z+7,25)], '#111b1d')
+      linha(p(x+3,z+7,25),p(x+a-3,z+7,25),'#edce66',1.5)
+      const q = p(x + a / 2, z + 7, 16)
+      texto(limitarTexto(nome, a - 16, 9.5), q, 9.5, '#ead79b', 700, 'center')
+      const cantos = [p(x,z+7,5),p(x+a,z+7,5),p(x,z+7,29),p(x+a,z+7,29)]
+      const hx = Math.min(...cantos.map(c=>c.x)), hy = Math.min(...cantos.map(c=>c.y))
+      hits.push({ chave: `navegacao:${modulo}`, modulo, x:hx, y:hy, largura:Math.max(...cantos.map(c=>c.x))-hx, altura:Math.max(...cantos.map(c=>c.y))-hy })
+    })
     // As ilhas são recebidas já filtradas. Não materializar nenhuma outra.
     layout.ilhas.forEach((ilha, idx) => {
       const { x, y: z, largura: a, altura: b } = ilha
