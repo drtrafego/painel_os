@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { NucleoShell } from './ui/nucleo/NucleoShell'
+import { moduloAberto } from './ui/nucleo/areas'
 import { Sidebar } from './ui/Sidebar'
 import { Topbar } from './ui/Topbar'
 import { EstadoInvalido, Rede } from './ui/Erro'
@@ -236,6 +238,33 @@ export default function App() {
         return <OQueFalta {...comum} />
     }
   }
+
+  // CT_NUCLEO_SHELL_BEGIN — camada de apresentação; switch, dados e rotas acima preservados.
+  const usarNucleo = typeof window === 'undefined' || new URLSearchParams(window.location.search).get('interface') !== 'classica'
+  if (usarNucleo) {
+    return (
+      <NucleoShell
+        rota={rota}
+        aoIr={ir}
+        areaRef={areaRef}
+        instrumentos={(abrirAreas) => <Topbar
+          hora={hora}
+          estado={estado}
+          vista={moduloAberto(rota) ? vista.nome : 'Escritório'}
+          aoAbrirMenu={abrirAreas}
+          expandido={larguraExpandida}
+          aoAlternarExpandido={alternarLarguraExpandida}
+          faixa={faixa}
+          aoMudarFaixa={setFaixa}
+        />}
+        avisos={origem === 'estado-invalido' && problemas ? <EstadoInvalido problemas={problemas} origem="/api/estado" /> : null}
+        escritorio={<Rede ondeEstava="Escritório"><Suspense fallback={<CarregandoTela />}><Tarefas {...comum} vista={POR_ID.tarefas} /></Suspense></Rede>}
+      >
+        {moduloAberto(rota) ? <Rede ondeEstava={vista.nome}><Suspense fallback={<CarregandoTela />}>{desenhar()}</Suspense></Rede> : null}
+      </NucleoShell>
+    )
+  }
+  // CT_NUCLEO_SHELL_END — interface clássica permanece integral abaixo.
 
   return (
     <div className="flex h-screen overflow-hidden">
