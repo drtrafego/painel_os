@@ -1,3 +1,4 @@
+import { chaveRelacao, descreverRelacao } from '../dados/cofre-confianca'
 import { corDaArea, corDaAreaEscuro } from '../dados/cofre'
 import type { ArestaCofre, Estado, NoMemoria } from '../dados/tipos'
 import { Cabecalho, Pilula } from './primitivos'
@@ -82,7 +83,7 @@ export function FichaCofre(props: {
       {/* ROTA / CAMINHO SELECIONADO */}
       {caminho !== null && alvoNo && (
         <div data-caminho-cofre className="mt-3.5 rounded-md border border-vermelho/30 bg-vermelho/10 p-2.5">
-          <div className="rotulo mb-1.5 text-vermelho">caminho até {alvoNo.rotulo}</div>
+          <div className="rotulo mb-1.5 text-vermelho">caminho de navegação até {alvoNo.rotulo}</div>
           <ol className="space-y-1.5">
             {caminho.slice(1).map((id, i) => (
               <li data-caminho-salto key={id} className="text-[11px] leading-relaxed">
@@ -103,8 +104,8 @@ export function FichaCofre(props: {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className="rotulo flex items-center gap-1">
-              <span className="rounded bg-amber-500/20 px-1 font-bold text-amber-400">PRE</span>
-              antecedentes (de onde veio)
+              <span className="rounded bg-amber-500/20 px-1 font-bold text-amber-400">ENTRA</span>
+              relações de entrada
             </span>
             <span className="font-mono text-[10px] opacity-60">{entram.length}</span>
           </div>
@@ -112,17 +113,17 @@ export function FichaCofre(props: {
             {entram.length ? entram.map((a) => (
               <button
                 type="button"
-                key={`${a.de}:${a.para}`}
-                title={`PRE: ${a.porque}`}
+                key={chaveRelacao(a)}
+                title={`${descreverRelacao(a).rotulo}: ${a.porque}`}
                 onClick={() => escolher(a.de)}
                 className="group transition-transform active:scale-95"
               >
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-left font-mono text-[10.5px] hover:border-amber-400">
                   <span className="size-1.5 rounded-full" style={{ background: (modoComando ? corDaAreaEscuro : corDaArea)(nos.find((n) => n.id === a.de)?.area ?? '') }} />
-                  <span className="truncate max-w-[280px]">{curto(a.de)}</span>
+                  <span className="opacity-65">{descreverRelacao(a).rotulo} · </span><span className="truncate max-w-[280px]">{curto(a.de)}</span>
                 </span>
               </button>
-            )) : <span className="text-xs opacity-50">nenhum antecedente declarado</span>}
+            )) : <span className="text-xs opacity-50">nenhuma relação de entrada registrada</span>}
           </div>
         </div>
 
@@ -130,8 +131,8 @@ export function FichaCofre(props: {
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className="rotulo flex items-center gap-1">
-              <span className="rounded bg-sky-500/20 px-1 font-bold text-sky-400">NEXT</span>
-              destrava / consequências
+              <span className="rounded bg-sky-500/20 px-1 font-bold text-sky-400">SAI</span>
+              relações de saída
             </span>
             <span className="font-mono text-[10px] opacity-60">{saem.length}</span>
           </div>
@@ -139,23 +140,23 @@ export function FichaCofre(props: {
             {saem.length ? saem.map((a) => (
               <button
                 type="button"
-                key={`${a.de}:${a.para}`}
-                title={`NEXT: ${a.porque}`}
+                key={chaveRelacao(a)}
+                title={`${descreverRelacao(a).rotulo}: ${a.porque}`}
                 onClick={() => escolher(a.para)}
                 className="group transition-transform active:scale-95"
               >
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-left font-mono text-[10.5px] hover:border-sky-400">
                   <span className="size-1.5 rounded-full" style={{ background: (modoComando ? corDaAreaEscuro : corDaArea)(nos.find((n) => n.id === a.para)?.area ?? '') }} />
-                  <span className="truncate max-w-[280px]">{curto(a.para)}</span>
+                  <span className="opacity-65">{descreverRelacao(a).rotulo} · </span><span className="truncate max-w-[280px]">{curto(a.para)}</span>
                 </span>
               </button>
-            )) : <span className="text-xs opacity-50">não destrava outro registro diretamente</span>}
+            )) : <span className="text-xs opacity-50">nenhuma relação de saída registrada</span>}
           </div>
         </div>
 
         {/* Nota de Privacidade & Auditoria */}
         <div className="border-t border-linha pt-3 font-mono text-[10px] leading-relaxed opacity-60">
-          Registro auditado na fonte. Título, corpo, caso e autor passam pela trava sanitizadora de PII do coletor.
+          Localização na fonte e sanitização não comprovam a sustentação de cada afirmação. Confira revisão, vigência e evidências na nova leitura de Evidências.
         </div>
       </div>
     </aside>

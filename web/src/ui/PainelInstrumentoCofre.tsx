@@ -57,7 +57,7 @@ export function PainelInstrumentoCofre({
       <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-3 py-2 ${divisoria}`}>
         <span className={`inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold tracking-wider ${modoComando ? 'text-emerald-400' : 'text-verde'}`}>
           <span className="size-1.5 rounded-full bg-current" />
-          SISTEMA OPERACIONAL
+          MAPA DE CONHECIMENTO
         </span>
         <span className={`font-mono text-[11px] font-bold ${modoComando ? 'text-sky-400' : 'text-tinta'}`}>
           {fps} <span className={`text-[9px] ${secundario}`}>FPS</span>
@@ -106,10 +106,10 @@ export function PainelInstrumentoCofre({
         <div className="ml-auto min-w-0 flex-[1_1_220px] sm:max-w-xs">
           <input
             type="text"
-            aria-label="Buscar nó, autor ou caso"
+            aria-label="Buscar ID, conteúdo, autor, fonte ou caso"
             value={termoBusca}
             onChange={(e) => setTermoBusca(e.target.value)}
-            placeholder="🔍 Buscar nó, autor ou caso..."
+            placeholder="Buscar ID, conteúdo ou fonte..."
             className={`w-full rounded border px-3 py-1 font-mono text-[11px] outline-none transition-colors ${modoComando
               ? 'border-sky-500/40 bg-slate-900/90 text-slate-100 placeholder-slate-500 focus:border-sky-400'
               : 'border-linha bg-white/80 text-tinta placeholder-tinta-3 focus:border-linha-forte'}`}
