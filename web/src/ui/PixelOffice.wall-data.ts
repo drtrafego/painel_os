@@ -1,6 +1,5 @@
 /** Adaptadores de LEITURA. Não criam tarefas, agentes, cobranças ou estimativas. */
-import type { AgenteVivo, UsoPlanos } from '../dados/tipos'
-import type { GrupoLancador } from '../dados/lancadores'
+import type { TarefasDiretores, UsoPlanos } from '../dados/tipos'
 
 export interface GastoIA {
   id: string
@@ -19,20 +18,29 @@ export interface GastosIA {
 export interface TarefaParede {
   chave: string
   nome: string
+  ordem: number
   titulo: string
-  estado: AgenteVivo['estado']
-  ferramenta: string | null
+  prioridade: 'P0' | 'P1' | 'P2' | 'P3'
+  data: string | null
+  dependeDe: string | null
+  estado: 'ativa' | 'bloqueada' | 'concluida'
+  emAndamento: boolean
 }
 export interface ColunaTarefas {
   id: 'renato' | 'luana'
   nome: string
   tarefas: TarefaParede[]
+  avisos: string[]
+  lidoEm: string | null
 }
 export interface UsoParede {
   id: string
   nome: string
   janela: string
   percentual: number | null
+  semanaPercentual?: number | null
+  semanaJanelaDias?: number | null
+  semanaOficial?: boolean
   tokens: number | null
   observado: boolean
   nota: string
@@ -70,6 +78,9 @@ export function montarUsoParede(uso?: UsoPlanos): UsoParede[] {
   return [
     { id: 'claude', nome: 'Claude', janela: 'Sessão · 5 horas',
       percentual: numeroMedido(claude?.sessao_5h_percentual), tokens: numeroMedido(claude?.tokens_24h_estimativa),
+      semanaPercentual: numeroMedido(claude?.semana_7d_percentual),
+      semanaJanelaDias: numeroMedido(claude?.semana_7d_janela_dias) ?? 7,
+      semanaOficial: claude?.semana_7d_fonte_percentual_oficial === true,
       observado: uso?.status === 'pronto' && claude?.fonte_percentual_oficial === true,
       nota: claude?.fonte_percentual_oficial ? 'Percentual oficial do plano' : 'Origem oficial não confirmada' },
     { id: 'codex', nome: 'Codex', janela: codex?.primario_janela_dias ? `Janela · ${codex.primario_janela_dias} dias` : 'Janela primária',
@@ -77,24 +88,26 @@ export function montarUsoParede(uso?: UsoPlanos): UsoParede[] {
       observado: uso?.status === 'pronto', nota: codex?.conta_compartilhada ? 'Conta compartilhada' : textoMedido(codex?.plano) || 'Plano não informado' },
   ]
 }
-/** Usa os grupos do algoritmo EXISTENTE; nunca infere o lançador pelo nome. */
-export function montarTarefasParede(
-  grupos: readonly GrupoLancador[],
-  resolver: (agente: AgenteVivo) => { chave: string; nome: string } | undefined,
-): ColunaTarefas[] {
+/** A parede de tarefas lê o contrato próprio, separado da presença dos agentes. */
+export function montarTarefasParede(tarefas?: TarefasDiretores | null): ColunaTarefas[] {
   return (['renato', 'luana'] as const).map(id => {
-    const grupo = grupos.find(g => g.id === id)
-    const vistas = new Set<string>()
-    const tarefas: TarefaParede[] = []
-    for (const agente of grupo?.agentes || []) {
-      const visual = resolver(agente)
-      // Sem visual identificável não inventamos um alvo clicável.
-      if (!visual || vistas.has(visual.chave)) continue
-      vistas.add(visual.chave)
-      tarefas.push({ chave: visual.chave, nome: visual.nome,
-        titulo: textoMedido(agente.tarefa) || textoMedido(agente.descricao) || textoMedido(agente.etapa) || 'Tarefa não informada',
-        estado: agente.estado, ferramenta: textoMedido(agente.ferramenta) })
+    const pacote = tarefas?.[id]
+    return {
+      id,
+      nome: id === 'renato' ? 'Renato' : 'Luana',
+      tarefas: (pacote?.itens || []).map(item => ({
+        chave: item.chave,
+        nome: item.responsavel,
+        ordem: item.ordem,
+        titulo: item.titulo,
+        prioridade: item.prioridade,
+        data: item.data,
+        dependeDe: item.depende_de,
+        estado: item.estado_tarefa,
+        emAndamento: item.em_andamento,
+      })),
+      avisos: pacote?.avisos || [],
+      lidoEm: pacote?.lido_em || null,
     }
-    return { id, nome: id === 'renato' ? 'Renato' : 'Luana', tarefas }
   })
 }

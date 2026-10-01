@@ -1598,6 +1598,46 @@ conferir("uso_planos.codex passa na trava de privacidade sem vazar", c.auditar_e
 
 shutil.rmtree(tmp_codex_dir)
 
+print("\n--- uso do plano claude: semana oficial, ausência e cache velho")
+tmp_claude_dir = Path(tempfile.mkdtemp())
+try:
+    oficial = tmp_claude_dir / "uso_claude_oficial.json"
+    oficial.write_text(json.dumps({
+        "medido_em": c.agora_utc().isoformat(),
+        "fonte": "statusLine Claude Code",
+        "cinco_horas": {"usado_pct": 7, "reseta_em": 1790838000},
+        "sete_dias": {"usado_pct": 33, "reseta_em": 1791352800},
+    }), encoding="utf-8")
+    res_claude = c.ler_uso_planos_claude(pasta_projetos=tmp_claude_dir / "projetos", caminho_oficial=oficial)
+    conferir("claude semana_7d_percentual vem da fonte oficial", res_claude["semana_7d_percentual"], 33)
+    conferir("claude semana_7d_janela_dias declarada", res_claude["semana_7d_janela_dias"], 7)
+    conferir("claude semana_7d_fonte_percentual_oficial verdadeira", res_claude["semana_7d_fonte_percentual_oficial"], True)
+
+    oficial.write_text(json.dumps({
+        "medido_em": c.agora_utc().isoformat(),
+        "fonte": "statusLine Claude Code",
+        "cinco_horas": {"usado_pct": 7, "reseta_em": 1790838000},
+        "sete_dias": {"reseta_em": 1791352800},
+    }), encoding="utf-8")
+    res_claude_sem_semana = c.ler_uso_planos_claude(pasta_projetos=tmp_claude_dir / "projetos", caminho_oficial=oficial)
+    conferir("claude sem semana oficial não inventa percentual", res_claude_sem_semana["semana_7d_percentual"], None)
+    conferir("claude sem usado_pct não declara janela semanal", res_claude_sem_semana["semana_7d_janela_dias"], None)
+    conferir("claude sem semana oficial marca falso", res_claude_sem_semana["semana_7d_fonte_percentual_oficial"], False)
+
+    velho = (c.agora_utc() - datetime.timedelta(hours=7)).isoformat()
+    oficial.write_text(json.dumps({
+        "medido_em": velho,
+        "fonte": "statusLine Claude Code",
+        "cinco_horas": {"usado_pct": 7, "reseta_em": 1790838000},
+        "sete_dias": {"usado_pct": 33, "reseta_em": 1791352800},
+    }), encoding="utf-8")
+    res_claude_velho = c.ler_uso_planos_claude(pasta_projetos=tmp_claude_dir / "projetos", caminho_oficial=oficial)
+    conferir("claude cache velho não usa percentual semanal", res_claude_velho["semana_7d_percentual"], None)
+    conferir("claude cache velho preserva janela conhecida", res_claude_velho["semana_7d_janela_dias"], 7)
+    conferir("claude cache velho marca fonte semanal falsa", res_claude_velho["semana_7d_fonte_percentual_oficial"], False)
+finally:
+    shutil.rmtree(tmp_claude_dir, ignore_errors=True)
+
 print("\n--- financeiro: allowlist e isolamento de PII (rodada 8)")
 dados_sinteticos_financeiro = {
     "mrr": 15000.0,

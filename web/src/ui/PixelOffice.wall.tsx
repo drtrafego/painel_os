@@ -5,13 +5,11 @@ interface ParedeProps {
   uso?: UsoPlanos
   gastos?: GastosIA | null
   tarefas: ColunaTarefas[]
-  aoSelecionar: (chave: string) => void
-  selecionadoId?: string | null
   descricaoSonda: string
   leituraConfirmada: boolean
 }
 /** Painéis HTML reais sobre a parede do escritório; não são uma imagem. */
-export function ParedeEscritorio({ uso, gastos, tarefas, aoSelecionar, selecionadoId, descricaoSonda, leituraConfirmada }: ParedeProps) {
+export function ParedeEscritorio({ uso, gastos, tarefas, descricaoSonda, leituraConfirmada }: ParedeProps) {
   const planos = montarUsoParede(uso)
   const totais = totalizarGastos(gastos)
   return (
@@ -35,6 +33,12 @@ export function ParedeEscritorio({ uso, gastos, tarefas, aoSelecionar, seleciona
             <div className="ct-meter" role={plano.percentual === null ? 'img' : 'meter'} aria-label={plano.percentual === null ? `Uso do plano ${plano.nome} não informado` : `Uso do plano ${plano.nome}`} aria-valuemin={plano.percentual === null ? undefined : 0} aria-valuemax={plano.percentual === null ? undefined : 100} aria-valuenow={plano.percentual === null ? undefined : Math.min(plano.percentual, 100)} aria-valuetext={plano.percentual === null ? undefined : `${formatarNumero(plano.percentual)} por cento`}>
               <i style={{ width: `${Math.min(100, plano.percentual ?? 0)}%` }} />
             </div>
+            {plano.id === 'claude' ? <div className="ct-week-usage" title={plano.semanaOficial ? 'Percentual oficial da janela semanal do Claude Code' : 'Semana: sem fonte oficial'}>
+              <div><span>Semana · {formatarNumero(plano.semanaJanelaDias ?? 7)} dias</span><b>{plano.semanaOficial && typeof plano.semanaPercentual === 'number' ? `${formatarNumero(plano.semanaPercentual)}%` : 'sem fonte oficial'}</b></div>
+              {plano.semanaOficial && typeof plano.semanaPercentual === 'number' ? <div className="ct-meter" role="meter" aria-label="Uso semanal do plano Claude" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(plano.semanaPercentual, 100)} aria-valuetext={`${formatarNumero(plano.semanaPercentual)} por cento`}>
+                <i style={{ width: `${Math.min(100, plano.semanaPercentual)}%` }} />
+              </div> : null}
+            </div> : null}
             <p>{formatarNumero(plano.tokens)} <span>tokens / 24h · estimativa</span></p>
             <small>{plano.observado ? plano.nota : 'Leitura não confirmada · ' + plano.nota}</small>
           </article>)}
@@ -46,19 +50,23 @@ export function ParedeEscritorio({ uso, gastos, tarefas, aoSelecionar, seleciona
         <p className="ct-disclaimer">Tokens e percentual de plano não são custo em dinheiro. Sem conversão estimada.</p>
       </section>
       <section className="ct-display ct-tasks" aria-label="Tarefas de Renato e Luana">
-        <header className="ct-display-heading"><div><span className="ct-kicker">PAINEL 02 / EXECUÇÃO</span><h3>Tarefas</h3></div><span className="ct-tag" title={descricaoSonda}>{leituraConfirmada ? 'Execuções ao vivo' : 'Leitura não confirmada'}</span></header>
+        <header className="ct-display-heading"><div><span className="ct-kicker">PAINEL 02 / FILA</span><h3>Tarefas</h3></div><span className="ct-tag" title={descricaoSonda}>{leituraConfirmada ? 'Memória lida' : 'Leitura não confirmada'}</span></header>
         <div className="ct-task-columns">
           {tarefas.map(coluna => <section className="ct-task-column" aria-label={`Tarefas de ${coluna.nome}`} key={coluna.id} data-testid={`office-tasks-${coluna.id}`}>
-            <header><span className="ct-director-avatar" aria-hidden="true">{coluna.nome[0]}</span><div><h4>{coluna.nome}</h4><small>{coluna.tarefas.length} {coluna.tarefas.length === 1 ? 'execução' : 'execuções'} na sonda</small></div></header>
+            <header><div><h4>{coluna.nome}</h4><small>{coluna.tarefas.length} {coluna.tarefas.length === 1 ? 'tarefa' : 'tarefas'} na fila</small></div></header>
             <div className="ct-task-list">
-              {coluna.tarefas.length ? coluna.tarefas.map(tarefa => <button type="button" key={tarefa.chave} onClick={() => aoSelecionar(tarefa.chave)} aria-pressed={selecionadoId === tarefa.chave} className="ct-task" title={tarefa.titulo}>
-                <span className={`ct-task-state ${tarefa.estado === 'trabalhando' ? 'ct-task-running' : ''}`} aria-hidden="true">{tarefa.estado === 'trabalhando' ? '↗' : 'Ⅱ'}</span>
-                <span className="ct-task-copy"><b>{tarefa.titulo}</b><small>{tarefa.nome}</small><em>{tarefa.estado === 'trabalhando' ? 'Em execução' : 'Silencioso · na mesa'}{tarefa.ferramenta ? ` · ${tarefa.ferramenta}` : ''}</em></span>
-              </button>) : <p className="ct-task-empty">Nenhuma execução recebida para {coluna.nome}.{!leituraConfirmada ? ' A sonda ainda precisa confirmar a leitura.' : ''}</p>}
+              {coluna.tarefas.length ? coluna.tarefas.map(tarefa => <button type="button" key={tarefa.chave} onClick={(evento) => evento.currentTarget.blur()} aria-label={`Tarefa ${tarefa.ordem}: ${tarefa.titulo}`} className={`ct-task ${tarefa.emAndamento ? 'ct-task-current' : ''} ${tarefa.estado === 'bloqueada' ? 'ct-task-blocked' : ''}`} title={tarefa.titulo}>
+                <span className={`ct-task-state ${tarefa.emAndamento ? 'ct-task-running' : ''}`} aria-hidden="true">{tarefa.ordem}</span>
+                <b className="ct-task-title">{tarefa.titulo}</b>
+                {tarefa.dependeDe ? <span className="ct-task-dep" title={`depende de ${tarefa.dependeDe}`} aria-label={`depende de ${tarefa.dependeDe}`}>↳</span> : null}
+                <span className="ct-task-priority">{tarefa.prioridade}</span>
+                {tarefa.data ? <time className="ct-task-date">{tarefa.data}</time> : <span className="ct-task-date" aria-hidden="true">—</span>}
+              </button>) : <p className="ct-task-empty">Sem tarefas na fila{coluna.avisos[0] ? `. ${coluna.avisos[0]}` : ''}</p>}
             </div>
+            {coluna.tarefas.length && coluna.avisos[0] ? <p className="ct-task-empty">{coluna.avisos[0]}</p> : null}
           </section>)}
         </div>
-        <footer className="ct-source"><span className={`ct-dot ${leituraConfirmada ? 'ct-dot-green' : 'ct-dot-amber'}`} /><span>{descricaoSonda}. Bia e outras origens continuam no inspetor.</span></footer>
+        <footer className="ct-source"><span className={`ct-dot ${leituraConfirmada ? 'ct-dot-green' : 'ct-dot-amber'}`} /><span>{descricaoSonda}. Agentes vivos continuam no escritório.</span></footer>
       </section>
     </div>
   )

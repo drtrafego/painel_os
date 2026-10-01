@@ -1,0 +1,91 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Setor de bots: desenvolvimento e fiscalização de agentes",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "pipeline-completo",
+        "label": "Pipeline completo",
+        "focus": [
+          "renato",
+          "heitor",
+          "vitor",
+          "dev",
+          "qa",
+          "explore"
+        ],
+        "note": "Fluxo de desenvolvimento, regência e testes automatizados de bots."
+      }
+    ],
+    "output": "web/public/mapas/setor-bots.html"
+  },
+  "lanes": [
+    {
+      "id": "bots",
+      "label": "Squad de bots"
+    }
+  ],
+  "phases": [
+    {
+      "id": "diretoria",
+      "label": "Diretoria",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "regencia",
+      "label": "Regência e fiscalização",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "security"
+    },
+    {
+      "id": "engenharia",
+      "label": "Engenharia e testes",
+      "fromCol": 3,
+      "toCol": 5
+    }
+  ],
+  "mainPath": [
+    "renato",
+    "heitor",
+    "vitor",
+    "dev",
+    "qa",
+    "explore"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "renato"
+    ],
+    "allowedTerminals": [
+      "explore"
+    ],
+    "requiredEdges": [
+      {
+        "from": "renato",
+        "to": "heitor"
+      },
+      {
+        "from": "heitor",
+        "to": "vitor"
+      },
+      {
+        "from": "heitor",
+        "to": "dev"
+      },
+      {
+        "from": "heitor",
+        "to": "qa"
+      },
+      {
+        "from": "heitor",
+        "to": "explore"
+      }
+    ]
+  }
+}

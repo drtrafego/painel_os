@@ -153,6 +153,7 @@ export function validarPayloadAgentesVivos(json: unknown): json is AgentesVivos 
       if (typeof ag !== 'object' || ag === null) return false
       if (typeof (ag as Record<string, unknown>).id !== 'string') return false
     }
+    if (obj.tarefas_diretores !== undefined && (typeof obj.tarefas_diretores !== 'object' || obj.tarefas_diretores === null)) return false
   }
   return true
 }

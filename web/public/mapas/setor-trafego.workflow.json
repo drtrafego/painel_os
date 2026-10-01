@@ -1,0 +1,97 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Setor de tráfego: gestão de mídia e campanhas",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "pipeline-completo",
+        "label": "Pipeline completo",
+        "focus": [
+          "bia",
+          "tereza",
+          "jade",
+          "gestor",
+          "analista",
+          "iris"
+        ],
+        "note": "Fluxo de regência, otimização e veiculação de tráfego pago."
+      }
+    ],
+    "output": "web/public/mapas/setor-trafego.html"
+  },
+  "lanes": [
+    {
+      "id": "trafego",
+      "label": "Squad de tráfego"
+    }
+  ],
+  "phases": [
+    {
+      "id": "diretoria",
+      "label": "Diretoria",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "regencia",
+      "label": "Regência e fiscalização",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "security"
+    },
+    {
+      "id": "operacao",
+      "label": "Operação e análise",
+      "fromCol": 3,
+      "toCol": 5
+    }
+  ],
+  "mainPath": [
+    "bia",
+    "tereza",
+    "jade",
+    "gestor",
+    "analista",
+    "iris"
+  ],
+  "semanticChecks": {
+    "allowedRoots": [
+      "bia",
+      "luana"
+    ],
+    "allowedTerminals": [
+      "iris",
+      "analista"
+    ],
+    "requiredEdges": [
+      {
+        "from": "bia",
+        "to": "tereza"
+      },
+      {
+        "from": "luana",
+        "to": "tereza"
+      },
+      {
+        "from": "tereza",
+        "to": "jade"
+      },
+      {
+        "from": "tereza",
+        "to": "gestor"
+      },
+      {
+        "from": "tereza",
+        "to": "analista"
+      },
+      {
+        "from": "tereza",
+        "to": "iris"
+      }
+    ]
+  }
+}

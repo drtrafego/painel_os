@@ -75,15 +75,18 @@ try:
     # Quando este arquivo é carregado como módulo pelo servidor/testes, o
     # pacote está disponível a partir da raiz do painel.
     from servidor.agentes_vivos import ler_agentes, ler_agentes_da_casa
+    from servidor.tarefas_diretores import sanitizar_texto_publico as sanitizar_tarefa_publica
 except ModuleNotFoundError:
     try:
         # Execução direta (python servidor/servir.py), em que o diretório do
         # script é a entrada do sys.path.
         from agentes_vivos import ler_agentes, ler_agentes_da_casa
+        from tarefas_diretores import sanitizar_texto_publico as sanitizar_tarefa_publica
     except ModuleNotFoundError:
         import sys
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from agentes_vivos import ler_agentes, ler_agentes_da_casa
+        from tarefas_diretores import sanitizar_texto_publico as sanitizar_tarefa_publica
 
 RAIZ = Path(__file__).resolve().parent.parent
 
@@ -518,9 +521,14 @@ if redigir_texto_livre is None:
         """Sanitiza texto livre: remove caminhos do sistema, redige emails/telefones e mascara nomes de clientes."""
         if not texto or not isinstance(texto, str):
             return texto
+        texto = texto[:400]
         # 1. Sanitizar caminhos internos (/opt/..., /home/..., C:\...)
         limpo = re.sub(r"/(?:opt|home|root|etc|var|tmp|usr)/\S+", "[caminho]", texto)
         limpo = re.sub(r"[a-zA-Z]:\\[^\s'\":]+", "[caminho]", limpo)
+
+        limpo = re.sub(r"(?i)\bsk-[a-z0-9_-]{8,}\b", "[segredo]", limpo)
+        limpo = re.sub(r"(?i)\bbearer\s+[a-z0-9._~+/=-]{8,}", "Bearer [segredo]", limpo)
+        limpo = re.sub(r"(?i)(?<![a-z0-9])(?:token|key|apikey|senha|password|secret)=([^&\s]+)", "[segredo]", limpo)
 
         # 2. Redigir emails e telefones
         if callable(redigir):
@@ -541,6 +549,10 @@ if redigir_texto_livre is None:
         return limpo[:limite].strip()
 
 
+def _texto_livre_curto(texto: str) -> str:
+    return texto[:400]
+
+
 def redigir_dados_agentes(dados: dict) -> dict:
     """Passa todos os campos de texto livre da resposta dos agentes vivos pela redação de clientes e caminhos."""
     if not isinstance(dados, dict):
@@ -552,19 +564,114 @@ def redigir_dados_agentes(dados: dict) -> dict:
         copia = dict(ag)
         for campo in ("descricao", "etapa", "tarefa", "problema", "quem_mandou", "status", "esforco"):
             if campo in copia and isinstance(copia[campo], str):
-                copia[campo] = redigir_texto_livre(copia[campo])
+                copia[campo] = redigir_texto_livre(_texto_livre_curto(copia[campo]))
         agentes_redigidos.append(copia)
 
     avisos_redigidos = []
     for av in dados.get("avisos", []):
         if isinstance(av, str):
-            avisos_redigidos.append(redigir_texto_livre(av, limite=300))
+            avisos_redigidos.append(redigir_texto_livre(_texto_livre_curto(av), limite=300))
         else:
             avisos_redigidos.append(av)
+
+    prioridades_validas = {"P0", "P1", "P2", "P3"}
+    estados_validos = {"ativa", "bloqueada", "concluida"}
+
+    def responsavel_do_dono(dono_tarefa: str) -> str:
+        return "Renato" if dono_tarefa == "renato" else "Luana"
+
+    def data_publica(valor: object) -> str | None:
+        if not isinstance(valor, str):
+            return None
+        if re.fullmatch(r"\d{2}/\d{2}(?:/\d{4})?", valor):
+            return valor
+        return None
+
+    def dependencia_publica(valor: object) -> str | None:
+        if not isinstance(valor, str):
+            return None
+        limpo = sanitizar_tarefa_publica(valor, 90)
+        return limpo or None
+
+    def iso_publico(valor: object) -> str | None:
+        if not isinstance(valor, str):
+            return None
+        try:
+            datetime.fromisoformat(valor.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return valor
+
+    tarefas_diretores_redigidas = {}
+    tarefas_brutas = dados.get("tarefas_diretores")
+    if tarefas_brutas is None:
+        tarefas_brutas = {}
+    elif not isinstance(tarefas_brutas, dict):
+        tarefas_brutas = {}
+        avisos_redigidos.append("tarefas_diretores inválido omitido")
+    for dono, pacote in tarefas_brutas.items():
+        dono_normal = str(dono).lower()
+        if dono_normal not in {"luana", "renato"} or not isinstance(pacote, dict):
+            avisos_redigidos.append(f"pacote de tarefas inválido omitido: {dono_normal}")
+            continue
+        itens = []
+        itens_brutos = pacote.get("itens", [])
+        if not isinstance(itens_brutos, list):
+            itens_brutos = []
+            avisos_redigidos.append(f"itens de tarefas inválido omitido: {dono_normal}")
+        for item in itens_brutos:
+            if not isinstance(item, dict):
+                avisos_redigidos.append(f"item de tarefa inválido omitido: {dono_normal}")
+                continue
+            prioridade = item.get("prioridade")
+            if not isinstance(prioridade, str) or prioridade not in prioridades_validas:
+                prioridade = "P3"
+            estado_tarefa = item.get("estado_tarefa")
+            if not isinstance(estado_tarefa, str) or estado_tarefa not in estados_validos:
+                estado_tarefa = "ativa"
+            titulo = sanitizar_tarefa_publica(item.get("titulo"), 90)
+            proximo_passo = sanitizar_tarefa_publica(item.get("proximo_passo"), 120)
+            if not titulo or not proximo_passo:
+                avisos_redigidos.append(f"item de tarefa incompleto omitido: {dono_normal}")
+                continue
+            itens.append({
+                "chave": f"{dono_normal}:{prioridade}:{len(itens)}",
+                "ordem": len(itens) + 1,
+                "prioridade": prioridade,
+                "titulo": titulo,
+                "responsavel": responsavel_do_dono(dono_normal),
+                "proximo_passo": proximo_passo,
+                "data": data_publica(item.get("data")),
+                "depende_de": dependencia_publica(item.get("depende_de")),
+                "estado_tarefa": estado_tarefa,
+                "em_andamento": False,
+            })
+        for item in itens:
+            if item["estado_tarefa"] == "ativa":
+                item["em_andamento"] = True
+                break
+        avisos_tarefas = []
+        avisos_brutos = pacote.get("avisos", [])
+        if not isinstance(avisos_brutos, list):
+            avisos_brutos = []
+            avisos_redigidos.append(f"avisos de tarefas inválido omitido: {dono_normal}")
+        for aviso in avisos_brutos:
+            if isinstance(aviso, str):
+                aviso_limpo = sanitizar_tarefa_publica(aviso, 120)
+                if aviso_limpo:
+                    avisos_tarefas.append(aviso_limpo)
+            if len(avisos_tarefas) >= 10:
+                break
+        tarefas_diretores_redigidas[dono_normal] = {
+            "itens": itens,
+            "avisos": avisos_tarefas,
+            "lido_em": iso_publico(pacote.get("lido_em")),
+        }
 
     return {
         **dados,
         "agentes": agentes_redigidos,
+        "tarefas_diretores": tarefas_diretores_redigidas,
         "avisos": avisos_redigidos,
     }
 

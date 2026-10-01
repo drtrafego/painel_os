@@ -2212,7 +2212,9 @@ def ler_uso_planos_claude(pasta_projetos=PROJETOS, caminho_oficial=None):
                                 "sessao_5h_percentual": c5.get("usado_pct"),
                                 "sessao_5h_reset": c5.get("reseta_em"),
                                 "semana_7d_percentual": c7.get("usado_pct"),
+                                "semana_7d_janela_dias": 7 if "usado_pct" in c7 else None,
                                 "semana_7d_reset": c7.get("reseta_em"),
+                                "semana_7d_fonte_percentual_oficial": "usado_pct" in c7,
                                 "fonte_percentual_oficial": True,
                                 "medido_em": medido_str,
                                 "status": "pronto"
@@ -2222,7 +2224,9 @@ def ler_uso_planos_claude(pasta_projetos=PROJETOS, caminho_oficial=None):
                                 "sessao_5h_percentual": None,
                                 "sessao_5h_reset": c5.get("reseta_em"),
                                 "semana_7d_percentual": None,
+                                "semana_7d_janela_dias": 7 if "usado_pct" in c7 else None,
                                 "semana_7d_reset": c7.get("reseta_em"),
+                                "semana_7d_fonte_percentual_oficial": False,
                                 "fonte_percentual_oficial": False,
                                 "medido_em": medido_str,
                                 "status": "desatualizado"
@@ -2297,7 +2301,9 @@ def ler_uso_planos_claude(pasta_projetos=PROJETOS, caminho_oficial=None):
         "sessao_5h_percentual": oficial_dados["sessao_5h_percentual"] if oficial_dados else None,
         "sessao_5h_reset": oficial_dados["sessao_5h_reset"] if oficial_dados else None,
         "semana_7d_percentual": oficial_dados["semana_7d_percentual"] if oficial_dados else None,
+        "semana_7d_janela_dias": oficial_dados["semana_7d_janela_dias"] if oficial_dados else None,
         "semana_7d_reset": oficial_dados["semana_7d_reset"] if oficial_dados else None,
+        "semana_7d_fonte_percentual_oficial": oficial_dados["semana_7d_fonte_percentual_oficial"] if oficial_dados else False,
         "fonte_percentual_oficial": oficial_dados["fonte_percentual_oficial"] if oficial_dados else False,
         "tokens_24h_estimativa": soma_total if any(v is not None for v in tokens_map.values()) else None,
         "por_diretor": [{"diretor": d, "tokens_24h": tokens_map[d]} for d in diretores],
@@ -6164,14 +6170,20 @@ def redigir_texto_livre(texto: str | None, limite: int = 400, manter_ultimos_4_t
     """
     if not texto or not isinstance(texto, str):
         return texto
+    texto = texto[:400]
     # 1. Sanitizar caminhos internos (/opt/..., /home/..., C:\...)
     limpo = re.sub(r"/(?:opt|home|root|etc|var|tmp|usr)/\S+", "[caminho]", texto)
     limpo = re.sub(r"[a-zA-Z]:\\[^\s'\":]+", "[caminho]", limpo)
 
-    # 2. Redigir emails
+    # 2. Redigir segredos antes de procurar números, para não quebrar chaves em pedaços.
+    limpo = re.sub(r"(?i)\bsk-[a-z0-9_-]{8,}\b", "[segredo]", limpo)
+    limpo = re.sub(r"(?i)\bbearer\s+[a-z0-9._~+/=-]{8,}", "Bearer [segredo]", limpo)
+    limpo = re.sub(r"(?i)(?<![a-z0-9])(?:token|key|apikey|senha|password|secret)=([^&\s]+)", "[segredo]", limpo)
+
+    # 3. Redigir emails
     limpo = RE_EMAIL.sub("[e-mail]", limpo)
 
-    # 3. Redigir telefones e números sensíveis
+    # 4. Redigir telefones e números sensíveis
     chave = limpo.translate(TABELA_SEPARADOR)
     pedacos, fim = [], 0
     for m in RE_NUMERO.finditer(chave):
@@ -6188,7 +6200,7 @@ def redigir_texto_livre(texto: str | None, limite: int = 400, manter_ultimos_4_t
     pedacos.append(limpo[fim:])
     limpo = "".join(pedacos)
 
-    # 4. Mascarar nomes de clientes
+    # 5. Mascarar nomes de clientes
     if callable(achou_nome_de_cliente) and isinstance(NEGACAO, dict) and NEGACAO.get("carregada"):
         try:
             achados = achou_nome_de_cliente(limpo)

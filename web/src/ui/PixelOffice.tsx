@@ -4,7 +4,7 @@ import { ParedeEscritorio } from './PixelOffice.wall'
 import { montarTarefasParede, type GastosIA } from './PixelOffice.wall-data'
 import logoCasal from '../assets/casal-do-trafego.png'
 import './PixelOffice.gold.css'
-import type { AgenteSessao, AgenteVivo, Estado } from '../dados/tipos'
+import type { AgenteSessao, AgenteVivo, Estado, TarefasDiretores } from '../dados/tipos'
 import {
   chaveAgente,
   formatarRotulo,
@@ -38,6 +38,7 @@ interface PixelOfficeProps {
   aoAbrirCerebro?: () => void
   /** Opcional: valores monetários reais. Nunca derivados de tokens ou da despesa geral. */
   gastosIA?: GastosIA | null
+  tarefasDiretores?: TarefasDiretores | null
 }
 
 type ObjetoMesa = 'codigo' | 'texto' | 'arte' | 'radar' | 'metricas' | 'qualidade' | 'envio' | 'cafe'
@@ -737,7 +738,7 @@ function useSquadsSobDemanda(execucoes: ExecucaoVisual[]) {
   return { abertos, saindo }
 }
 
-export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos, aoAbrirCerebro, gastosIA }: PixelOfficeProps) {
+export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos, aoAbrirCerebro, gastosIA, tarefasDiretores }: PixelOfficeProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const palcoRef = useRef<HTMLDivElement | null>(null)
   const hitsRef = useRef<Array<{ chave: string; x: number; y: number; largura: number; altura: number }>>([])
@@ -797,7 +798,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const faseSelecionada = selecionada ? fasesRef.current.get(selecionada.animacaoChave) : undefined
   const squadsVisiveis = useMemo(() => PIXEL_AGENT_SQUADS.filter((squad) => layout.ilhas.some((ilha) => ilha.squad === squad.id)), [layout.ilhas])
   const gruposLancadores = useMemo(() => agruparAgentesAtivosPorLancador(agentes), [agentes])
-  const tarefasDaParede = useMemo(() => montarTarefasParede(gruposLancadores, (agente) => todasExecucoes.find((v) => v.execucao === agente)), [gruposLancadores, todasExecucoes])
+  const tarefasDaParede = useMemo(() => montarTarefasParede(tarefasDiretores), [tarefasDiretores])
 
   useEffect(() => {
     const palco = palcoRef.current
@@ -1127,7 +1128,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       </header>
       <div className="ct-body">
         <div role="region" className="ct-main" aria-label="Escritório e painéis operacionais">
-          <ParedeEscritorio uso={estado?.uso_planos} gastos={gastosIA} tarefas={tarefasDaParede} aoSelecionar={selecionar} selecionadoId={agenteSelecionadoId} descricaoSonda={descricaoSonda} leituraConfirmada={statusLeitura === 'confirmado'} />
+          <ParedeEscritorio uso={estado?.uso_planos} gastos={gastosIA} tarefas={tarefasDaParede} descricaoSonda={descricaoSonda} leituraConfirmada={statusLeitura === 'confirmado'} />
           <div className="ct-toolbar" role="toolbar" aria-label="Controles do escritório">
             <span className="ct-room-label"><i className="ct-dot ct-dot-amber" />Escritório vivo <span className="ct-tag">{execucoesVisiveis.length} visíveis</span></span>
             <button type="button" className="ct-button" onClick={() => aoAlternarSoAtivos?.(!soAtivos)} aria-pressed={soAtivos}>Só ativos</button>

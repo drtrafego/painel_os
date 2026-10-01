@@ -43,34 +43,42 @@
   ],
   "phases": [
     {
+      "id": "regencia",
+      "label": "Regência",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
       "id": "sinal-plano",
       "label": "Sinal e plano",
-      "fromCol": 0,
-      "toCol": 2
+      "fromCol": 1,
+      "toCol": 3
     },
     {
       "id": "aprovacao-plano",
       "label": "Aprovação",
-      "fromCol": 3,
-      "toCol": 3,
+      "fromCol": 4,
+      "toCol": 4,
       "variant": "security"
     },
     {
       "id": "texto-fiscal",
       "label": "Texto e fiscal",
-      "fromCol": 4,
-      "toCol": 6,
+      "fromCol": 5,
+      "toCol": 7,
       "variant": "security"
     },
     {
       "id": "ativacao-aprendizado",
       "label": "Ativação, fechamento e aprendizado",
-      "fromCol": 7,
-      "toCol": 9,
+      "fromCol": 8,
+      "toCol": 10,
       "variant": "emphasis"
     }
   ],
   "mainPath": [
+    "elza",
     "zara",
     "otto",
     "bento",
@@ -84,12 +92,16 @@
   ],
   "semanticChecks": {
     "allowedRoots": [
-      "zara"
+      "elza"
     ],
     "allowedTerminals": [
       "hugo"
     ],
     "requiredEdges": [
+      {
+        "from": "elza",
+        "to": "zara"
+      },
       {
         "from": "bento",
         "to": "gastao_plano"
@@ -109,16 +121,26 @@
     ],
     "requiredPaths": [
       {
-        "from": "zara",
+        "from": "elza",
         "to": "hugo"
       }
     ]
   },
   "nodes": [
     {
-      "id": "zara",
+      "id": "elza",
       "lane": "comercial",
       "col": 0,
+      "type": "regente",
+      "label": "Elza",
+      "sublabel": "diretora e regência",
+      "width": 135,
+      "yOffset": 0
+    },
+    {
+      "id": "zara",
+      "lane": "comercial",
+      "col": 1,
       "type": "backend",
       "label": "Zara",
       "sublabel": "triagem e ICP",
@@ -128,7 +150,7 @@
     {
       "id": "otto",
       "lane": "comercial",
-      "col": 1,
+      "col": 2,
       "type": "backend",
       "label": "Otto",
       "sublabel": "radar e sinais",
@@ -138,7 +160,7 @@
     {
       "id": "bento",
       "lane": "comercial",
-      "col": 2,
+      "col": 3,
       "type": "backend",
       "label": "Bento",
       "sublabel": "estrategista da conta",
@@ -148,7 +170,7 @@
     {
       "id": "gastao_plano",
       "lane": "comercial",
-      "col": 3,
+      "col": 4,
       "type": "security",
       "label": "Gastão",
       "sublabel": "aprova o plano",
@@ -159,7 +181,7 @@
     {
       "id": "maya",
       "lane": "comercial",
-      "col": 4,
+      "col": 5,
       "type": "backend",
       "label": "Maya",
       "sublabel": "copy e abordagem",
@@ -169,7 +191,7 @@
     {
       "id": "olga",
       "lane": "comercial",
-      "col": 5,
+      "col": 6,
       "type": "security",
       "label": "Olga",
       "sublabel": "fiscal de copy (PASSA)",
@@ -179,7 +201,7 @@
     {
       "id": "gastao_textos",
       "lane": "comercial",
-      "col": 6,
+      "col": 7,
       "type": "security",
       "label": "Gastão",
       "sublabel": "aprova textos e hash",
@@ -190,7 +212,7 @@
     {
       "id": "caio",
       "lane": "comercial",
-      "col": 7,
+      "col": 8,
       "type": "backend",
       "label": "Caio",
       "sublabel": "operador de envio",
@@ -200,7 +222,7 @@
     {
       "id": "clay",
       "lane": "comercial",
-      "col": 8,
+      "col": 9,
       "type": "backend",
       "label": "Clay",
       "sublabel": "closer (reunião)",
@@ -210,7 +232,7 @@
     {
       "id": "hugo",
       "lane": "comercial",
-      "col": 9,
+      "col": 10,
       "type": "database",
       "label": "Hugo",
       "sublabel": "analista e métricas",
@@ -219,6 +241,14 @@
     }
   ],
   "edges": [
+    {
+      "id": "elza-zara",
+      "from": "elza",
+      "to": "zara",
+      "label": "orquestra",
+      "variant": "emphasis",
+      "role": "main"
+    },
     {
       "id": "zara-otto",
       "from": "zara",

@@ -306,6 +306,32 @@ export type AgenteVivo = {
   status?: string | null
 }
 
+export type TarefaDiretor = {
+  chave: string
+  ordem: number
+  prioridade: 'P0' | 'P1' | 'P2' | 'P3'
+  titulo: string
+  responsavel: 'Luana' | 'Renato'
+  proximo_passo: string
+  data: string | null
+  depende_de: string | null
+  estado_tarefa: 'ativa' | 'bloqueada' | 'concluida'
+  em_andamento: boolean
+}
+
+export interface TarefasDiretores {
+  luana: {
+    itens: TarefaDiretor[]
+    avisos: string[]
+    lido_em: string | null
+  }
+  renato: {
+    itens: TarefaDiretor[]
+    avisos: string[]
+    lido_em: string | null
+  }
+}
+
 export type AgentesVivos = {
   ok: boolean
   motivo: string
@@ -319,6 +345,7 @@ export type AgentesVivos = {
     indeterminados?: number
   }
   agentes: AgenteVivo[]
+  tarefas_diretores?: TarefasDiretores
   avisos: string[]
 }
 
@@ -353,7 +380,9 @@ export type UsoPlanos = {
     sessao_5h_percentual: number | null
     sessao_5h_reset: string | number | null
     semana_7d_percentual: number | null
+    semana_7d_janela_dias?: number | null
     semana_7d_reset: string | number | null
+    semana_7d_fonte_percentual_oficial?: boolean
     fonte_percentual_oficial: boolean
     tokens_24h_estimativa: number | null
     por_diretor: ConsumoPorDiretor[]

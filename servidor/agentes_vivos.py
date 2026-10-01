@@ -416,6 +416,22 @@ def _texto_curto(valor: object, limite: int = 160) -> str | None:
 def _sanitizar_etapa_codex(texto: str) -> str | None:
     """Prepara uma linha de pedido para exibição pública no painel."""
     limpo = _sanitizar_caminho(texto)
+    limpo_norm = " ".join(limpo.split()).casefold()
+    prefixos_privados = (
+        "você é ",
+        "voce é ",
+        "voce e ",
+        "a ponte enviará automaticamente",
+        "a ponte enviara automaticamente",
+        "mensagem nova recebida",
+        "retomada interna da ponte",
+        "mantenha cada resposta ao telegram",
+        "tipo da entrada:",
+    )
+    if limpo_norm.startswith(prefixos_privados):
+        return None
+    if "preserve exclusivamente essa identidade" in limpo_norm:
+        return None
     limpo = re.sub(
         r"(?i)(?<!\S)\S*[\\/]\S*(?:credencial|credential|secret|token|senha|password|\.env)\S*",
         "[caminho]",
@@ -433,6 +449,26 @@ def _sanitizar_etapa_codex(texto: str) -> str | None:
 
     limpo = re.sub(r"(?<!\w)\+?\d[\d(). -]{8,}\d(?!\w)", _redigir_telefone, limpo)
     return _texto_curto(limpo, 90)
+
+
+def _linha_publica_pedido_codex(linha: str) -> str | None:
+    linha = " ".join(linha.split())
+    if not linha:
+        return None
+    if linha.startswith("{") and '"content"' in linha:
+        try:
+            payload = json.loads(linha)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            conteudo = payload.get("content")
+            if isinstance(conteudo, str):
+                for pedaco in conteudo.splitlines():
+                    publico = _sanitizar_etapa_codex(pedaco)
+                    if publico:
+                        return publico
+            return None
+    return _sanitizar_etapa_codex(linha)
 
 
 def _primeira_linha_pedido_codex(registro: dict) -> str | None:
@@ -470,9 +506,9 @@ def _primeira_linha_pedido_codex(registro: dict) -> str | None:
         if texto.lower().startswith(prefixos_injetados):
             continue
         for linha in texto.splitlines():
-            linha = " ".join(linha.split())
-            if linha:
-                return _sanitizar_etapa_codex(linha)
+            publico = _linha_publica_pedido_codex(linha)
+            if publico:
+                return publico
     return None
 
 
@@ -1535,6 +1571,7 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
     Codex: cada dono lê só o próprio CODEX_HOME (`codex`). Com `projetos`
     explícito e sem `codex`, nenhuma sessão Codex entra (leitura isolada).
     """
+    modo_casa_padrao = projetos is None and raiz is None
     if codex is None:
         codex = CODEX_DA_CASA if projetos is None else {}
     projetos = projetos or PROJETOS_DA_CASA
@@ -1576,6 +1613,19 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
             avisos.append(f"{dono}: falha inesperada na sonda: {type(e).__name__}: {_sanitizar_caminho(str(e))}")
 
     agentes.sort(key=lambda a: (a.get("silencio_s") is None, a.get("silencio_s") or 0))
+    tarefas_diretores = {}
+    if modo_casa_padrao:
+        try:
+            try:
+                from servidor.tarefas_diretores import obter_tarefas_diretores
+            except ModuleNotFoundError:
+                from tarefas_diretores import obter_tarefas_diretores
+            tarefas_diretores = obter_tarefas_diretores()
+        except Exception as e:
+            tarefas_diretores = {
+                "luana": {"itens": [], "avisos": [f"falha ao ler tarefas: {type(e).__name__}"], "lido_em": None},
+                "renato": {"itens": [], "avisos": [f"falha ao ler tarefas: {type(e).__name__}"], "lido_em": None},
+            }
     agora = _agora()
     return {
         "ok": algum_ok,
@@ -1589,6 +1639,7 @@ def ler_agentes_da_casa(projetos: dict[str, str] | None = None,
                      "total": len(agentes), "historico": historico_total,
                      "indeterminados": indeterminados_total},
         "agentes": agentes,
+        "tarefas_diretores": tarefas_diretores,
         "avisos": avisos,
     }
 
