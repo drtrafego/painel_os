@@ -53,14 +53,23 @@ export function ParedeEscritorio({ uso, gastos, tarefas, tarefasSolicitadas, des
         {tarefas.map(coluna => <section className="ct-task-column" aria-label={`Tarefas de ${coluna.nome}`} key={coluna.id} data-testid={`office-tasks-${coluna.id}`}>
           <header><div><h4>{coluna.nome}</h4><small>{coluna.tarefas.length} {coluna.tarefas.length === 1 ? 'tarefa' : 'tarefas'} na fila</small></div></header>
           <div className="ct-task-list">
-            {coluna.tarefas.length ? coluna.tarefas.map(tarefa => <button type="button" key={tarefa.chave} onClick={(evento) => evento.currentTarget.blur()} aria-label={`Tarefa ${tarefa.ordem}: ${tarefa.titulo}`} className={`ct-task ${tarefa.emAndamento ? 'ct-task-current' : ''} ${tarefa.estado === 'bloqueada' ? 'ct-task-blocked' : ''}`} title={tarefa.titulo}>
-              <span className={`ct-task-state ${tarefa.emAndamento ? 'ct-task-running' : ''}`} aria-hidden="true">{tarefa.ordem}</span>
-              <b className="ct-task-title">{tarefa.titulo}</b>
-              {tarefa.dependeDe ? <span className="ct-task-dep" title={`depende de ${tarefa.dependeDe}`} aria-label={`depende de ${tarefa.dependeDe}`}>↳</span> : null}
-              <span className="ct-task-priority">{tarefa.prioridade}</span>
-              {tarefa.data ? <time className="ct-task-date">{tarefa.data}</time> : <span className="ct-task-date" aria-hidden="true">—</span>}
-            </button>) : <p className="ct-task-empty">Sem tarefas na fila{coluna.avisos[0] ? `. ${coluna.avisos[0]}` : ''}</p>}
+            {coluna.tarefas.length ? coluna.tarefas.map(tarefa => <div className="ct-task-group" key={tarefa.chave}>
+              <div role="listitem" aria-label={`Tarefa ${tarefa.ordem}: ${tarefa.titulo}`} className={`ct-task ${tarefa.emAndamento ? 'ct-task-current' : ''} ${tarefa.estado === 'bloqueada' ? 'ct-task-blocked' : ''}`} title={tarefa.titulo}>
+                <span className={`ct-task-state ${tarefa.emAndamento ? 'ct-task-running' : ''}`} aria-hidden="true">{tarefa.ordem}</span>
+                <b className="ct-task-title">{tarefa.titulo}</b>
+                {tarefa.dependeDe ? <span className="ct-task-dep" title={`depende de ${tarefa.dependeDe}`} aria-label={`depende de ${tarefa.dependeDe}`}>
+                  <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 2v4.5c0 1.4 1.1 2.5 2.5 2.5H9M7 6.5 9.5 9 7 11.5" /></svg>
+                </span> : null}
+                <span className="ct-task-priority">{tarefa.prioridade}</span>
+                {tarefa.semProximoPasso ? <span className="ct-task-date ct-task-missing-step" title="sem próximo passo">sem próximo passo</span> : tarefa.data ? <time className="ct-task-date">{tarefa.data}</time> : <span className="ct-task-date" aria-hidden="true">—</span>}
+              </div>
+              {tarefa.subtarefas.map(subtarefa => <div className={`ct-subtask ${subtarefa.estado === 'bloqueada' ? 'ct-subtask-blocked' : ''}`} key={`${tarefa.chave}:sub:${subtarefa.ordem}`} title={subtarefa.titulo}>
+                <span className="ct-subtask-dot" aria-hidden="true" />
+                <span className="ct-subtask-title">{subtarefa.titulo}</span>
+              </div>)}
+            </div>) : <p className="ct-task-empty">Sem tarefas na fila{coluna.avisos[0] ? `. ${coluna.avisos[0]}` : ''}</p>}
           </div>
+          {coluna.restantes > 0 ? <footer className="ct-task-more">+{coluna.restantes} na fila</footer> : null}
           {coluna.tarefas.length && coluna.avisos[0] ? <p className="ct-task-empty">{coluna.avisos[0]}</p> : null}
         </section>)}
       </div> : <div className="ct-task-columns">

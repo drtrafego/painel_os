@@ -602,6 +602,29 @@ def redigir_dados_agentes(dados: dict) -> dict:
             return None
         return valor
 
+    def inteiro_publico(valor: object) -> int:
+        if isinstance(valor, bool) or not isinstance(valor, int):
+            return 0
+        return max(0, valor)
+
+    def subtarefas_publicas(valor: object, estado_mae: str) -> list[dict[str, object]]:
+        if not isinstance(valor, list):
+            return []
+        saida = []
+        for bruto in valor:
+            if not isinstance(bruto, dict):
+                continue
+            titulo = sanitizar_tarefa_publica(bruto.get("titulo"), 70)
+            if not titulo:
+                continue
+            estado = bruto.get("estado")
+            if not isinstance(estado, str) or estado not in estados_validos:
+                estado = estado_mae
+            saida.append({"titulo": titulo, "ordem": len(saida) + 1, "estado": estado})
+            if len(saida) >= 6:
+                break
+        return saida
+
     tarefas_diretores_redigidas = {}
     tarefas_brutas = dados.get("tarefas_diretores")
     if tarefas_brutas is None:
@@ -631,7 +654,8 @@ def redigir_dados_agentes(dados: dict) -> dict:
                 estado_tarefa = "ativa"
             titulo = sanitizar_tarefa_publica(item.get("titulo"), 90)
             proximo_passo = sanitizar_tarefa_publica(item.get("proximo_passo"), 120)
-            if not titulo or not proximo_passo:
+            sem_proximo_passo = item.get("sem_proximo_passo") is True
+            if not titulo or (not proximo_passo and not sem_proximo_passo):
                 avisos_redigidos.append(f"item de tarefa incompleto omitido: {dono_normal}")
                 continue
             itens.append({
@@ -641,6 +665,8 @@ def redigir_dados_agentes(dados: dict) -> dict:
                 "titulo": titulo,
                 "responsavel": responsavel_do_dono(dono_normal),
                 "proximo_passo": proximo_passo,
+                "sem_proximo_passo": sem_proximo_passo,
+                "subtarefas": subtarefas_publicas(item.get("subtarefas"), estado_tarefa),
                 "data": data_publica(item.get("data")),
                 "depende_de": dependencia_publica(item.get("depende_de")),
                 "estado_tarefa": estado_tarefa,
@@ -666,6 +692,7 @@ def redigir_dados_agentes(dados: dict) -> dict:
             "itens": itens,
             "avisos": avisos_tarefas,
             "lido_em": iso_publico(pacote.get("lido_em")),
+            "restantes": inteiro_publico(pacote.get("restantes")),
         }
 
     return {

@@ -10,7 +10,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 TTL_S = 20.0
-MAX_ITENS = 5
+MAX_ITENS = 30
 MAX_BYTES = 1_000_000
 BRT = ZoneInfo("America/Sao_Paulo")
 DEPENDENCIA_GASTAO = "decisão do Gastão"
@@ -302,7 +302,7 @@ def _ler_prioridade_streaming(caminho: Path) -> tuple[str | None, list[str]]:
 def _separar_itens(blocos: list[str]) -> list[str]:
     itens = []
     atual: list[str] = []
-    inicio = re.compile(r"^\s*(?:\d+\.\s+|-+\s+|\*\s+)")
+    inicio = re.compile(r"^(?:\d+\.\s+|-+\s+|\*\s+)")
     for linha in "\n".join(blocos).splitlines():
         if inicio.match(linha):
             if atual:
@@ -318,9 +318,26 @@ def _separar_itens(blocos: list[str]) -> list[str]:
     return itens
 
 
+def _texto_apos_proximo_passo(texto: str) -> str | None:
+    achado = re.search(
+        r"pr[oó]ximo passo(?: verific[aá]vel)?\s*(?:\([^)]+\))?\s*(?:é|:)?\s*(.*?)(?:\s+prova(?:/fonte)?\s*:|$)",
+        " ".join(texto.split()),
+        re.I,
+    )
+    if not achado:
+        return None
+    return achado.group(1).strip(" .:-") or None
+
+
 def _estado_tarefa(texto: str) -> str:
     normal = _normalizar(texto)
-    if any(p in normal for p in ("concluido", "concluida", "feito", "fechado", "fechada")):
+    proximo = _texto_apos_proximo_passo(texto)
+    if proximo:
+        if any(p in normal for p in ("aguarda", "aguardando o gastao", "depende dele", "bloqueado por")):
+            return "bloqueada"
+        return "ativa"
+    primeira_linha = _normalizar(texto.splitlines()[0] if texto.splitlines() else texto)
+    if any(p in primeira_linha for p in ("concluido", "concluida", "encerrado", "encerrada", "fechado", "fechada")):
         return "concluida"
     if any(p in normal for p in ("aguarda", "aguardando o gastao", "depende dele", "bloqueado por")):
         return "bloqueada"
@@ -328,10 +345,33 @@ def _estado_tarefa(texto: str) -> str:
 
 
 def _extrair_data(texto: str) -> str | None:
-    achado = re.search(r"\b(\d{2}/\d{2}(?:/\d{4})?)\b", texto)
-    if achado:
-        return sanitizar_texto_publico(achado.group(1), 10) or None
+    achado = re.search(r"\bdata\s*:?\s*(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?)\b", texto, re.I)
+    if not achado:
+        achado = re.search(r"\b(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}(?:/\d{4})?)\b", texto)
+    if not achado:
+        return None
+    valor = achado.group(1)
+    iso = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", valor)
+    if iso:
+        return sanitizar_texto_publico(f"{iso.group(3)}/{iso.group(2)}", 5) or None
+    barra = re.fullmatch(r"(\d{1,2})/(\d{1,2})(?:/\d{2,4})?", valor)
+    if barra:
+        return sanitizar_texto_publico(f"{int(barra.group(1)):02d}/{int(barra.group(2)):02d}", 5) or None
     return None
+
+
+def _extrair_proximo_passo(texto: str) -> str | None:
+    proximo = _texto_apos_proximo_passo(texto)
+    if proximo:
+        return sanitizar_texto_publico(proximo, 120) or None
+    return None
+
+
+def _titulo_curto_publico(texto: str, limite: int) -> str | None:
+    titulo = _truncar_palavra(_mascarar_nomes_proprios(sanitizar_texto_publico(texto, 400)), limite)
+    if not titulo or _somente_mascara(titulo):
+        return None
+    return titulo
 
 
 def _extrair_titulo(texto: str) -> str:
@@ -348,19 +388,53 @@ def _extrair_titulo(texto: str) -> str:
     return plano
 
 
+def _limpar_titulo_subtarefa(texto: str) -> str:
+    texto = re.sub(r"^\s*(?:[-*]\s+|\d+\.\s+|\(\d+\)\s*)", "", texto)
+    texto = re.sub(r"[*_`]", "", texto)
+    return " ".join(texto.split()).strip(" .:-")
+
+
+def _subtarefas_de_lista(bruto: str, estado: str) -> list[dict[str, object]]:
+    subtarefas: list[dict[str, object]] = []
+    for linha in bruto.splitlines()[1:]:
+        if not re.match(r"^[ \t]+(?:-\s+|\d+\.\s+)", linha):
+            continue
+        titulo = _titulo_curto_publico(_limpar_titulo_subtarefa(linha), 70)
+        if not titulo:
+            continue
+        subtarefas.append({"titulo": titulo, "ordem": len(subtarefas) + 1, "estado": estado})
+        if len(subtarefas) >= 6:
+            break
+    return subtarefas
+
+
+def _subtarefas_de_proximo_passo(bruto: str, estado: str) -> list[dict[str, object]]:
+    proximo = _texto_apos_proximo_passo(bruto)
+    if not proximo:
+        return []
+    achados = list(re.finditer(r"\((\d+)\)\s*", proximo))
+    if len(achados) < 2:
+        return []
+    subtarefas: list[dict[str, object]] = []
+    for pos, achado in enumerate(achados[:6]):
+        inicio = achado.end()
+        fim = achados[pos + 1].start() if pos + 1 < len(achados) else len(proximo)
+        titulo = _titulo_curto_publico(_limpar_titulo_subtarefa(proximo[inicio:fim]), 70)
+        if not titulo:
+            continue
+        subtarefas.append({"titulo": titulo, "ordem": len(subtarefas) + 1, "estado": estado})
+    return subtarefas
+
+
+def _extrair_subtarefas(bruto: str, estado: str) -> list[dict[str, object]]:
+    por_lista = _subtarefas_de_lista(bruto, estado)
+    if por_lista:
+        return por_lista
+    return _subtarefas_de_proximo_passo(bruto, estado)
+
+
 def _responsavel_do_dono(dono: str) -> str:
     return "Renato" if dono == "renato" else "Luana"
-
-
-def _extrair_proximo_passo(texto: str) -> str | None:
-    achado = re.search(
-        r"pr[oó]ximo passo(?: verific[aá]vel)?\s*(?:é|:)?\s*(.*?)(?:\s+prova(?:/fonte)?\s*:|$)",
-        " ".join(texto.split()),
-        re.I,
-    )
-    if not achado:
-        return None
-    return sanitizar_texto_publico(achado.group(1), 120) or None
 
 
 def _extrair_dependencia(texto: str) -> str | None:
@@ -408,26 +482,31 @@ def _extrair_dependencia(texto: str) -> str | None:
 def _parse_item(bruto: str, indice: int, dono: str) -> tuple[dict | None, str | None]:
     texto = " ".join(bruto.split())
     prioridade_achada = re.search(r"\b(P[0-3])\b", texto, re.I)
-    prioridade = prioridade_achada.group(1).upper() if prioridade_achada else "P3"
-    ordem = _PRIORIDADE_ORDEM.get(prioridade, 99) if prioridade_achada else 99
-    titulo = _truncar_palavra(_mascarar_nomes_proprios(sanitizar_texto_publico(_extrair_titulo(bruto), 400)), 90)
-    if not titulo or _somente_mascara(titulo):
-        return None, "item omitido por privacidade"
+    if not prioridade_achada:
+        return None, "sem prioridade"
+    prioridade = prioridade_achada.group(1).upper()
+    ordem = _PRIORIDADE_ORDEM.get(prioridade, 99)
+    titulo = _titulo_curto_publico(_extrair_titulo(bruto), 90)
+    if not titulo:
+        return None, "sem título"
     proximo = _extrair_proximo_passo(bruto)
-    if not proximo:
-        return None, "item incompleto"
-    proximo = _mascarar_nomes_proprios(proximo)
-    if _somente_mascara(proximo):
-        proximo = "próximo passo omitido por privacidade"
+    sem_proximo_passo = not bool(proximo)
+    if proximo:
+        proximo = _mascarar_nomes_proprios(proximo)
+        if _somente_mascara(proximo):
+            proximo = "próximo passo omitido por privacidade"
+    estado = _estado_tarefa(bruto)
     item = {
         "chave": f"{dono}:{prioridade}:{indice}",
         "prioridade": prioridade,
         "titulo": titulo,
         "responsavel": _responsavel_do_dono(dono),
-        "proximo_passo": proximo,
+        "proximo_passo": proximo or "",
+        "sem_proximo_passo": sem_proximo_passo,
+        "subtarefas": _extrair_subtarefas(bruto, estado),
         "data": _extrair_data(bruto),
         "depende_de": _extrair_dependencia(bruto),
-        "estado_tarefa": _estado_tarefa(bruto),
+        "estado_tarefa": estado,
         "_ordem": ordem,
         "_indice": indice,
     }
@@ -438,27 +517,37 @@ def ler_prioridade_agente(dono: str, caminho: Path, *, permitir_caminho_teste: b
     avisos: list[str] = []
     caminho_real, aviso_caminho = _validar_caminho(dono, caminho, permitir_caminho_teste)
     if aviso_caminho:
-        return {"itens": [], "avisos": [aviso_caminho], "lido_em": None}
+        return {"itens": [], "avisos": [aviso_caminho], "lido_em": None, "restantes": 0}
     assert caminho_real is not None
     texto, avisos_leitura = _ler_prioridade_streaming(caminho_real)
     avisos.extend(avisos_leitura)
     if texto is None:
-        return {"itens": [], "avisos": avisos, "lido_em": None}
+        return {"itens": [], "avisos": avisos, "lido_em": None, "restantes": 0}
     if not texto.strip():
-        return {"itens": [], "avisos": ["working-memory vazio"], "lido_em": None}
+        return {"itens": [], "avisos": ["working-memory vazio"], "lido_em": None, "restantes": 0}
     itens = []
+    avisos_parse: dict[str, int] = {}
     for indice, bruto in enumerate(_separar_itens([texto])):
         item, aviso = _parse_item(bruto, indice, dono)
         if aviso:
-            avisos.append(aviso)
+            avisos_parse[aviso] = avisos_parse.get(aviso, 0) + 1
         if item:
             itens.append(item)
+    for motivo, quantidade in avisos_parse.items():
+        if motivo == "sem prioridade":
+            avisos.append(f"{quantidade} {'item sem prioridade omitido' if quantidade == 1 else 'itens sem prioridade omitidos'}")
+        elif motivo == "sem título":
+            avisos.append(f"{quantidade} {'item sem título omitido' if quantidade == 1 else 'itens sem título omitidos'}")
+        else:
+            avisos.append(f"{quantidade} {motivo}")
     if not itens:
         avisos.append("nenhum item público parseável")
     itens.sort(key=lambda item: (item["_ordem"], item["_indice"]))
     preferenciais = [i for i in itens if i["estado_tarefa"] != "concluida"]
     concluidos = [i for i in itens if i["estado_tarefa"] == "concluida"]
-    escolhidos = (preferenciais + concluidos)[:MAX_ITENS]
+    ordenados = preferenciais + concluidos
+    escolhidos = ordenados[:MAX_ITENS]
+    restantes = max(0, len(ordenados) - len(escolhidos))
     for indice, item in enumerate(escolhidos):
         ordem = indice + 1
         item["ordem"] = ordem
@@ -470,7 +559,7 @@ def ler_prioridade_agente(dono: str, caminho: Path, *, permitir_caminho_teste: b
         if item["estado_tarefa"] == "ativa":
             item["em_andamento"] = True
             break
-    return {"itens": escolhidos, "avisos": avisos, "lido_em": datetime.now(BRT).isoformat()}
+    return {"itens": escolhidos, "avisos": avisos, "lido_em": datetime.now(BRT).isoformat(), "restantes": restantes}
 
 
 def _assinatura(caminhos: dict[str, Path]) -> tuple:
@@ -504,8 +593,8 @@ def obter_tarefas_diretores(
     caminhos = caminhos or ARQUIVOS
     if caminhos is not ARQUIVOS and not permitir_caminho_teste:
         return {
-            "luana": {"itens": [], "avisos": ["caminho de teste recusado fora do modo teste"], "lido_em": None},
-            "renato": {"itens": [], "avisos": ["caminho de teste recusado fora do modo teste"], "lido_em": None},
+            "luana": {"itens": [], "avisos": ["caminho de teste recusado fora do modo teste"], "lido_em": None, "restantes": 0},
+            "renato": {"itens": [], "avisos": ["caminho de teste recusado fora do modo teste"], "lido_em": None, "restantes": 0},
         }
     chave = _assinatura(caminhos)
     if usar_cache:

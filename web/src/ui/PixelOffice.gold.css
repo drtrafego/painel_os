@@ -54,16 +54,29 @@
 .ct-office .ct-task-column > header { display:flex; align-items:center; gap:8px; border-bottom:1px solid #35362e; padding:8px }
 .ct-office .ct-director-avatar { width:30px; height:30px; border-radius:50%; display:grid; place-items:center; flex-shrink:0; font-size:15px; font-weight:650; color:#f6dea0; background:radial-gradient(circle at 30% 20%,#6f603a,#252829); border:1px solid #7c6c3e }
 .ct-office .ct-task-column h4 { font-size:12px }.ct-office .ct-task-column header small { display:block; font-size:9px; margin-top:2px; color:var(--ct-muted) }
-.ct-office .ct-task-list { height:154px; overflow:auto; padding:5px; scrollbar-width:thin; scrollbar-color:#746236 #131518 }
+.ct-office .ct-task-list { box-sizing:border-box; max-height:145px; overscroll-behavior:contain; overflow-x:hidden; overflow-y:auto; padding:5px; scrollbar-width:thin; scrollbar-color:#b69a46 #171b1d; scrollbar-gutter:stable }
+.ct-office .ct-task-list::-webkit-scrollbar { width:8px }
+.ct-office .ct-task-list::-webkit-scrollbar-track { background:#171b1d }
+.ct-office .ct-task-list::-webkit-scrollbar-thumb { background:#b69a46; border:2px solid #171b1d; border-radius:8px }
+.ct-office .ct-task-list::-webkit-scrollbar-thumb:hover { background:#d1b95e }
+.ct-office .ct-task-group { margin-bottom:3px }
+.ct-office .ct-task, .ct-office .ct-subtask { -webkit-user-select:text; user-select:text; cursor:text }
 .ct-office .ct-task { display:flex; align-items:center; width:100%; min-height:24px; height:24px; gap:5px; padding:2px 5px; margin-bottom:3px; text-align:left; color:var(--ct-text); background:#191e22; border:1px solid #30372f; border-radius:5px; overflow:hidden }
 .ct-office .ct-task:hover { border-color:var(--ct-yellow); background:#292a21 }
 .ct-office .ct-task-current { border-color:#7fdb95; background:#1a2a22 }
 .ct-office .ct-task-blocked { border-style:dashed; opacity:.82; background:#1b1b1a }
 .ct-office .ct-task-state { flex:none; display:grid; place-items:center; width:16px; height:16px; border:1px solid #4f513e; border-radius:3px; color:#c9b160; font-size:9px; line-height:1; font-weight:800; font-variant-numeric:tabular-nums }.ct-office .ct-task-running { color:#7fdb95; border-color:#7fdb95 }
 .ct-office .ct-task-title { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px; line-height:1.2; font-weight:520 }
-.ct-office .ct-task-dep { flex:none; color:#d6bd66; font-size:10px; line-height:1; text-align:center }
+.ct-office .ct-task-dep { flex:none; display:grid; place-items:center; width:12px; height:12px; color:#d6bd66; line-height:1 }
+.ct-office .ct-task-dep svg { width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round }
 .ct-office .ct-task-priority { flex:none; display:inline-grid; place-items:center; height:15px; min-width:24px; border:1px solid #4b4730; border-radius:3px; color:#ead57e; background:#24251e; font-size:8px; line-height:1; font-weight:750 }
 .ct-office .ct-task-date[aria-hidden="true"] { display:none }.ct-office .ct-task-date { flex:none; color:#b1b2a7; font-size:8px; line-height:1; text-align:right; white-space:nowrap; font-style:normal }
+.ct-office .ct-task-missing-step { max-width:92px; height:14px; padding:2px 4px; overflow:hidden; text-overflow:ellipsis; border:1px solid #4b4730; border-radius:3px; color:#ead57e; background:#24251e; text-align:center }
+.ct-office .ct-subtask { display:flex; align-items:center; height:18px; min-height:18px; gap:5px; margin:0 0 2px 22px; padding:1px 5px 1px 7px; color:#b8b7aa; background:#15191b; border-left:1px solid #3a3f35; overflow:hidden }
+.ct-office .ct-subtask-blocked { opacity:.76 }
+.ct-office .ct-subtask-dot { flex:none; width:4px; height:4px; border-radius:50%; background:#b69a46 }
+.ct-office .ct-subtask-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px; line-height:1; font-weight:500 }
+.ct-office .ct-task-more { height:18px; padding:1px 7px 5px; color:#c7b76f; font-size:9px; line-height:12px; border-top:1px solid #252b25 }
 .ct-office .ct-task-empty { padding:14px 7px; font-size:11px; line-height:1.6; color:#b7b5a8 }
 .ct-office .ct-toolbar { display:flex; align-items:center; gap:7px; flex-wrap:wrap; padding:10px 16px; background:#101417; border-bottom:1px solid #4f452d }
 .ct-office .ct-button { min-height:38px; border:1px solid #4a4636; border-radius:7px; color:#dcd8ca; background:#1c211f; padding:6px 12px; font-size:11px; font-weight:550 }
@@ -99,9 +112,9 @@
 .ct-office .ct-relations button { color:#e5deca; background:#1e2424; border:1px solid #514a30; border-radius:4px; padding:7px; width:100%; text-align:left }
 .ct-office .ct-relations ul { padding:0 0 0 7px; list-style:none }
 .ct-office .ct-sr-only { position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important }
-@media (max-width:1250px) { .ct-office .ct-body { grid-template-columns:minmax(0,1fr) 230px }.ct-office .ct-wall { grid-template-columns:1fr }.ct-office .ct-costs { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.1fr); gap:0 14px }.ct-office .ct-costs .ct-display-heading,.ct-office .ct-costs .ct-source,.ct-office .ct-costs .ct-disclaimer,.ct-office .ct-money-items { grid-column:1/-1 }.ct-office .ct-cost-total { border-bottom:0; margin:0; padding:0; display:block }.ct-office .ct-cost-total p { margin-top:5px }.ct-office .ct-task-list { height:154px } }
+@media (max-width:1250px) { .ct-office .ct-body { grid-template-columns:minmax(0,1fr) 230px }.ct-office .ct-wall { grid-template-columns:1fr }.ct-office .ct-costs { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.1fr); gap:0 14px }.ct-office .ct-costs .ct-display-heading,.ct-office .ct-costs .ct-source,.ct-office .ct-costs .ct-disclaimer,.ct-office .ct-money-items { grid-column:1/-1 }.ct-office .ct-cost-total { border-bottom:0; margin:0; padding:0; display:block }.ct-office .ct-cost-total p { margin-top:5px } }
 @media (max-width:850px) { .ct-office .ct-body { grid-template-columns:1fr }.ct-office .ct-inspector { border-left:0; border-top:1px solid #49402b; display:grid; grid-template-columns:1fr 1fr; gap:12px }.ct-office .ct-inspector > .ct-kicker,.ct-office .ct-inspector > h3,.ct-office .ct-inspector-note { grid-column:1/-1 }.ct-office .ct-stats { grid-column:1/-1; grid-template-columns:repeat(4,1fr) }.ct-office .ct-inspector [data-testid="office-launchers-overview"] { margin:0 }.ct-office .ct-header { padding:10px 12px; gap:9px }.ct-office .ct-wall { padding:12px }.ct-office .ct-room-scroll { height:470px } }
-@media (max-width:480px) { .ct-office .ct-header { align-items:flex-start }.ct-office .ct-header-status { width:100%; gap:6px }.ct-office .ct-header-status .ct-button { margin-left:auto }.ct-office .ct-display { padding:10px }.ct-office .ct-costs { display:block }.ct-office .ct-cost-total { display:flex; margin:9px 0 12px }.ct-office .ct-display-heading { flex-wrap:wrap }.ct-office .ct-task-columns { grid-template-columns:1fr }.ct-office .ct-task-list { height:154px; max-height:154px }.ct-office .ct-room-label { flex-basis:100% }.ct-office .ct-toolbar { padding:9px 12px }.ct-office .ct-inspector { display:block }.ct-office .ct-inspector [data-testid="office-launchers-overview"] { margin-top:12px }.ct-office .ct-stats { grid-template-columns:repeat(2,1fr) }.ct-office .ct-room-scroll { height:420px }.ct-office .ct-usage-grid { gap:7px }.ct-office .ct-usage { padding:7px } }
+@media (max-width:480px) { .ct-office .ct-header { align-items:flex-start }.ct-office .ct-header-status { width:100%; gap:6px }.ct-office .ct-header-status .ct-button { margin-left:auto }.ct-office .ct-display { padding:10px }.ct-office .ct-costs { display:block }.ct-office .ct-cost-total { display:flex; margin:9px 0 12px }.ct-office .ct-display-heading { flex-wrap:wrap }.ct-office .ct-task-columns { grid-template-columns:1fr }.ct-office .ct-room-label { flex-basis:100% }.ct-office .ct-toolbar { padding:9px 12px }.ct-office .ct-inspector { display:block }.ct-office .ct-inspector [data-testid="office-launchers-overview"] { margin-top:12px }.ct-office .ct-stats { grid-template-columns:repeat(2,1fr) }.ct-office .ct-room-scroll { height:420px }.ct-office .ct-usage-grid { gap:7px }.ct-office .ct-usage { padding:7px } }
 @media (prefers-reduced-motion:reduce) { .ct-office *, .ct-office *::before, .ct-office *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important } }
 
 .ct-office .ct-money-timestamp { display:block; margin-top:5px; font-size:9px; color:#b7b4a4 }

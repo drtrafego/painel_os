@@ -25,6 +25,8 @@ export interface TarefaParede {
   dependeDe: string | null
   estado: 'ativa' | 'bloqueada' | 'concluida'
   emAndamento: boolean
+  semProximoPasso: boolean
+  subtarefas: Array<{ titulo: string; ordem: number; estado: 'ativa' | 'bloqueada' | 'concluida' }>
 }
 export interface ColunaTarefas {
   id: 'renato' | 'luana'
@@ -32,6 +34,7 @@ export interface ColunaTarefas {
   tarefas: TarefaParede[]
   avisos: string[]
   lidoEm: string | null
+  restantes: number
 }
 export interface UsoParede {
   id: string
@@ -105,9 +108,16 @@ export function montarTarefasParede(tarefas?: TarefasDiretores | null): ColunaTa
         dependeDe: item.depende_de,
         estado: item.estado_tarefa,
         emAndamento: item.em_andamento,
+        semProximoPasso: item.sem_proximo_passo === true,
+        subtarefas: (item.subtarefas || []).map((subtarefa) => ({
+          titulo: subtarefa.titulo,
+          ordem: subtarefa.ordem,
+          estado: subtarefa.estado,
+        })),
       })),
       avisos: pacote?.avisos || [],
       lidoEm: pacote?.lido_em || null,
+      restantes: numeroMedido(pacote?.restantes) ?? 0,
     }
   })
 }

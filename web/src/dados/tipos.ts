@@ -317,6 +317,8 @@ export type TarefaDiretor = {
   depende_de: string | null
   estado_tarefa: 'ativa' | 'bloqueada' | 'concluida'
   em_andamento: boolean
+  sem_proximo_passo?: boolean
+  subtarefas?: { titulo: string; ordem: number; estado: 'ativa' | 'bloqueada' | 'concluida' }[]
 }
 
 export interface TarefasDiretores {
@@ -324,11 +326,13 @@ export interface TarefasDiretores {
     itens: TarefaDiretor[]
     avisos: string[]
     lido_em: string | null
+    restantes?: number
   }
   renato: {
     itens: TarefaDiretor[]
     avisos: string[]
     lido_em: string | null
+    restantes?: number
   }
 }
 

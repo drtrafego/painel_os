@@ -112,8 +112,25 @@ def testar_parser():
             for n in range(50)
         )
         pacote = ler(wm(muitos, tmp))
-        conferir("50 itens corta em 5", len(pacote["itens"]), 5)
-        conferir("corte depois da ordenação mantém P0", [i["prioridade"] for i in pacote["itens"]], ["P0"] * 5)
+        conferir("50 itens corta em 30", len(pacote["itens"]), 30)
+        conferir("corte depois da ordenação mantém P0 primeiro", [i["prioridade"] for i in pacote["itens"][:13]], ["P0"] * 13)
+        conferir("50 itens registram restantes fora do limite", pacote["restantes"], 20)
+
+        oito = "# Memória\n\n## Prioridade agora\n\n" + "\n".join(
+            f"{n}. **P1, item parseável {n}, responsável Luana:** texto.\n   Próximo passo verificável: passo {n}."
+            for n in range(1, 9)
+        )
+        pacote = ler(wm(oito, tmp))
+        conferir("8 itens parseáveis dão 8 exibidos", len(pacote["itens"]), 8)
+        conferir("8 itens parseáveis registram restantes 0", pacote["restantes"], 0)
+
+        trinta_e_cinco = "# Memória\n\n## Prioridade agora\n\n" + "\n".join(
+            f"{n}. **P1, item extra {n}, responsável Luana:** texto.\n   Próximo passo verificável: passo {n}."
+            for n in range(1, 36)
+        )
+        pacote = ler(wm(trinta_e_cinco, tmp))
+        conferir("35 itens parseáveis dão 30 exibidos", len(pacote["itens"]), 30)
+        conferir("35 itens parseáveis registram restantes 5", pacote["restantes"], 5)
 
         longo = wm("# Memória\n\n## Prioridade agora\n\n1. **P1, " + ("tarefa " * 20000) + ", responsável Luana:** texto.\n   Próximo passo verificável: " + ("passo " * 20000) + ".\n", tmp)
         pacote = ler(longo)
@@ -131,9 +148,29 @@ def testar_parser():
    Próximo passo verificável: executar.
 """, tmp)
         pacote = ler(estados)
-        conferir("estado_tarefa sem estado operacional", sorted(i["estado_tarefa"] for i in pacote["itens"]), ["ativa", "bloqueada", "concluida"])
+        conferir("estado_tarefa sem estado operacional", sorted(i["estado_tarefa"] for i in pacote["itens"]), ["ativa", "ativa", "bloqueada"])
         conferir_verdade("itens não têm campo estado", all("estado" not in i for i in pacote["itens"]))
         conferir("só primeiro item ativo fica em andamento", [i["em_andamento"] for i in pacote["itens"]], [False, True, False])
+
+        fechado_com_proximo = wm("""# Memória
+
+## Prioridade agora
+
+1. **P1, SAC mvpsac, responsável Renato:** Fechado e CONFERIDO no atendimento, mas ainda há validação pendente.
+   Próximo passo verificável (1): conferir lembrete 24h no painel e horário editável.
+""", tmp)
+        pacote = ler(fechado_com_proximo)
+        conferir("Fechado e CONFERIDO com próximo passo aberto fica ativa", pacote["itens"][0]["estado_tarefa"], "ativa")
+
+        data_iso = wm("""# Memória
+
+## Prioridade agora
+
+1. **P1, frota com data explícita, responsável Renato, data 2026-09-30:** texto cita 28/09 mais adiante.
+   Próximo passo verificável: conferir regressão de 28/09.
+""", tmp)
+        pacote = ler(data_iso)
+        conferir("campo data ISO vence primeiro dd/mm do texto", pacote["itens"][0]["data"], "30/09")
 
         dependencias = wm("""# Memória
 
@@ -164,8 +201,82 @@ def testar_parser():
    Próximo passo verificável: executar completo.
 """, tmp)
         pacote = ler(parcial)
-        conferir("item sem próximo passo é omitido", [i["titulo"] for i in pacote["itens"]], ["item completo"])
-        conferir_verdade("item incompleto gera aviso", any("item incompleto" in a for a in pacote["avisos"]))
+        conferir("item sem próximo passo aparece", [i["titulo"] for i in pacote["itens"]], ["item parcial", "item completo"])
+        conferir("item sem próximo passo ganha flag", pacote["itens"][0]["sem_proximo_passo"], True)
+        conferir_verdade("item sem próximo passo não gera item incompleto", all("item incompleto" not in a for a in pacote["avisos"]))
+
+        incompletos = wm("""# Memória
+
+## Prioridade agora
+
+1. **sem prioridade, responsável Luana:** texto.
+   Próximo passo verificável: não exibir.
+2. **P1, token=abc123, responsável Luana:** texto.
+   Próximo passo verificável: não exibir.
+3. **P2, completo, responsável Luana:** texto.
+   Próximo passo verificável: exibir.
+""", tmp)
+        pacote = ler(incompletos)
+        conferir("itens sem prioridade ou título são omitidos", [i["titulo"] for i in pacote["itens"]], ["completo"])
+        conferir_verdade("aviso cita quantidade sem prioridade", any("1 item sem prioridade omitido" in a for a in pacote["avisos"]), str(pacote["avisos"]))
+        conferir_verdade("aviso cita quantidade sem título", any("1 item sem título omitido" in a for a in pacote["avisos"]), str(pacote["avisos"]))
+
+
+def testar_subtarefas_e_sem_proximo_passo():
+    print("\n--- tarefas_diretores: subtarefas e sem próximo passo")
+    with tempfile.TemporaryDirectory() as tmp:
+        sem_passo = wm("""# Memória
+
+## Prioridade agora
+
+1. **P0, item sem passo, responsável Luana:** texto aberto sem a expressão exigida antes.
+""", tmp)
+        pacote = ler(sem_passo)
+        conferir("P0 com título sem próximo passo aparece", len(pacote["itens"]), 1)
+        conferir("flag sem_proximo_passo verdadeira", pacote["itens"][0]["sem_proximo_passo"], True)
+        conferir("subtarefas ausentes viram lista vazia", pacote["itens"][0]["subtarefas"], [])
+
+        passos = wm("""# Memória
+
+## Prioridade agora
+
+1. **P1, item com passos, responsável Luana:** texto.
+   Próximo passo verificável: (1) conferir lembrete 24h no painel (2) validar horário editável com Renato.
+""", tmp)
+        pacote = ler(passos)
+        conferir("passos numerados geram 2 subtarefas", [s["titulo"] for s in pacote["itens"][0]["subtarefas"]], ["conferir lembrete 24h no painel", "validar horário editável com Renato"])
+        conferir("subtarefas herdam estado", [s["estado"] for s in pacote["itens"][0]["subtarefas"]], ["ativa", "ativa"])
+
+        lista = wm("""# Memória
+
+## Prioridade agora
+
+1. **P1, item com lista, responsável Luana:** texto.
+   - primeira subtarefa aninhada
+   2. segunda subtarefa aninhada
+   Próximo passo verificável: (1) passo ignorado porque lista vence (2) outro passo.
+""", tmp)
+        pacote = ler(lista)
+        conferir("lista aninhada vence passos numerados", [s["titulo"] for s in pacote["itens"][0]["subtarefas"]], ["primeira subtarefa aninhada", "segunda subtarefa aninhada"])
+
+        sete = wm("# Memória\n\n## Prioridade agora\n\n1. **P1, item com sete, responsável Luana:** texto.\n" + "\n".join(
+            f"   - subtarefa número {n} para limite" for n in range(1, 8)
+        ) + "\n   Próximo passo verificável: executar.\n", tmp)
+        pacote = ler(sete)
+        conferir("subtarefas cortam em 6", len(pacote["itens"][0]["subtarefas"]), 6)
+        conferir("ordem das 6 subtarefas", [s["ordem"] for s in pacote["itens"][0]["subtarefas"]], [1, 2, 3, 4, 5, 6])
+
+        segredo = wm("""# Memória
+
+## Prioridade agora
+
+1. **P1, item com segredo, responsável Luana:** texto.
+   - usar token=abc123 e sk-1234567890abcdef na subtarefa
+   Próximo passo verificável: executar.
+""", tmp)
+        pacote = ler(segredo)
+        bruto = json.dumps(pacote, ensure_ascii=False)
+        conferir_verdade("segredo dentro de subtarefa é mascarado", "abc123" not in bruto and "sk-1234567890abcdef" not in bruto and "[segredo]" in bruto, bruto)
 
 
 def testar_privacidade():
@@ -193,7 +304,7 @@ def testar_privacidade():
         ]
         conferir_verdade("nada sensível aparece na saída", all(p not in bruto for p in proibidos), bruto)
         conferir("item com título só privado é omitido", [i["titulo"] for i in pacote["itens"]], ["ligar para [privado]", "tarefa pública"])
-        conferir_verdade("omissão por privacidade gera aviso", any("item omitido por privacidade" in a for a in pacote["avisos"]))
+        conferir_verdade("omissão por título todo mascarado gera aviso", any("item sem título omitido" in a for a in pacote["avisos"]))
 
         original = mod.sanitizar_texto_publico
         try:
@@ -403,6 +514,8 @@ def testar_rota_real():
                     "prioridade": "sk-1234567890abcdef",
                     "estado_tarefa": "sk-1234567890abcdef",
                     "chave": "sk-1234567890abcdef",
+                    "sem_proximo_passo": True,
+                    "subtarefas": [{"titulo": "sub token=abc123 sk-1234567890abcdef", "ordem": 8, "estado": "quebrado"}],
                 }],
                 "avisos": ["aviso com secret=abc123 " + ("x" * 200)] * 12,
                 "lido_em": "sk-1234567890abcdef",
@@ -422,10 +535,13 @@ def testar_rota_real():
     conferir("rota regenera ordem", item["ordem"], 1)
     conferir("rota mascara dependência", item["depende_de"], "aguarda [segredo]")
     conferir("rota descarta estado inválido", item["estado_tarefa"], "ativa")
+    conferir("rota preserva flag sem próximo passo", item["sem_proximo_passo"], True)
+    conferir("rota redige subtarefa", item["subtarefas"], [{"titulo": "sub [segredo] [segredo]", "ordem": 1, "estado": "ativa"}])
     conferir("rota marca andamento único", item["em_andamento"], True)
     conferir("rota fixa responsável pelo dono", item["responsavel"], "Luana")
     conferir("rota descarta data inválida", item["data"], None)
     conferir("rota aceita só lido_em ISO", redigido["tarefas_diretores"]["luana"]["lido_em"], None)
+    conferir("rota trata restantes ausente como zero", redigido["tarefas_diretores"]["luana"]["restantes"], 0)
     conferir("rota limita avisos a 10", len(redigido["tarefas_diretores"]["luana"]["avisos"]), 10)
     conferir_verdade("rota limita aviso a 120 caracteres", all(len(a) <= 120 for a in redigido["tarefas_diretores"]["luana"]["avisos"]))
 
@@ -443,6 +559,7 @@ def testar_rota_tipos_e_vazamento():
         ("ordem string", {"luana": {"itens": [{"titulo": "Tarefa", "proximo_passo": "Fazer", "ordem": "1"}], "avisos": []}}),
         ("em_andamento string", {"luana": {"itens": [{"titulo": "Tarefa", "proximo_passo": "Fazer", "em_andamento": "sim"}], "avisos": []}}),
         ("depende_de lista", {"luana": {"itens": [{"titulo": "Tarefa", "proximo_passo": "Fazer", "depende_de": ["x"]}], "avisos": []}}),
+        ("sem próximo passo explícito", {"luana": {"itens": [{"titulo": "Tarefa", "proximo_passo": "", "sem_proximo_passo": True}], "avisos": []}}),
         ("pacote None", {"luana": None}),
         ("chave inexistente", {"luana": {"itens": [{"titulo": "Tarefa", "proximo_passo": "Fazer"}], "avisos": []}}),
     ]
@@ -465,20 +582,25 @@ def testar_rota_tipos_e_vazamento():
                 "itens": [{
                     "titulo": "Tarefa segura",
                     "proximo_passo": "Fazer seguro",
+                    "sem_proximo_passo": False,
+                    "subtarefas": [{"titulo": "Sub segura", "ordem": 99, "estado": "ativa", "extra": "sk-subvazamento123456"}],
                     "campo_desconhecido": "sk-itemvazamento123456",
                 }],
                 "avisos": [],
                 "lido_em": "2026-10-01T00:00:00-03:00",
+                "restantes": 3,
             }
         },
     }
     redigido = redigir_dados_agentes(payload_extra)
     pacote = redigido["tarefas_diretores"]["luana"]
     item = pacote["itens"][0]
-    conferir("pacote público só tem campos conhecidos", set(pacote.keys()), {"itens", "avisos", "lido_em"})
-    conferir("item público só tem campos conhecidos", set(item.keys()), {"chave", "ordem", "prioridade", "titulo", "responsavel", "proximo_passo", "data", "depende_de", "estado_tarefa", "em_andamento"})
+    conferir("pacote público só tem campos conhecidos", set(pacote.keys()), {"itens", "avisos", "lido_em", "restantes"})
+    conferir("pacote público preserva restantes inteiro", pacote["restantes"], 3)
+    conferir("item público só tem campos conhecidos", set(item.keys()), {"chave", "ordem", "prioridade", "titulo", "responsavel", "proximo_passo", "sem_proximo_passo", "subtarefas", "data", "depende_de", "estado_tarefa", "em_andamento"})
+    conferir("subtarefa pública só tem campos conhecidos", set(item["subtarefas"][0].keys()), {"titulo", "ordem", "estado"})
     saida = json.dumps(redigido, ensure_ascii=False)
-    conferir_verdade("extra aninhado não vaza segredo", "sk-vazamento" not in saida and "sk-itemvazamento" not in saida, saida)
+    conferir_verdade("extra aninhado não vaza segredo", "sk-vazamento" not in saida and "sk-itemvazamento" not in saida and "sk-subvazamento" not in saida, saida)
 
 
 def testar_dependencia_40_frases():
@@ -599,6 +721,7 @@ def testar_integracao():
 
 if __name__ == "__main__":
     testar_parser()
+    testar_subtarefas_e_sem_proximo_passo()
     testar_privacidade()
     testar_acentos_e_supermascara()
     testar_corte_antes_de_regex()

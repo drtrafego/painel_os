@@ -14,6 +14,7 @@ const tarefas: TarefasDiretores = {
   luana: {
     lido_em: '2026-10-01T01:00:00-03:00',
     avisos: ['aviso público'],
+    restantes: 3,
     itens: [
       {
         chave: 'luana:P0:0',
@@ -22,6 +23,11 @@ const tarefas: TarefasDiretores = {
         titulo: 'Nina lead de anúncio',
         responsavel: 'Luana',
         proximo_passo: 'reiniciar receiver',
+        sem_proximo_passo: false,
+        subtarefas: [
+          { titulo: 'conferir lembrete 24h', ordem: 1, estado: 'ativa' },
+          { titulo: 'validar horário editável', ordem: 2, estado: 'ativa' },
+        ],
         data: '01/10',
         depende_de: 'decisão do Gastão',
         estado_tarefa: 'ativa',
@@ -33,7 +39,8 @@ const tarefas: TarefasDiretores = {
         prioridade: 'P1',
         titulo: 'Mineração AutonomIA',
         responsavel: 'Luana',
-        proximo_passo: 'aguardar diagnóstico',
+        proximo_passo: '',
+        sem_proximo_passo: true,
         data: null,
         depende_de: null,
         estado_tarefa: 'bloqueada',
@@ -46,7 +53,7 @@ const tarefas: TarefasDiretores = {
 
 const colunas = montarTarefasParede(tarefas)
 conferir('ordem das colunas fica Renato e Luana', colunas.map((c) => c.id), ['renato', 'luana'])
-conferir('coluna vazia permanece neutra', colunas[0], { id: 'renato', nome: 'Renato', tarefas: [], avisos: [], lidoEm: null })
+conferir('coluna vazia permanece neutra', colunas[0], { id: 'renato', nome: 'Renato', tarefas: [], avisos: [], lidoEm: null, restantes: 0 })
 conferir('usa campos da fila, não de agente vivo', colunas[1].tarefas[0], {
   chave: 'luana:P0:0',
   nome: 'Luana',
@@ -57,8 +64,16 @@ conferir('usa campos da fila, não de agente vivo', colunas[1].tarefas[0], {
   dependeDe: 'decisão do Gastão',
   estado: 'ativa',
   emAndamento: true,
+  semProximoPasso: false,
+  subtarefas: [
+    { titulo: 'conferir lembrete 24h', ordem: 1, estado: 'ativa' },
+    { titulo: 'validar horário editável', ordem: 2, estado: 'ativa' },
+  ],
 })
+conferir('ausência de data vira selo quando sem próximo passo', colunas[1].tarefas[1].semProximoPasso, true)
+conferir('subtarefas ausentes ficam seguras', montarTarefasParede({ luana: { lido_em: null, avisos: [], itens: [ { ...tarefas.luana.itens[0], subtarefas: undefined, sem_proximo_passo: undefined } ] }, renato: { lido_em: null, avisos: [], itens: [] } })[1].tarefas[0].subtarefas, [])
 conferir('avisos ficam na coluna sem virar tarefa', colunas[1].avisos, ['aviso público'])
+conferir('restantes passa para a coluna quando presente', colunas[1].restantes, 3)
 
 const usoComSemana: UsoPlanos = {
   status: 'pronto',
