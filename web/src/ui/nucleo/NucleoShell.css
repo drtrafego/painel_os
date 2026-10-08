@@ -81,6 +81,7 @@
 .nx-office-slot [data-testid="pixel-office"] + div{display:none}
 
 /* A navegação espacial está nos monitores desenhados na parede. Sem sidebar externa. */
+.nx-environment{display:flex;flex-direction:column}
 .nx-architecture{order:2;width:100%;display:flex;flex-direction:row;align-items:stretch;padding:8px 18px;gap:8px;border-right:0;border-top:1px solid rgba(244,206,75,0.35);background:linear-gradient(180deg,#181d20 0%,#0c1012 100%);box-shadow:inset 0 1px 0 rgba(244,206,75,0.18),0 -6px 20px rgba(0,0,0,0.5);overflow-x:auto;position:relative}
 .nx-architecture:after{display:none}.nx-wall-inscription{display:none}
 .nx-station{position:relative;flex:1;min-width:124px;min-height:50px;padding:7px 10px 7px 36px;border:1px solid #3d3725;border-radius:8px;background:linear-gradient(145deg,#1f2528,#101517);color:#eee9d5;display:flex;align-items:flex-start;flex-direction:column;justify-content:center;box-shadow:inset 0 1px 0 rgba(244,206,75,0.1),0 2px 5px rgba(0,0,0,0.4);transition:all .15s ease-out;text-align:left}
