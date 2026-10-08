@@ -81,11 +81,17 @@
 .nx-office-slot [data-testid="pixel-office"] + div{display:none}
 
 /* A navegação espacial está nos monitores desenhados na parede. Sem sidebar externa. */
-.nx-environment{display:flex;flex-direction:column}
-.nx-architecture{order:2;width:100%;display:flex;flex-direction:row;align-items:stretch;padding:9px 18px;gap:9px;border-right:0;border-top:1px solid #997b3f66;background:linear-gradient(#161d1c,#0d1417);box-shadow:inset 0 2px 0 #e9c25412;overflow-x:auto}
+.nx-architecture{order:2;width:100%;display:flex;flex-direction:row;align-items:stretch;padding:8px 18px;gap:8px;border-right:0;border-top:1px solid rgba(244,206,75,0.35);background:linear-gradient(180deg,#181d20 0%,#0c1012 100%);box-shadow:inset 0 1px 0 rgba(244,206,75,0.18),0 -6px 20px rgba(0,0,0,0.5);overflow-x:auto;position:relative}
 .nx-architecture:after{display:none}.nx-wall-inscription{display:none}
-.nx-station{flex:1;min-width:120px;min-height:49px;padding:8px 10px 8px 35px;border-color:#57513a;display:flex;align-items:flex-start;flex-direction:column;justify-content:center}
-.nx-station-icon{position:absolute;left:10px;top:12px;font-size:19px}.nx-station strong{font-size:10px;margin:0}.nx-station small{font-size:8px;display:block}.nx-station-number{font-size:7px}
+.nx-station{position:relative;flex:1;min-width:124px;min-height:50px;padding:7px 10px 7px 36px;border:1px solid #3d3725;border-radius:8px;background:linear-gradient(145deg,#1f2528,#101517);color:#eee9d5;display:flex;align-items:flex-start;flex-direction:column;justify-content:center;box-shadow:inset 0 1px 0 rgba(244,206,75,0.1),0 2px 5px rgba(0,0,0,0.4);transition:all .15s ease-out;text-align:left}
+.nx-station-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--nx-accent);line-height:1;filter:drop-shadow(0 0 6px rgba(244,206,75,0.25))}
+.nx-station strong{display:block;font-size:10.5px;font-weight:600;letter-spacing:.02em;color:#eeeade;margin:0;line-height:1.2}
+.nx-station small{display:block;font-size:8.5px;line-height:1.35;color:#a5a18d;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.nx-station-number{position:absolute;right:7px;top:6px;color:#8a835c;font:8.5px monospace;letter-spacing:.05em}
+.nx-station:hover{border-color:#f4ce4b;background:linear-gradient(145deg,#282d30,#14191c);box-shadow:0 0 14px rgba(244,206,75,0.2),inset 0 1px 0 rgba(244,206,75,0.25);transform:translateY(-1px)}
+.nx-station-active{border-color:#f4ce4b;background:linear-gradient(145deg,#2f2a1b,#14191c);box-shadow:0 0 18px rgba(244,206,75,0.28),inset 0 2px 0 #f4ce4b;color:#fff4c7}
+.nx-station-active strong{color:#fff2bf}
+.nx-station-active .nx-station-icon{filter:drop-shadow(0 0 8px #f4ce4b)}
 .nx-shell .ct-room-scroll{height:clamp(390px,calc(100dvh - 405px),660px)}
 @media(max-width:700px){.nx-architecture{padding:9px;gap:7px}.nx-station{min-width:124px;min-height:47px}.nx-shell .ct-room-scroll{height:440px}}
 /* Monitores compactos: a maior área da visão geral pertence ao escritório. */
