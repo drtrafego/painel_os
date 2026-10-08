@@ -107,6 +107,19 @@ def testar_parser():
         conferir("ordem é a posição final da fila", [i["ordem"] for i in pacote["itens"]], [1, 2])
         conferir("chave continua regenerada com índice", [i["chave"] for i in pacote["itens"]], ["luana:P0:0", "luana:P3:1"])
 
+        alfanumerico = wm("""# Memória
+
+## Prioridade agora
+
+5. **P1, mineração em acompanhamento, responsável Luana:** texto.
+   Próximo passo verificável: conferir mineração.
+6b. **P1, post travado, responsável Luana:** texto.
+   Próximo passo verificável: conferir publicação.
+""", tmp)
+        pacote = ler(alfanumerico)
+        conferir("marcador alfanumérico inicia uma nova tarefa", [i["titulo"] for i in pacote["itens"]], ["mineração em acompanhamento", "post travado"])
+        conferir("marcador alfanumérico preserva fila visual contínua", [i["ordem"] for i in pacote["itens"]], [1, 2])
+
         muitos = "# Memória\n\n## Prioridade agora\n\n" + "\n".join(
             f"{n}. **P{n % 4}, item {n:02d}, responsável Luana:** texto.\n   Próximo passo verificável: passo {n}."
             for n in range(50)

@@ -5,6 +5,25 @@ umask 077
 RAIZ_PAINEL="/opt/gastaomatos/luana/painel_os"
 PORTA="5199"
 TRAVA="/tmp/painel-os-watchdog.lock"
+TRAVA_COLETOR="/tmp/painel_os_coletor.lock"
+CACHE_USO="$RAIZ_PAINEL/data/cache_uso_planos.json"
+LOG_COLETOR="$RAIZ_PAINEL/servidor/coletor-cron.log"
+IDADE_MAXIMA_USO=900
+
+# O cron regular roda a cada cinco minutos, mas usa flock não bloqueante. Se
+# ele parar por completo (ou a máquina tiver ficado indisponível), este
+# watchdog já acorda todo minuto e relança UMA coleta quando o cache de uso
+# passou de 15 min. O timeout impede que a recuperação vire outra trava eterna.
+recuperar_uso_vencido() {
+  local agora modificado idade
+  agora=$(/usr/bin/date +%s)
+  modificado=$(/usr/bin/stat -c %Y "$CACHE_USO" 2>/dev/null || printf '0')
+  idade=$((agora - modificado))
+  (( idade > IDADE_MAXIMA_USO )) || return 0
+  /usr/bin/setsid /usr/bin/flock -n "$TRAVA_COLETOR" \
+    /usr/bin/timeout -k 10 120 /usr/bin/python3 "$RAIZ_PAINEL/coletor/coletar_estado.py" \
+    >> "$LOG_COLETOR" 2>&1 &
+}
 
 # Uma única instância decide. O watchdog nunca encerra processo: se a porta
 # pertencer a outra coisa, falha alto para não causar dano tentando adivinhar.
@@ -27,6 +46,7 @@ if (( ${#PIDS[@]} > 0 )); then
       codigo=$(/usr/bin/curl --silent --output /dev/null --write-out '%{http_code}' \
         --max-time 3 "http://127.0.0.1:$PORTA/" || true)
       if [[ "$codigo" == "401" ]]; then
+        recuperar_uso_vencido
         exit 0
       fi
       echo "painel-os: processo $pid existe, mas a porta local respondeu ${codigo:-sem resposta}; não reiniciei às cegas" >&2

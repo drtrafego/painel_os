@@ -857,18 +857,19 @@ else:
 
 # ‼️ E o CORPUS REAL DA CASA, que foi quem derrubou a primeira regua: a porta
 # nao pode parar a coleta por causa de texto que ja esta escrito em `memoria/`
-# e `diario/`. Medido em 10/09/2026: a regua larga parava em 8 linhas, cinco
-# delas id de conta do Google Ads; esta para em 1, e essa 1 e um telefone DE
-# VERDADE escrito no diario, ou seja acerto, nao falso positivo.
+# e `diario/`. Medido em 08/10/2026: a regua larga parava em 8 linhas, cinco
+# delas id de conta do Google Ads; esta para em 2, e as 2 sao telefones DE
+# VERDADE escritos no diario, ou seja acertos, nao falsos positivos.
 casa = [p for pasta in ("memoria", "diario")
         for p in sorted((Path("/opt/gastaomatos/luana") / pasta).glob("*.md"))]
 if casa:
     param = [(p.name, ln.strip()[:60]) for p in casa
              for ln in p.read_text(encoding="utf-8", errors="replace").splitlines()
              if ln.strip() and c.numero_de_pessoa(ln)]
-    # 1 linha e o telefone real do diario de 31/08. Mais que isso e regressao.
-    conferir(f"corpus da casa ({len(casa)} arquivos): no maximo 1 linha para a coleta",
-             len(param) <= 1, True)
+    # Sao os telefones reais dos diarios de 31/08 e 01/10. Um terceiro caso
+    # precisa ser revisto para distinguir novo dado real de regressao da regua.
+    conferir(f"corpus da casa ({len(casa)} arquivos): no maximo 2 linhas para a coleta",
+             len(param) <= 2, True)
     if param:
         print(f"       (a que para: {param[0][0]} -> {param[0][1]!r})")
 else:
@@ -1525,6 +1526,9 @@ try:
     conferir("presença usa só o jsonl raiz mais novo e processo vivo", (presenca["estado"], presenca["ultima_atividade"]), ("ativo", esperado_ultima))
     sem_processo = c.ler_presenca_sessao({"id": "bia", "pasta": pasta_bia}, projetos=projetos, agora=agora_ref, processos_claude=(set(), None))
     conferir("jsonl recente sem processo remoto não vira ativo", sem_processo["estado"], "ocioso")
+    com_service_codex = c.presenca_com_service_ativo(sem_processo, {"situacao": "um_ativo", "motor": "Codex"})
+    conferir("service Codex ativo corrige presença ociosa", com_service_codex["estado"], "ativo")
+    conferir("service parado não mascara presença ociosa", c.presenca_com_service_ativo(sem_processo, {"situacao": "nenhum_ativo"})["estado"], "ocioso")
     proc_indeterminado = c.ler_presenca_sessao({"id": "bia", "pasta": pasta_bia}, projetos=projetos, agora=agora_ref, processos_claude=(None, "falha sintética"))
     conferir("falha de /proc não vira ativo", (proc_indeterminado["estado"], proc_indeterminado["erro_atividade"]), ("indeterminado", "falha sintética"))
     conferir("presença não publica caminho", c.auditar_estado_publico(presenca), [])

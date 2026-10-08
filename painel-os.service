@@ -1,0 +1,18 @@
+[Unit]
+Description=Painel OS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=claude
+Group=claude
+WorkingDirectory=/opt/gastaomatos/luana/painel_os
+UMask=0077
+ExecStart=/usr/bin/python3 -u servidor/servir.py
+Restart=always
+RestartSec=10
+Environment=HOME=/home/claude
+
+[Install]
+WantedBy=multi-user.target

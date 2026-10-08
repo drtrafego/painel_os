@@ -51,12 +51,18 @@ try:
 except Exception:
     FUSO_SP = timezone(timedelta(hours=-3), name="America/Sao_Paulo")
 from pathlib import Path
+
+PAINEL_OS_DIR = Path(__file__).resolve().parent.parent
+if str(PAINEL_OS_DIR) not in sys.path:
+    sys.path.insert(0, str(PAINEL_OS_DIR))
+
 from chamadas_ingestao import ErroIngestao, carregar_inbox
 from diretiva import carregar as carregar_diretiva
 import motores
+from servidor.tarefas_diretores import obter_tarefas_diretores
+from servidor.agentes_vivos import _workers_codex_mecanico
 
 RAIZ = Path("/opt/gastaomatos")
-PAINEL_OS_DIR = Path(__file__).resolve().parent.parent
 DATA_MAPAS = PAINEL_OS_DIR / "data" / "mapas"
 DIST_MAPAS = PAINEL_OS_DIR / "web" / "dist" / "mapas"
 PUBLIC_MAPAS = PAINEL_OS_DIR / "web" / "public" / "mapas"
@@ -107,6 +113,8 @@ DIRETIVA_JSON = RAIZ / "luana/painel_os/data/diretiva.json"
 ESTUDIO_FONTES_JSON = RAIZ / "luana/painel_os/data/estudio-fontes.json"
 SKILLS_RAIZ = RAIZ / "luana/.claude/skills"
 CONEXOES_RAIZ = RAIZ / "luana/conexoes"
+MINERADOR_ENV = RAIZ / "luana/.env.minerador"
+MINERADOR_STATUS_URL = "https://minerador.casaldotrafego.com/api/agent/status?empresa=AutonomIA"
 
 # Agentes de sessao: os que rodam no systemd e falam pelo Telegram.
 #
@@ -252,6 +260,101 @@ def gravar_atomico(caminho: Path, dado) -> None:
                 pass
 
 
+def _ler_env_simples(caminho: Path) -> dict[str, str]:
+    valores = {}
+    try:
+        for linha in caminho.read_text(encoding="utf-8").splitlines():
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            chave, valor = linha.split("=", 1)
+            valores[chave.strip()] = valor.strip().strip("'\"")
+    except OSError:
+        return {}
+    return valores
+
+
+def ler_status_mineracao_autonomia(buscar=None) -> dict:
+    """Publica só telemetria agregada do minerador. Nunca inclui leads ou abordagem."""
+    vazio = {
+        "status": "erro",
+        "atualizado_em": agora_utc().isoformat(),
+        "empresa": "AutonomIA",
+        "saude_ok": None,
+        "alertas": [],
+        "operando": None,
+        "total_enviado_hoje": None,
+        "falhas_hoje": None,
+        "email_capacidade": {"teto_do_dia": None, "enviados": None, "restante": None},
+        "chegando_hoje": {"mensagens": None, "conversas": None},
+        "pool_disponivel": {"email": None, "whatsapp": None},
+        "fonte": "minerador.casaldotrafego.com/api/agent/status?empresa=AutonomIA",
+        "erro": None,
+    }
+    try:
+        bruto = buscar() if buscar is not None else None
+        if bruto is None:
+            env = _ler_env_simples(MINERADOR_ENV)
+            token = env.get("LUANA_API_TOKEN") or env.get("MINERADOR_API_TOKEN")
+            if not token:
+                return {**vazio, "erro": "token do minerador não configurado para o painel"}
+            req = urllib.request.Request(
+                MINERADOR_STATUS_URL,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                bruto = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        motivo = "IP não autorizado pela API" if e.code == 403 else f"HTTP {e.code}"
+        return {**vazio, "erro": motivo}
+    except Exception as e:
+        return {**vazio, "erro": f"{type(e).__name__}: falha ao consultar status do minerador"}
+
+    if not isinstance(bruto, dict) or bruto.get("ok") is not True:
+        return {**vazio, "erro": "resposta do minerador veio sem ok:true"}
+    empresa = None
+    if isinstance(bruto.get("empresas"), list):
+        for item in bruto["empresas"]:
+            if isinstance(item, dict) and item.get("empresa") == "AutonomIA":
+                empresa = item
+                break
+    if empresa is None:
+        return {**vazio, "erro": "resposta não trouxe a empresa AutonomIA"}
+
+    def inteiro(valor):
+        return valor if isinstance(valor, int) and valor >= 0 else None
+
+    saude = bruto.get("saude") if isinstance(bruto.get("saude"), dict) else {}
+    cap = empresa.get("email_capacidade") if isinstance(empresa.get("email_capacidade"), dict) else {}
+    chegando = empresa.get("chegando_hoje") if isinstance(empresa.get("chegando_hoje"), dict) else {}
+    pool = empresa.get("pool_disponivel") if isinstance(empresa.get("pool_disponivel"), dict) else {}
+    alertas = [str(a)[:180] for a in saude.get("alertas", []) if isinstance(a, str)][:8]
+    return {
+        **vazio,
+        "status": "pronto",
+        "atualizado_em": agora_utc().isoformat(),
+        "saude_ok": saude.get("ok") if isinstance(saude.get("ok"), bool) else None,
+        "alertas": alertas,
+        "operando": empresa.get("operando") if isinstance(empresa.get("operando"), bool) else None,
+        "total_enviado_hoje": inteiro(empresa.get("total_enviado_hoje")),
+        "falhas_hoje": inteiro(empresa.get("total_falhas_hoje")),
+        "email_capacidade": {
+            "teto_do_dia": inteiro(cap.get("teto_do_dia")),
+            "enviados": inteiro(cap.get("enviados")),
+            "restante": inteiro(cap.get("restante")),
+        },
+        "chegando_hoje": {
+            "mensagens": inteiro(chegando.get("mensagens")),
+            "conversas": inteiro(chegando.get("conversas")),
+        },
+        "pool_disponivel": {
+            "email": inteiro(pool.get("email")),
+            "whatsapp": inteiro(pool.get("whatsapp")),
+        },
+        "erro": None,
+    }
+
+
 def _projeto_claude_da_pasta(pasta: Path) -> str:
     try:
         partes = Path(pasta).resolve().parts
@@ -356,6 +459,28 @@ def ler_presenca_sessao(
         "estado": estado,
         "ultima_atividade": instante.isoformat(),
         "erro_atividade": erro_processos,
+    }
+
+
+def presenca_com_service_ativo(presenca, estado_motores):
+    """Um service ativo é presença, inclusive quando ele usa Codex.
+
+    A sonda histórica acima conhece só ``claude --remote-control``. Depois do
+    drop-in do Renato trocar o ExecStart para a ponte Codex, ela continuou
+    devolvendo ``ocioso`` apesar de o systemd confirmar a sessão viva. Não
+    chamamos isto de ferramenta em execução; apenas corrigimos a presença do
+    diretor para a evidência mais forte e atual do service.
+    """
+    if not isinstance(estado_motores, dict) or estado_motores.get("situacao") != "um_ativo":
+        return presenca
+    if not isinstance(presenca, dict) or presenca.get("estado") == "ativo":
+        return presenca
+    origem = "service ativo confirmado pelo systemd"
+    anterior = presenca.get("fonte_atividade")
+    return {
+        **presenca,
+        "estado": "ativo",
+        "fonte_atividade": f"{origem}; {anterior}" if anterior else origem,
     }
 
 
@@ -6871,6 +6996,19 @@ def auditar_estado_publico(valor, caminho="estado"):
 
 def main():
     agentes = descobrir_agentes()
+    tarefas_diretores = obter_tarefas_diretores()
+    workers_brutos, erro_workers = _workers_codex_mecanico()
+    workers_codex = {
+        "status": "indeterminado" if workers_brutos is None else "pronto",
+        "erro": erro_workers,
+        "itens": [],
+    }
+    for worker in workers_brutos or []:
+        item = dict(worker)
+        for campo in ("tarefa", "descricao", "etapa", "status"):
+            if isinstance(item.get(campo), str):
+                item[campo] = redigir_texto_livre(item[campo], limite=90) or "tarefa técnica em execução"
+        workers_codex["itens"].append(item)
     conv = ler_convocacoes()
     convocacoes = conv["por_agente"]
     ultima_vez = conv["ultima"]
@@ -6914,6 +7052,8 @@ def main():
     for item in SESSAO:
         pasta = item["pasta"]
         presenca = ler_presenca_sessao(item, agora=agora_sessao, processos_claude=processos_claude)
+        estado_motores = motores.estado_dos_motores(item["service_prefixo"], sonda_motores)
+        presenca = presenca_com_service_ativo(presenca, estado_motores)
         sessao.append(
             {
                 "id": item["id"],
@@ -6933,7 +7073,7 @@ def main():
                 "diario": contar_arquivos_linhas(pasta / "diario", "*.md"),
                 "cron_linhas": cron["por_agente"].get(item["id"]),
                 "service_prefixo": item["service_prefixo"],
-                "motores": motores.estado_dos_motores(item["service_prefixo"], sonda_motores),
+                "motores": estado_motores,
             }
         )
 
@@ -6951,6 +7091,7 @@ def main():
     salvar_mapa_setor_comercial()
     salvar_mapa_setor_trafego()
     salvar_mapa_setor_bots()
+    mineracao = ler_status_mineracao_autonomia()
 
     estado = {
         "gerado_em": agora_utc().isoformat(),
@@ -7026,6 +7167,7 @@ def main():
         "biblioteca": biblioteca,
         "pipeline": pipeline,
         "followup": followup,
+        "mineracao": mineracao,
         "calendario": calendario,
         "diretiva": diretiva,
         "uso_planos": uso_planos,
@@ -7036,6 +7178,8 @@ def main():
         "squad_bots": squad_bots,
         "squads": squads,
         "sessao": sessao,
+        "workers_codex": workers_codex,
+        "tarefas_diretores": tarefas_diretores,
         "agentes": agentes,
         "convocacoes_fora_da_casa": de_fora,
         "arestas": conv["arestas"],

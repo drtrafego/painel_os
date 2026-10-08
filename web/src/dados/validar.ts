@@ -86,9 +86,9 @@ function validarMotores(ctx: Contexto, v: unknown, p: string) {
   if (v === undefined || v === null) return
   if (!objetoObrigatorio(ctx, v, p)) return
   if (v.situacao !== undefined && (!texto(ctx, v.situacao, `${p}.situacao`) || !ESTADOS_MOTOR.has(v.situacao))) ctx.problemas.push(`${p}.situacao: situação de motor não permitida`)
-  opcionalTexto(ctx, v.motivo, `${p}.motivo`, true); opcionalTexto(ctx, v.motor, `${p}.motor`, true); if (v.ativos !== undefined) listaTextos(ctx, v.ativos, `${p}.ativos`)
+  opcionalTexto(ctx, v.motivo, `${p}.motivo`, true); opcionalTexto(ctx, v.motor, `${p}.motor`, true); opcionalTexto(ctx, v.modelo, `${p}.modelo`, true); opcionalTexto(ctx, v.esforco, `${p}.esforco`, true); if (v.ativos !== undefined) listaTextos(ctx, v.ativos, `${p}.ativos`)
   if (v.servicos === undefined) return
-  if (lista(ctx, v.servicos, `${p}.servicos`)) v.servicos.forEach((servico, i) => { const sp = `${p}.servicos[${i}]`; if (!objetoObrigatorio(ctx, servico, sp)) return; texto(ctx, servico.service, `${sp}.service`); for (const n of ['ativo', 'existe']) if (servico[n] !== undefined && servico[n] !== null) booleano(ctx, servico[n], `${sp}.${n}`); for (const n of ['estado', 'sub', 'motor']) opcionalTexto(ctx, servico[n], `${sp}.${n}`, true); if (!('motor_fonte' in servico)) ctx.problemas.push(`${sp}.motor_fonte: campo ausente`); else opcionalTexto(ctx, servico.motor_fonte, `${sp}.motor_fonte`, true) })
+  if (lista(ctx, v.servicos, `${p}.servicos`)) v.servicos.forEach((servico, i) => { const sp = `${p}.servicos[${i}]`; if (!objetoObrigatorio(ctx, servico, sp)) return; texto(ctx, servico.service, `${sp}.service`); for (const n of ['ativo', 'existe']) if (servico[n] !== undefined && servico[n] !== null) booleano(ctx, servico[n], `${sp}.${n}`); for (const n of ['estado', 'sub', 'motor', 'modelo', 'esforco']) opcionalTexto(ctx, servico[n], `${sp}.${n}`, true); if (!('motor_fonte' in servico)) ctx.problemas.push(`${sp}.motor_fonte: campo ausente`); else opcionalTexto(ctx, servico.motor_fonte, `${sp}.motor_fonte`, true) })
 }
 
 function validarSessao(ctx: Contexto, v: unknown) {
@@ -183,6 +183,27 @@ function validarJanelas(ctx: Contexto, v: unknown) {
   }
 }
 
+function validarMineracao(ctx: Contexto, v: unknown) {
+  if (v === undefined) return
+  if (!objetoObrigatorio(ctx, v, 'estado.mineracao')) return
+  texto(ctx, v.status, 'estado.mineracao.status')
+  dataIso(ctx, v.atualizado_em, 'estado.mineracao.atualizado_em')
+  texto(ctx, v.empresa, 'estado.mineracao.empresa')
+  if (v.saude_ok !== null) booleano(ctx, v.saude_ok, 'estado.mineracao.saude_ok')
+  if (v.operando !== null) booleano(ctx, v.operando, 'estado.mineracao.operando')
+  listaTextos(ctx, v.alertas, 'estado.mineracao.alertas')
+  for (const n of ['total_enviado_hoje', 'falhas_hoje']) opcionalNumero(ctx, v[n], `estado.mineracao.${n}`, true, true, true)
+  for (const grupo of ['email_capacidade', 'chegando_hoje', 'pool_disponivel']) {
+    if (objetoObrigatorio(ctx, v[grupo], `estado.mineracao.${grupo}`)) {
+      for (const [chave, valor] of Object.entries(v[grupo] as Registro)) {
+        opcionalNumero(ctx, valor, `estado.mineracao.${grupo}.${chave}`, true, true, true)
+      }
+    }
+  }
+  texto(ctx, v.fonte, 'estado.mineracao.fonte')
+  opcionalTexto(ctx, v.erro, 'estado.mineracao.erro', true)
+}
+
 function validarPrivacidade(v: unknown, p = 'estado', problemas: string[] = []) {
   const chaveSecreta = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential|authorization|private[_-]?key|bearer)/i
   const caminhoPrivado = /(?:^|[\s"'=])(?:\/(?:opt|home|root|tmp|var|mnt|etc)\/|[A-Za-z]:\\|\\\\[^\\]+\\)/i
@@ -200,6 +221,7 @@ export function validarEstado(dado: unknown): ResultadoValidacao {
   if (objetoObrigatorio(ctx, e.squads, 'estado.squads')) for (const [id, squad] of Object.entries(e.squads)) { ctx.squads.add(id); const p = `estado.squads.${id}`; if (objetoObrigatorio(ctx, squad, p)) { texto(ctx, squad.nome, `${p}.nome`); texto(ctx, squad.descricao, `${p}.descricao`) } }
   if (objetoObrigatorio(ctx, e.resumo, 'estado.resumo')) { for (const n of ['agentes_casa', 'agentes_sessao', 'convocacoes_total', 'convocacoes_casa', 'transcripts_lidos']) numero(ctx, e.resumo[n], `estado.resumo.${n}`, true, true); opcionalNumero(ctx, e.resumo.convocacoes_pela_sessao, 'estado.resumo.convocacoes_pela_sessao', false, true, true); opcionalNumero(ctx, e.resumo.convocacoes_por_subagente, 'estado.resumo.convocacoes_por_subagente', false, true, true); opcionalNumero(ctx, e.resumo.convocacoes_repetidas_descartadas, 'estado.resumo.convocacoes_repetidas_descartadas', false, true, true); opcionalNumero(ctx, e.resumo.cron_ativo, 'estado.resumo.cron_ativo', true, true, true); for (const n of ['convocacoes_por_motor', 'convocacoes_por_modelo', 'transcripts_por_motor']) if (e.resumo[n] !== undefined) mapaNumeros(ctx, e.resumo[n], `estado.resumo.${n}`) }
   validarAgentes(ctx, e.agentes); validarSquadsComAgentes(ctx, e.agentes); validarSessao(ctx, e.sessao); validarArestas(ctx, e.arestas); validarJanelas(ctx, e.janelas)
+  validarMineracao(ctx, e.mineracao)
   mapaNumeros(ctx, e.convocacoes_fora_da_casa, 'estado.convocacoes_fora_da_casa')
   if (objetoObrigatorio(ctx, e.verificadores, 'estado.verificadores')) for (const [nome, item] of Object.entries(e.verificadores)) { if (nome === 'erro') opcionalTexto(ctx, item, `estado.verificadores.${nome}`, true); else validarVerificador(ctx, item, `estado.verificadores.${nome}`) }
   if (objetoObrigatorio(ctx, e.cron, 'estado.cron')) { if (e.cron.jobs === null) { /* permitido pelo tipo */ } else if (lista(ctx, e.cron.jobs, 'estado.cron.jobs')) e.cron.jobs.forEach((j, i) => { const p = `estado.cron.jobs[${i}]`; if (objetoObrigatorio(ctx, j, p)) { texto(ctx, j.expressao, `${p}.expressao`); texto(ctx, j.rotulo, `${p}.rotulo`); opcionalTexto(ctx, j.dono, `${p}.dono`, true) } }); else ctx.problemas.push('estado.cron.jobs: campo ausente'); opcionalTexto(ctx, e.cron.fuso, 'estado.cron.fuso', true); opcionalNumero(ctx, e.cron.total, 'estado.cron.total', true, true, true); if (e.cron.negacao !== undefined && objetoObrigatorio(ctx, e.cron.negacao, 'estado.cron.negacao')) { opcionalTexto(ctx, e.cron.negacao.erro, 'estado.cron.negacao.erro', true); opcionalNumero(ctx, e.cron.negacao.mascarados, 'estado.cron.negacao.mascarados', false, true, true) } }

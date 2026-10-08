@@ -466,71 +466,26 @@
       "lane": "operacao",
       "col": 5,
       "type": "external",
-      "label": "outros (1)",
-      "sublabel": "1 chamada sem ficha",
+      "label": "outros (2)",
+      "sublabel": "2 chamadas sem ficha",
       "width": 136,
       "yOffset": 180
     }
   ],
   "edges": [
     {
-      "id": "luana-dani-designer",
-      "from": "luana",
-      "to": "dani-designer",
+      "id": "elza-hugo-analista",
+      "from": "elza",
+      "to": "hugo-analista",
       "label": "5 chamadas",
       "variant": "default",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "luana-theo-criador",
+      "id": "luana-elza",
       "from": "luana",
-      "to": "theo-criador",
-      "label": "5 chamadas",
-      "variant": "default",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "luana-cleo-produtor",
-      "from": "luana",
-      "to": "cleo-produtor",
-      "label": "4 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "bia-cleo-produtor",
-      "from": "bia",
-      "to": "cleo-produtor",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "bia-dani-designer",
-      "from": "bia",
-      "to": "dani-designer",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "luana-dev",
-      "from": "luana",
-      "to": "dev",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "luana-guardiao",
-      "from": "luana",
-      "to": "guardiao",
+      "to": "elza",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
@@ -546,27 +501,18 @@
       "width": 1.2
     },
     {
-      "id": "luana-publicador",
+      "id": "luana-qa",
       "from": "luana",
-      "to": "publicador",
+      "to": "qa",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "luana-social",
-      "from": "luana",
-      "to": "social",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "renato-heitor",
-      "from": "renato",
-      "to": "heitor",
+      "id": "elza-outros",
+      "from": "elza",
+      "to": "outros",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",

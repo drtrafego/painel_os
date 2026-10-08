@@ -513,7 +513,7 @@ function CabecalhoSessao({ sessao, cor }: { sessao: AgenteSessao; cor: string })
               <span className={s.ativo ? 'text-tinta' : 'text-tinta-3'}>{s.service}</span>
               <span className="rotulo">{descreverServico(s)}</span>
               <span className="rotulo ml-auto truncate" title={s.motor_fonte}>
-                {nomeMotor(s.motor)}
+                {nomeMotor(s.motor, s.modelo, s.esforco)}
               </span>
             </li>
           ))}

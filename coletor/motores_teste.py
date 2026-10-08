@@ -50,10 +50,11 @@ CMD_CODEX = "/usr/bin/python3 /opt/gastaomatos/luana/codex-service/bridge.py"
 class SondaFalsa(motores.Sonda):
     """Devolve o que o systemd devolveria. Nada aqui toca o sistema."""
 
-    def __init__(self, units, arquivos=None, processos=None, show_falha=False, listar_falha=False):
+    def __init__(self, units, arquivos=None, processos=None, ambientes=None, show_falha=False, listar_falha=False):
         self.units = units
         self.arquivos = arquivos or {}
         self.processos = processos or {}
+        self.ambientes = ambientes or {}
         self.show_falha = show_falha
         self.listar_falha = listar_falha
 
@@ -93,6 +94,9 @@ class SondaFalsa(motores.Sonda):
             if pid in mapa:
                 return mapa[pid]
         return None
+
+    def ambiente(self, pid):
+        return self.ambientes.get(pid)
 
 
 ARQUIVOS = {
@@ -219,7 +223,38 @@ achado = [s for s in e["servicos"] if s["service"] == "luana-gemini.service"][0]
 checar("e o motor dele sai não identificado, não chutado", achado["motor"] is None, str(achado["motor"]))
 checar("mas ele conta como ativo", e["situacao"] == "um_ativo", e["situacao"])
 
-print("\n[11] MEDIDO CONTRA O SYSTEMD DE VERDADE (não é simulação)")
+print("\n[11] MODELO - vem da evidência certa de cada motor")
+sonda_modelos = SondaFalsa(
+    unidades("inactive", "active"), ARQUIVOS,
+    {
+        "/system.slice/luana-claude.service": {
+            "3001": "/usr/local/bin/claude --model claude-opus-4-6 --effort high --remote-control luana",
+        },
+        "/system.slice/luana.service": {
+            "3002": "/opt/codex-luana/bin/codex app-server --stdio",
+        },
+    },
+    {"3002": {"CODEX_MODEL": "gpt-5.6-luna", "CODEX_EFFORT": "xhigh", "NAO_PUBLICAR": "segredo"}},
+)
+motor, modelo, esforco, _ = motores.leitura_do_processo(
+    "luana-claude.service", "/system.slice/luana-claude.service", sonda_modelos,
+)
+checar("Claude extrai --model da linha de comando", (motor, modelo) == (motores.MOTOR_CLAUDE, "claude-opus-4-6"), str((motor, modelo)))
+checar("Claude extrai --effort da linha de comando", esforco == "high", str(esforco))
+motor, modelo, esforco, _ = motores.leitura_do_processo(
+    "luana.service", "/system.slice/luana.service", sonda_modelos,
+)
+checar("Codex extrai CODEX_MODEL do ambiente vivo", (motor, modelo) == (motores.MOTOR_CODEX, "gpt-5.6-luna"), str((motor, modelo)))
+checar("Codex extrai CODEX_EFFORT do ambiente vivo", esforco == "xhigh", str(esforco))
+checar("modelo Codex não cai para arquivo estático", motores.modelo_codex_do_ambiente({}) is None)
+checar("esforço Codex não cai para arquivo estático", motores.esforco_codex_do_ambiente({}) is None)
+
+estado_modelos = motores.estado_dos_motores("luana", sonda_modelos)
+checar("resumo publica o esforço do service ativo", estado_modelos["esforco"] == "xhigh", str(estado_modelos["esforco"]))
+codex_ativo = [s for s in estado_modelos["servicos"] if s["service"] == "luana.service"][0]
+checar("service publica somente o esforço selecionado", (codex_ativo["modelo"], codex_ativo["esforco"], "NAO_PUBLICAR" in codex_ativo) == ("gpt-5.6-luna", "xhigh", False), str(codex_ativo))
+
+print("\n[12] MEDIDO CONTRA O SYSTEMD DE VERDADE (não é simulação)")
 real = motores.estado_dos_motores("luana")
 checar("a Luana tem mais de um service instalado", len(real["servicos"]) >= 2, str(len(real["servicos"])))
 checar("a situação real é conhecida",
@@ -228,7 +263,7 @@ print(f"        luana: {real['situacao']} | motor no ar: {real['motor']}")
 for s in real["servicos"]:
     print(f"        {s['service']:24} {str(s['estado']):9} motor={s['motor']}")
 
-print("\n[12] CONTROLE - o arnês precisa saber REPROVAR")
+print("\n[13] CONTROLE - o arnês precisa saber REPROVAR")
 antes = len(falhas)
 checar("(controle) esta linha TEM que falhar", 1 == 2, "proposital")
 if len(falhas) == antes + 1:

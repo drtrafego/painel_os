@@ -11,11 +11,13 @@ Garante o contrato:
 
 import json
 import os
+import sqlite3
 import shutil
 import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import agentes_vivos as mod
 from agentes_vivos import (
@@ -487,6 +489,52 @@ def testar_agentes_vivos():
         conferir("dois codex exec da Luana são contados pelos CODEX_HOME", codex_fake, {"luana": 2})
         conferir("comando Codex que não é exec fica fora", erro_codex_fake, None)
 
+        print("\n--- Teste 4b: cada worker do codex_mecanico aparece pelo processo vivo")
+        (tmp_proc / "stat").write_text("btime 1000\n", encoding="utf-8")
+        (tmp_proc / "9105" / "status").write_text("Name:\tcodex\nPPid:\t9200\n", encoding="utf-8")
+        (tmp_proc / "9200").mkdir()
+        (tmp_proc / "9200" / "cmdline").write_bytes(
+            b"/usr/bin/bash\x00/opt/gastaomatos/luana/codex_mecanico.sh\x00"
+        )
+        (tmp_proc / "9200" / "status").write_text("Name:\tbash\nPPid:\t1\n", encoding="utf-8")
+        # O campo 22 (índice 19 após o nome do processo) é o starttime em ticks.
+        (tmp_proc / "9105" / "stat").write_text(
+            "9105 (codex) S 9200 " + "0 " * 17 + "5000\n", encoding="utf-8"
+        )
+        (tmp_proc / "9105" / "cmdline").write_bytes(
+            b"/opt/codex-luana/bin/codex\x00exec\x00--skip-git-repo-check\x00"
+            b"-c\x00model_reasoning_effort=high\x00-m\x00gpt-5.6-sol\x00"
+            b"-s\x00workspace-write\x00Investigar [token] com seguran\xc3\xa7a\x00"
+        )
+        workers_fake, erro_workers_fake = mod._workers_codex_mecanico(proc=tmp_proc, agora=1100)
+        conferir("worker filho do wrapper é detectado", erro_workers_fake, None)
+        conferir("um PID vira um worker visível", len(workers_fake or []), 1)
+        worker_fake = (workers_fake or [])[0]
+        conferir("worker informa quem despachou", worker_fake.get("dono"), "luana")
+        conferir("worker informa modelo e esforço", (worker_fake.get("modelo"), worker_fake.get("esforco")), ("gpt-5.6-sol", "alto"))
+        conferir("worker informa duração do processo", worker_fake.get("rodando_ha"), "50s")
+        conferir("prompt do worker é curto e redigido", worker_fake.get("tarefa"), "Investigar [token] com segurança")
+        print("\n--- Teste 4b.1: casa padrão preserva workers do codex_mecanico")
+        with patch.object(mod, "PROJETOS_DA_CASA", {"luana": "projeto-ausente"}), \
+             patch.object(mod, "CODEX_DA_CASA", {"luana": []}), \
+             patch.object(mod, "RAIZ_PROJETOS", tmp_proc), \
+             patch.object(mod, "_processos_claude_remotos", return_value=(set(), None)), \
+             patch.object(mod, "_processos_codex_exec", return_value=({}, None)), \
+             patch.object(mod, "_workers_codex_mecanico", return_value=(workers_fake, None)), \
+             patch.object(mod, "_jobs_ponte_codex", return_value=([], [])):
+            casa_padrao_worker = ler_agentes_da_casa()
+        conferir(
+            "ler_agentes_da_casa sem argumentos agrega worker vivo",
+            [a.get("id") for a in casa_padrao_worker["agentes"]],
+            ["worker-codex-9105"],
+        )
+        painel_worker = ler_agentes_da_casa(
+            projetos={"luana": "projeto-ausente"}, raiz=tmp_proc, codex={},
+            processos_claude=None, processos_codex=None, workers_codex=workers_fake,
+        )
+        conferir("worker sustenta a sonda mesmo sem transcript", painel_worker["ok"], True)
+        conferir("worker entra como execução paralela na sonda", [a.get("id") for a in painel_worker["agentes"]], ["worker-codex-9105"])
+
         print("\n--- Teste 5: Agregação resiliente quando uma sessão falha")
         projetos_com_falha = {
             "luana": "-opt-gastaomatos-luana",
@@ -517,6 +565,43 @@ def testar_agentes_vivos():
         conferir("sessão Codex carimbada com o dono certo", [a.get("dono") for a in sessoes_codex], ["luana"])
         conferir("total = 4 Claude + 1 Codex", len(casa_codex["agentes"]), 5)
 
+        print("\n--- Teste 6b.0: jobs reais da ponte entram no painel")
+        banco_jobs = tmp / "inbox-jobs-teste.sqlite3"
+        with sqlite3.connect(banco_jobs) as con:
+            con.execute("CREATE TABLE background_jobs (id TEXT, name TEXT, status TEXT, created REAL, updated REAL, model TEXT, effort TEXT)")
+            con.executemany("INSERT INTO background_jobs VALUES (?,?,?,?,?,?,?)", [
+                ("job-running", "copiar campanha", "running", agora - 50, agora - 20, "gpt-5.5", "low"),
+                ("job-review", "revisar campanha", "reviewing", agora - 80, agora - 10, "gpt-5.5", "low"),
+                ("job-queued", "enviar resumo", "queued", agora - 5, agora - 5, "gpt-5.5", "low"),
+                ("job-done", "tarefa antiga", "done", agora - 90, agora - 1, "gpt-5.5", "low"),
+            ])
+        jobs, avisos_jobs = mod._jobs_ponte_codex("luana", agora, banco=banco_jobs)
+        conferir("jobs da ponte são lidos sem erro", avisos_jobs, [])
+        home_agentes = tmp / "home-dos-agentes"
+        (home_agentes / ".codex-luana").mkdir(parents=True)
+        shutil.copyfile(banco_jobs, home_agentes / ".codex-luana" / "inbox.sqlite3")
+        with patch.object(mod, "AGENT_HOME", home_agentes):
+            jobs_por_home, _ = mod._jobs_ponte_codex("luana", agora)
+        conferir("painel usa home dos agentes, não home do processo web", len(jobs_por_home), 3)
+        conferir("execução e revisão contam como trabalhando", sum(j["estado"] == TRABALHANDO for j in jobs), 2)
+        conferir("job na fila fica visível mas não como execução", sum(j["estado"] == SILENCIOSO for j in jobs), 1)
+        conferir("job concluído não fica como vivo", len(jobs), 3)
+        with patch.object(mod, "RAIZ_PROJETOS", tmp), patch.object(mod, "_jobs_ponte_codex", return_value=(jobs, [])):
+            painel_jobs = ler_agentes(projeto="inexistente", dono="luana", raiz_codex=[],
+                                      processos_claude=None, processos_codex=None)
+        conferir("ponte sustenta leitura sem sessão Claude", painel_jobs["ok"], True)
+        conferir("painel conta jobs ativos", painel_jobs["contagem"][TRABALHANDO], 2)
+        conferir("painel mostra fila separada", painel_jobs["contagem"][SILENCIOSO], 1)
+        rollout_mesmo_job = {**next(j for j in jobs if j["tarefa"] == "copiar campanha"),
+                             "id": "rollout-mesmo-job", "fase": "atividade_codex",
+                             "etapa": "Tarefa: copiar campanha"}
+        with patch.object(mod, "RAIZ_PROJETOS", tmp), \
+             patch.object(mod, "_jobs_ponte_codex", return_value=(jobs, [])), \
+             patch.object(mod, "_codex_recentes", return_value=[rollout_mesmo_job]):
+            painel_sem_duplicata = ler_agentes(projeto="inexistente", dono="luana", raiz_codex=[],
+                                               processos_claude=None, processos_codex=None)
+        conferir("rollout do mesmo job não duplica a contagem", painel_sem_duplicata["contagem"][TRABALHANDO], 2)
+
         print("\n--- Teste 6b.1: processo vivo sustenta Codex durante ferramenta longa")
         raiz_codex_longo = tmp / "codex-longo"
         pasta_codex_longo = raiz_codex_longo / "2026"
@@ -540,7 +625,7 @@ def testar_agentes_vivos():
         conferir("Codex mostra a ferramenta atual", codex_longo[0]["ferramenta"], "exec")
         conferir("Codex conserva modelo e esforço reais", (codex_longo[0]["modelo_legivel"], codex_longo[0]["esforco"]), ("GPT-5.6 Sol", "alto"))
 
-        print("\n--- Teste 6c: Codex usa modelo real e primeira linha útil do pedido")
+        print("\n--- Teste 6c: Codex usa modelo real e pedido mais recente")
         raiz_codex_etapa = tmp / "codex-etapa"
         pasta_codex_etapa = raiz_codex_etapa / "2026"
         pasta_codex_etapa.mkdir(parents=True)
@@ -567,7 +652,7 @@ def testar_agentes_vivos():
             }},
             {"type": "response_item", "payload": {
                 "type": "message", "role": "user", "content": [{
-                    "type": "input_text", "text": "Pedido posterior não substitui o primeiro",
+                    "type": "input_text", "text": "Pedido posterior substitui o primeiro",
                 }],
             }},
         ]
@@ -588,11 +673,31 @@ def testar_agentes_vivos():
         conferir("modelo real recebe rótulo específico", card_codex_etapa["modelo_legivel"], "GPT-5.6 Sol")
         conferir("último turn_context fornece esforço real", card_codex_etapa["esforco"], "máximo (xhigh)")
         conferir(
-            "etapa usa primeira linha útil e redige caminho/telefone",
+            "etapa acompanha o pedido mais recente",
             card_codex_etapa["etapa"],
-            "Revise [caminho] e ligue para [telefone]",
+            "Pedido posterior substitui o primeiro",
         )
         conferir("etapa respeita limite de 90 caracteres", len(card_codex_etapa["etapa"]) <= 90, True)
+
+        linhas_codex_etapa.extend([
+            {"type": "event_msg", "payload": {"type": "task_started"}},
+            {"type": "response_item", "payload": {
+                "type": "message", "role": "user", "content": [{"type": "input_text", "text":
+                    'Você é Luana.\nResultados recentes dos executores: contexto antigo.\n'
+                    'Tipo da entrada: text.\n{"content":"Pedido real novo","meta":{"chat_id":123}}'}],
+            }},
+            {"type": "event_msg", "payload": {"type": "task_complete"}},
+        ])
+        transcript_codex_etapa.write_text(
+            "\n".join(json.dumps(linha, ensure_ascii=False) for linha in linhas_codex_etapa) + "\n",
+            encoding="utf-8",
+        )
+        card_encerrado = mod._codex_recentes(
+            time.time(), dono="luana", raiz_codex=raiz_codex_etapa,
+            processos_vivos=1,
+        )[0]
+        conferir("ponte mostra o pedido real, não contexto injetado", card_encerrado["etapa"], "Pedido real novo")
+        conferir("turno concluído não aparece trabalhando", card_encerrado["estado"], mod.PARADO)
 
         raiz_codex_sem_pedido = tmp / "codex-sem-pedido"
         pasta_codex_sem_pedido = raiz_codex_sem_pedido / "2026"

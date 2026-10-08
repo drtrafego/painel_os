@@ -474,6 +474,8 @@ function completarSessoesVivas(agentes: AgenteVivo[], catalogo: PixelAgent[], es
       fase: 'sessao_viva',
       etapa: 'sessão viva · aguardando ferramenta',
       ferramenta: null,
+      modelo: sessao.motores?.modelo ?? null,
+      modelo_legivel: sessao.motores?.modelo ?? null,
       silencio_s: null,
       status: 'executando',
     }))

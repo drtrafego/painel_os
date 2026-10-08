@@ -70,6 +70,16 @@ SINAIS = (
     (MOTOR_CODEX, re.compile(r"""(?:^|[\s'"=])/(?:[\w.-]+/)*codex(?=[\s'"]|$)""")),
 )
 
+# Modelo e esforço são outras medidas, não inferências a partir do motor.
+# Claude os declara na linha de comando; Codex recebe-os no ambiente do
+# processo que está rodando. Em especial, não olhamos o .service nem o script
+# para o Codex: depois de um restart eles podem já dizer uma coisa diferente
+# do processo que ainda está atendendo.
+MODELOS_CODEX_AMBIENTE = ("CODEX_MODEL", "CODEX_MODEL_NAME", "OPENAI_MODEL")
+ESFORCOS_CODEX_AMBIENTE = ("CODEX_EFFORT",)
+RE_MODELO_CLAUDE = re.compile(r"(?:^|\s)--model(?:=|\s+)(?P<modelo>[^\s'\"]+)")
+RE_ESFORCO_CLAUDE = re.compile(r"(?:^|\s)--effort(?:=|\s+)(?P<esforco>[^\s'\"]+)")
+
 # engine=$(cat /etc/luana-engine)  -> o script é um despachante: o motor está
 # escrito no arquivo, não no script, e os dois ramos convivem no mesmo texto.
 DESPACHANTE = re.compile(r"^[^\S\n]*\w+=\$\(\s*cat\s+(?P<caminho>/[\w./-]+)\s*\)", re.M)
@@ -141,6 +151,25 @@ class Sonda:
             return None
         return bruto.replace(b"\0", b" ").decode("utf-8", "replace").strip()
 
+    def ambiente(self, pid):
+        """Ambiente do processo vivo, usado só para modelo e esforço.
+
+        Nunca devolvemos o ambiente para o JSON público: ele pode conter
+        credenciais. O chamador seleciona explicitamente as chaves conhecidas
+        de modelo e esforço acima.
+        """
+        try:
+            bruto = Path(f"/proc/{pid}/environ").read_bytes()
+        except OSError:
+            return None
+        valores = {}
+        for par in bruto.split(b"\0"):
+            chave, separador, valor = par.partition(b"=")
+            if not separador:
+                continue
+            valores[chave.decode("utf-8", "replace")] = valor.decode("utf-8", "replace")
+        return valores
+
 
 def classificar(texto):
     """Motores que aparecem no texto. Vazio = não identificado; 2 = ambíguo."""
@@ -151,6 +180,44 @@ def classificar(texto):
 
 def _um(motores):
     return next(iter(motores)) if len(motores) == 1 else None
+
+
+def modelo_claude_do_comando(comando):
+    """Modelo Claude declarado por --model; vazio nunca vira modelo padrão."""
+    if not comando:
+        return None
+    achado = RE_MODELO_CLAUDE.search(comando)
+    return achado.group("modelo") if achado else None
+
+
+def modelo_codex_do_ambiente(ambiente):
+    """Modelo do Codex no ambiente do processo vivo, sem ler arquivo em disco."""
+    if not isinstance(ambiente, dict):
+        return None
+    for chave in MODELOS_CODEX_AMBIENTE:
+        valor = ambiente.get(chave)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip()
+    return None
+
+
+def esforco_claude_do_comando(comando):
+    """Esforço Claude declarado por --effort; vazio nunca vira padrão."""
+    if not comando:
+        return None
+    achado = RE_ESFORCO_CLAUDE.search(comando)
+    return achado.group("esforco") if achado else None
+
+
+def esforco_codex_do_ambiente(ambiente):
+    """Esforço do Codex no ambiente do processo vivo, nunca em disco."""
+    if not isinstance(ambiente, dict):
+        return None
+    for chave in ESFORCOS_CODEX_AMBIENTE:
+        valor = ambiente.get(chave)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip()
+    return None
 
 
 def _ramo_do_case(texto, valor):
@@ -223,24 +290,55 @@ def _motor_do_script(caminho, sonda, profundidade):
     return None, f"nenhum sinal de motor em {curto(caminho)}"
 
 
-def motor_do_processo(unit, control_group, sonda):
-    """O que o unit ATIVO de fato executa. Prova mais forte que ler script."""
+def leitura_do_processo(unit, control_group, sonda):
+    """(motor, modelo, esforço, fonte) do unit ATIVO; processo vale mais que script."""
     pids = sonda.pids_do_unit(control_group)
     if pids is None:
-        return None, f"não consegui listar os processos de {unit}"
+        return None, None, None, f"não consegui listar os processos de {unit}"
     if not pids:
-        return None, f"{unit} está ativo e sem processo no cgroup"
+        return None, None, None, f"{unit} está ativo e sem processo no cgroup"
 
     achados = set()
+    modelos = set()
+    esforcos = set()
     for pid in pids:
         linha = sonda.cmdline(pid)
         if linha:
-            achados |= classificar(linha)
+            motores_do_pid = classificar(linha)
+            achados |= motores_do_pid
+            if MOTOR_CLAUDE in motores_do_pid:
+                modelo = modelo_claude_do_comando(linha)
+                if modelo:
+                    modelos.add(modelo)
+                esforco = esforco_claude_do_comando(linha)
+                if esforco:
+                    esforcos.add(esforco)
+            if MOTOR_CODEX in motores_do_pid:
+                ambiente = sonda.ambiente(pid)
+                modelo = modelo_codex_do_ambiente(ambiente)
+                if modelo:
+                    modelos.add(modelo)
+                esforco = esforco_codex_do_ambiente(ambiente)
+                if esforco:
+                    esforcos.add(esforco)
     if len(achados) == 1:
-        return _um(achados), f"processo em execução ({len(pids)} no cgroup)"
+        modelo = next(iter(modelos)) if len(modelos) == 1 else None
+        esforco = next(iter(esforcos)) if len(esforcos) == 1 else None
+        fonte = f"processo em execução ({len(pids)} no cgroup)"
+        if modelo:
+            fonte = f"{fonte}; modelo no processo em execução"
+        if esforco:
+            fonte = f"{fonte}; esforço no processo em execução"
+        return _um(achados), modelo, esforco, fonte
     if len(achados) > 1:
-        return None, f"{unit} tem processos de mais de um motor: {sorted(achados)}"
-    return None, f"nenhum processo de {unit} declara motor conhecido"
+        return None, None, None, f"{unit} tem processos de mais de um motor: {sorted(achados)}"
+    return None, None, None, f"nenhum processo de {unit} declara motor conhecido"
+
+
+def motor_do_processo(unit, control_group, sonda):
+    """Compatibilidade para quem só precisa classificar o motor."""
+    motor, _, _, fonte = leitura_do_processo(unit, control_group, sonda)
+    return motor, fonte
 
 
 CAMPOS = ("Id", "LoadState", "ActiveState", "SubState", "ExecStart", "ControlGroup")
@@ -327,6 +425,8 @@ def estado_dos_motores(prefixo, sonda=None):
             "situacao": "indeterminado",
             "motivo": "não consegui listar os services do systemd",
             "motor": None,
+            "modelo": None,
+            "esforco": None,
             "ativos": [],
             "servicos": [],
         }
@@ -335,6 +435,8 @@ def estado_dos_motores(prefixo, sonda=None):
             "situacao": "indeterminado",
             "motivo": f"nenhum service com o nome {prefixo} está instalado",
             "motor": None,
+            "modelo": None,
+            "esforco": None,
             "ativos": [],
             "servicos": [],
         }
@@ -345,9 +447,11 @@ def estado_dos_motores(prefixo, sonda=None):
             "situacao": "indeterminado",
             "motivo": "systemctl show não respondeu",
             "motor": None,
+            "modelo": None,
+            "esforco": None,
             "ativos": [],
             "servicos": [{"service": n, "existe": None, "estado": None,
-                          "motor": None, "motor_fonte": "não medido"} for n in nomes],
+                          "motor": None, "modelo": None, "esforco": None, "motor_fonte": "não medido"} for n in nomes],
         }
 
     servicos, ativos, indeterminados = [], [], []
@@ -356,7 +460,7 @@ def estado_dos_motores(prefixo, sonda=None):
         if bloco is None:
             indeterminados.append(nome)
             servicos.append({"service": nome, "existe": None, "estado": None,
-                             "motor": None, "motor_fonte": "systemctl não devolveu este unit"})
+                             "motor": None, "modelo": None, "esforco": None, "motor_fonte": "systemctl não devolveu este unit"})
             continue
 
         carga = bloco.get("LoadState", "").strip()
@@ -365,20 +469,30 @@ def estado_dos_motores(prefixo, sonda=None):
         # igual a service parado.
         if carga == "not-found":
             servicos.append({"service": nome, "existe": False, "estado": None,
-                             "motor": None, "motor_fonte": "o systemd não conhece este service"})
+                             "motor": None, "modelo": None, "esforco": None, "motor_fonte": "o systemd não conhece este service"})
             indeterminados.append(nome)
             continue
 
         ativo = estado == "active"
         if ativo:
-            motor, fonte = motor_do_processo(nome, bloco.get("ControlGroup", "").strip(), sonda)
+            motor, modelo, esforco, fonte = leitura_do_processo(nome, bloco.get("ControlGroup", "").strip(), sonda)
             if motor is None:
                 estatico, fonte_estatica = motor_do_comando(bloco.get("ExecStart", ""), sonda)
                 if estatico is not None:
                     motor, fonte = estatico, f"{fonte_estatica} (processo não respondeu)"
+            if motor == MOTOR_CLAUDE and modelo is None:
+                modelo = modelo_claude_do_comando(bloco.get("ExecStart", ""))
+                if modelo:
+                    fonte = f"{fonte}; modelo no comando do service"
+            if motor == MOTOR_CLAUDE and esforco is None:
+                esforco = esforco_claude_do_comando(bloco.get("ExecStart", ""))
+                if esforco:
+                    fonte = f"{fonte}; esforço no comando do service"
             ativos.append(nome)
         else:
             motor, fonte = motor_do_comando(bloco.get("ExecStart", ""), sonda)
+            modelo = modelo_claude_do_comando(bloco.get("ExecStart", "")) if motor == MOTOR_CLAUDE else None
+            esforco = esforco_claude_do_comando(bloco.get("ExecStart", "")) if motor == MOTOR_CLAUDE else None
 
         servicos.append({
             "service": nome,
@@ -387,6 +501,8 @@ def estado_dos_motores(prefixo, sonda=None):
             "sub": bloco.get("SubState", "").strip() or None,
             "ativo": ativo,
             "motor": motor,
+            "modelo": modelo,
+            "esforco": esforco,
             "motor_fonte": fonte,
         })
 
@@ -413,6 +529,8 @@ def estado_dos_motores(prefixo, sonda=None):
         "situacao": situacao,
         "motivo": motivo,
         "motor": no_ar[0]["motor"] if len(no_ar) == 1 else None,
+        "modelo": no_ar[0]["modelo"] if len(no_ar) == 1 else None,
+        "esforco": no_ar[0]["esforco"] if len(no_ar) == 1 else None,
         "ativos": ativos,
         "servicos": servicos,
     }

@@ -270,6 +270,20 @@ console.log('\nOS CASOS DENTRO DE UMA LISTA (o erro tem que vir com o indice)')
 }
 {
   const c = copia(real) as { sessao: Record<string, unknown>[] }
+  const m = c.sessao[0].motores as { servicos: Record<string, unknown>[] }
+  m.modelo = 42
+  m.servicos[0].modelo = 42
+  m.esforco = 42
+  m.servicos[0].esforco = 42
+  const r = validarEstado(c)
+  ok('modelo de motor fora de texto reprova', !r.ok)
+  ok('aponta modelo do motor inválido', !r.ok && (r.problemas ?? []).some((p) => p.includes('motores.modelo')),
+    !r.ok ? (r.problemas ?? []).join(' | ').slice(0, 140) : '')
+  ok('aponta esforço do motor inválido', !r.ok && (r.problemas ?? []).some((p) => p.includes('motores.esforco')),
+    !r.ok ? (r.problemas ?? []).join(' | ').slice(0, 140) : '')
+}
+{
+  const c = copia(real) as { sessao: Record<string, unknown>[] }
   c.sessao[0].service_prefixo = 42
   const r = validarEstado(c)
   ok('sessao com service_prefixo inválido reprova', !r.ok)

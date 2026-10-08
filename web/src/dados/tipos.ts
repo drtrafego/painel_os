@@ -157,6 +157,8 @@ export type AgenteSessao = {
     situacao?: 'um_ativo' | 'varios_ativos' | 'nenhum_ativo' | 'indeterminado'
     motivo?: string | null
     motor?: string | null
+    modelo?: string | null
+    esforco?: string | null
     ativos?: string[]
     servicos?: {
       service: string
@@ -165,6 +167,8 @@ export type AgenteSessao = {
       estado?: string | null
       sub?: string | null
       motor?: string | null
+      modelo?: string | null
+      esforco?: string | null
       motor_fonte?: string
     }[]
   } | null
@@ -552,6 +556,22 @@ export type Estado = {
     envios_registrados_no_log: number | null
     erro?: string
     contatos_no_estado: number
+  }
+
+  mineracao?: {
+    status: 'pronto' | 'erro' | string
+    atualizado_em: string
+    empresa: 'AutonomIA' | string
+    saude_ok: boolean | null
+    alertas: string[]
+    operando: boolean | null
+    total_enviado_hoje: number | null
+    falhas_hoje: number | null
+    email_capacidade: { teto_do_dia: number | null; enviados: number | null; restante: number | null }
+    chegando_hoje: { mensagens: number | null; conversas: number | null }
+    pool_disponivel: { email: number | null; whatsapp: number | null }
+    fonte: string
+    erro?: string | null
   }
 
   diretiva?: {

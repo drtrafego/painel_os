@@ -54,6 +54,8 @@ export function Comando({
   const pipelineOk = Boolean(pipeline && !pipeline.erro && pipeline.total !== null)
   const followup = estado.followup
   const followupOk = Boolean(followup && followup.status === 'pronto' && followup.envios_registrados_no_log !== null)
+  const mineracao = estado.mineracao
+  const mineracaoOk = Boolean(mineracao && mineracao.status === 'pronto')
 
   return (
     <div className="w-full max-w-none px-3 py-4 sm:px-6 lg:px-8 xl:px-10">
@@ -115,9 +117,17 @@ export function Comando({
           valor={followupOk ? followup?.envios_registrados_no_log : null}
           nota={followupOk ? `${followup?.contatos_no_estado} contatos no estado do motor · envio registrado, não resposta` : (followup?.erro ?? 'fonte ainda não veio no estado')}
         />
+        <Kpi
+          rotulo="mineração AutonomIA"
+          valor={mineracaoOk ? mineracao?.total_enviado_hoje : null}
+          cor={mineracao?.saude_ok === false ? 'text-ambar' : 'text-tinta'}
+          nota={mineracaoOk
+            ? `${mineracao?.pool_disponivel.email ?? '—'} e-mails no pool · ${mineracao?.pool_disponivel.whatsapp ?? '—'} WhatsApp no pool`
+            : (mineracao?.erro ?? 'fonte ainda não veio no estado')}
+        />
       </div>
 
-      <Cobertura estado={estado} aprovacoesOk={aprovacoesOk} totalPendentes={totalPendentes} pipelineOk={pipelineOk} followupOk={followupOk} />
+      <Cobertura estado={estado} aprovacoesOk={aprovacoesOk} totalPendentes={totalPendentes} pipelineOk={pipelineOk} followupOk={followupOk} mineracaoOk={mineracaoOk} />
 
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
         <Saude estado={estado} antiga={antiga} aoIr={aoIr} />
@@ -165,11 +175,12 @@ export function Comando({
   )
 }
 
-function Cobertura({ estado, aprovacoesOk, totalPendentes, pipelineOk, followupOk }: { estado: Estado; aprovacoesOk: boolean; totalPendentes: number | null; pipelineOk: boolean; followupOk: boolean }) {
+function Cobertura({ estado, aprovacoesOk, totalPendentes, pipelineOk, followupOk, mineracaoOk }: { estado: Estado; aprovacoesOk: boolean; totalPendentes: number | null; pipelineOk: boolean; followupOk: boolean; mineracaoOk: boolean }) {
   const fontes = [
     ['aprovações', aprovacoesOk, aprovacoesOk ? `${totalPendentes} aguardando decisão humana` : (estado.aprovacoes?.erro ?? 'não medida')],
     ['CRM agregado', pipelineOk, pipelineOk ? `${estado.pipeline?.total} registros em ${estado.pipeline?.organizacoes} organizações isoladas` : (estado.pipeline?.erro ?? 'não medido')],
     ['follow-up', followupOk, followupOk ? `${estado.followup?.envios_registrados_no_log} envios registrados no log` : (estado.followup?.erro ?? 'não medido')],
+    ['mineração', mineracaoOk, mineracaoOk ? `${estado.mineracao?.total_enviado_hoje ?? 0} enviados hoje; sem publicar leads` : (estado.mineracao?.erro ?? 'não medida')],
     ['verificadores', estado.sessao.some((s) => !ilegivel(s)), `${estado.sessao.filter((s) => !ilegivel(s)).length} de ${estado.sessao.length} lidos`],
     ['cron', estado.cron.total !== null, estado.cron.total === null ? 'não lido' : `${estado.cron.total} linhas ativas`],
     ['convocações', estado.convocacoes_erro == null, estado.convocacoes_erro ?? `${estado.resumo.convocacoes_total} medidas`],

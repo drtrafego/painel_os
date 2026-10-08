@@ -302,7 +302,7 @@ def _ler_prioridade_streaming(caminho: Path) -> tuple[str | None, list[str]]:
 def _separar_itens(blocos: list[str]) -> list[str]:
     itens = []
     atual: list[str] = []
-    inicio = re.compile(r"^(?:\d+\.\s+|-+\s+|\*\s+)")
+    inicio = re.compile(r"^(?:\d+[A-Za-z]?\.\s+|-+\s+|\*\s+)")
     for linha in "\n".join(blocos).splitlines():
         if inicio.match(linha):
             if atual:
@@ -375,7 +375,8 @@ def _titulo_curto_publico(texto: str, limite: int) -> str | None:
 
 
 def _extrair_titulo(texto: str) -> str:
-    plano = re.sub(r"^[\s\d.*•·-]+", "", texto)
+    plano = re.sub(r"^\s*\d+[A-Za-z]?\.\s+", "", texto)
+    plano = re.sub(r"^[\s\d.*•·-]+", "", plano)
     plano = re.sub(r"[*_`]", "", plano)
     plano = " ".join(plano.split())
     plano = re.sub(r"^(?:[\W_]|[🔴🟡🟢✅⚠️‼️❗❕🚨])+","", plano).strip()

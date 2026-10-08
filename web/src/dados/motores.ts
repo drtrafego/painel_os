@@ -17,6 +17,8 @@ export type ServicoMotor = {
   sub?: string | null
   ativo?: boolean
   motor?: string | null
+  modelo?: string | null
+  esforco?: string | null
   motor_fonte?: string
 }
 
@@ -24,6 +26,8 @@ export type MotoresSessao = {
   situacao?: 'um_ativo' | 'varios_ativos' | 'nenhum_ativo' | 'indeterminado'
   motivo?: string | null
   motor?: string | null
+  modelo?: string | null
+  esforco?: string | null
   ativos?: string[]
   servicos?: ServicoMotor[]
 }
@@ -41,7 +45,7 @@ export function lerMotores(dados?: MotoresSessao | null): MotorInfo {
     case 'um_ativo':
       return {
         tom: 'verde',
-        rotulo: dados.motor ?? 'ativo',
+        rotulo: nomeMotor(dados.motor, dados.modelo, dados.esforco),
         detalhe: dados.servicos ? `${dados.servicos.filter((s) => s.ativo).length} no ar` : '1 service ativo',
       }
     case 'varios_ativos':
@@ -66,9 +70,9 @@ export function lerMotores(dados?: MotoresSessao | null): MotorInfo {
   }
 }
 
-export function nomeMotor(motor?: string | null): string {
-  if (!motor) return 'motor não identificado'
-  return motor
+export function nomeMotor(motor?: string | null, modelo?: string | null, esforco?: string | null): string {
+  const motorLegivel = motor || 'motor não identificado'
+  return [motorLegivel, modelo, esforco].filter(Boolean).join(' · ')
 }
 
 export function descreverServico(s: ServicoMotor): string {
