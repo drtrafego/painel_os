@@ -124,7 +124,7 @@ export function NucleoShell({ rota, aoIr, escritorio, children, instrumentos, av
         <div ref={cenarioRef} className="nx-environment" aria-hidden={aberto ? true : undefined}>
           <nav className="nx-architecture" aria-label="Estações integradas ao escritório">
             <div className="nx-wall-inscription"><span>CT</span><strong>OPERAÇÃO<br />EM MOVIMENTO</strong></div>
-            {AREAS_NUCLEO.filter(area => area.id !== 'inicio').map((area, i) => <button type="button" className="nx-station" key={area.id} onClick={() => abrir(area.vistas[0])} title={area.estacao}><span className="nx-station-number">0{i + 1}</span><span aria-hidden="true" className="nx-station-icon">{area.sinal}</span><strong>{area.nome}</strong><small>{area.estacao}</small></button>)}
+            {AREAS_NUCLEO.filter(area => area.id !== 'inicio').map((area, i) => <button type="button" className={`nx-station${areaAtual?.id === area.id ? ' nx-station-active' : ''}`} key={area.id} onClick={() => abrir(area.vistas[0])} title={area.estacao}><span className="nx-station-number">0{i + 1}</span><span aria-hidden="true" className="nx-station-icon">{area.sinal}</span><strong>{area.nome}</strong><small>{area.estacao}</small></button>)}
             {adicionais.map(v => <button type="button" className="nx-station" key={v.id} onClick={() => abrir(v.id)}><strong>{v.nome}</strong></button>)}
           </nav>
           <div className="nx-office-slot" data-testid="persistent-office">{escritorio}</div>
