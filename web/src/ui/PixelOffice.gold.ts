@@ -93,6 +93,7 @@ export function desenharEscritorioGold(ctx:CanvasRenderingContext2D, quadro:Quad
   const p=(x:number,z:number,e=0)=>projeterStudio(layout,x,z,e)
   const scale=p(w,0).x-p(w-1,0).x
   const alpha=(ilha?:IlhaGold)=>ilha?clamp(quadro.progressos?.get(ilha.squad)??1):1
+
   const text=(s:string,x:number,y:number,size=10,color=TEXT,align:CanvasTextAlign='left',weight=550)=>{
     ctx.font=`${weight} ${size}px Inter, system-ui, sans-serif`;ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;ctx.fillText(s,x,y)
   }
@@ -126,7 +127,6 @@ export function desenharEscritorioGold(ctx:CanvasRenderingContext2D, quadro:Quad
     const rw=f.w*factor,rh=f.h*factor*.78
     if(image)ctx.drawImage(image,f.x,f.y,f.w,f.h,x,y,rw,rh)
     else {
-      // Placeholder legível durante o carregamento; nunca reativa o desenho legado.
       rect(x+rw*.15,y+rh*.2,rw*.7,rh*.8,'#353a3c','#6c6248',10)
     }
     return {x,y,w:rw,h:rh}
@@ -135,151 +135,342 @@ export function desenharEscritorioGold(ctx:CanvasRenderingContext2D, quadro:Quad
     if([b.x,b.y,b.w,b.h].every(Number.isFinite)&&b.w>0&&b.h>0)
       hits.push({chave:key,x:b.x,y:b.y,largura:b.w,altura:b.h,...(modulo?{modulo}:{})})
   }
+
   const labelSize=Math.max(9,9/Math.max(.35,(parseFloat(ctx.canvas.style.width)||w)/w))
-  const nameTag=(name:string,q:Point,key:string,color:string,max=112,selected=false)=>{
+  const nameTag=(name:string,q:Point,key:string,color:string,max=120,selected=false)=>{
     ctx.font=`600 ${labelSize}px Inter, system-ui, sans-serif`
     let label=name; while(label.length>3&&ctx.measureText(label).width>max-25)label=label.slice(0,-2)+'…'
     const width=Math.max(42,Math.min(max,ctx.measureText(label).width+24))
     const b={x:q.x-width/2,y:q.y-labelSize/2-2,w:width,h:Math.max(17,labelSize+7)}
     rect(b.x,b.y,b.w,b.h,selected?'#333020':'#131a1feF',selected?GOLD:'#42474a',5)
-    ctx.fillStyle=color;ctx.beginPath();ctx.arc(b.x+8,q.y+1.5,2,0,Math.PI*2);ctx.fill()
+    ctx.fillStyle=color;ctx.beginPath();ctx.arc(b.x+8,q.y+1.5,2.2,0,Math.PI*2);ctx.fill()
     text(label,b.x+15,q.y+1.5,labelSize,selected?'#fff3c0':TEXT)
     addHit(key,b)
   }
-  const plant=(x:number,z:number,unit=27)=>{
-    const q=p(x,z);shadow(q,unit*.5*scale,unit*.25*scale,.35);sprite('plant',q,unit)
+
+  const plant=(x:number,z:number,unit=28)=>{
+    const q=p(x,z);shadow(q,unit*.5*scale,unit*.25*scale,.38);sprite('plant',q,unit)
   }
-  const glass=(x:number,z:number,width:number,depth:number,height:number)=>{
+
+  const glassPartition=(x:number,z:number,width:number,depth:number,height=24)=>{
     const a=p(x,z,0),b=p(x+width,z+depth,0),c=p(x+width,z+depth,height),d=p(x,z,height)
-    const grad=ctx.createLinearGradient(d.x,d.y,a.x,a.y);grad.addColorStop(0,'rgba(160,190,193,.13)');grad.addColorStop(1,'rgba(121,164,170,.035)')
-    poly([a,b,c,d],grad,'rgba(181,199,192,.19)');line(d,c,'rgba(237,227,182,.43)',1)
-    line(a,d,'#53605d',2);line(b,c,'#53605d',2)
+    const grad=ctx.createLinearGradient(d.x,d.y,a.x,a.y)
+    grad.addColorStop(0,'rgba(244,206,75,0.18)')
+    grad.addColorStop(.5,'rgba(56,189,248,0.12)')
+    grad.addColorStop(1,'rgba(15,23,42,0.4)')
+    poly([a,b,c,d],grad,'rgba(244,206,75,0.45)')
+    line(d,c,'rgba(254,240,138,0.8)',1.2,4)
+    line(a,d,'#475569',1.8);line(b,c,'#475569',1.8)
   }
+
+  const floatingSectorBadge=(name:string,count:number,q:Point,color=GOLD)=>{
+    const title=`● ${name} (${count})`
+    ctx.font=`600 ${Math.max(8.5,10*scale)}px Inter, system-ui, sans-serif`
+    const tw=ctx.measureText(title).width
+    const bw=Math.max(76,tw+22), bh=Math.max(18,13*scale+6)
+    const bx=q.x-bw/2, by=q.y-bh/2
+    ctx.save()
+    ctx.shadowColor='rgba(0,0,0,0.6)';ctx.shadowBlur=8
+    rect(bx,by,bw,bh,'rgba(15,20,24,0.92)',color,bh/2)
+    ctx.restore()
+    ctx.fillStyle=color;ctx.beginPath();ctx.arc(bx+11,q.y,3,0,Math.PI*2);ctx.fill()
+    text(`${name} (${count})`,bx+19,q.y,Math.max(8.5,10*scale),TEXT,'left',600)
+  }
+
+  const availablePositionBadge=(q:Point)=>{
+    const title='Posição disponível +'
+    ctx.font=`600 ${Math.max(7.5,8.5*scale)}px Inter, system-ui, sans-serif`
+    const tw=ctx.measureText(title).width
+    const bw=tw+18, bh=Math.max(16,11*scale+5)
+    const bx=q.x-bw/2, by=q.y-bh/2
+    ctx.save()
+    ctx.shadowColor='rgba(244,206,75,0.35)';ctx.shadowBlur=6
+    rect(bx,by,bw,bh,'rgba(22,27,34,0.92)','#e5b83b',bh/2)
+    ctx.restore()
+    text(title,q.x,q.y,Math.max(7.5,8.5*scale),'#fef08a','center',600)
+  }
+
+  const drawWorkstation=(posto:{x:number;y:number},person:PessoaGold|undefined,units:number)=>{
+    const q=p(posto.x,posto.y+18)
+    shadow(p(posto.x,posto.y+8),units*1.55*scale,units*.7*scale,.55)
+    // Desk surface & structure
+    sprite(person?.execucao.estado==='trabalhando'||person?.execucao.estado==='silencioso'?'desk-on':'desk-off',q,units)
+    // Dual glowing widescreen monitors
+    const monL=p(posto.x-units*.48,posto.y+3,units*.45)
+    const monR=p(posto.x+units*.48,posto.y+3,units*.45)
+    const mw=units*.65*scale, mh=units*.38*scale
+    // Left screen
+    rect(monL.x-mw/2,monL.y-mh,mw,mh,'#090d12','#334155',2)
+    rect(monL.x-mw/2+1.5,monL.y-mh+1.5,mw-3,mh-3,person?.ativa?'#0369a1':'#0f172a')
+    if(person?.ativa){
+      for(let l=0;l<3;l++){
+        ctx.fillStyle='#38bdf8';ctx.fillRect(monL.x-mw/2+3,monL.y-mh+3+l*3.5,mw*(.5+l*.15),1.2)
+      }
+    }
+    // Right screen
+    rect(monR.x-mw/2,monR.y-mh,mw,mh,'#090d12','#334155',2)
+    rect(monR.x-mw/2+1.5,monR.y-mh+1.5,mw-3,mh-3,person?.ativa?'#713f12':'#0f172a')
+    if(person?.ativa){
+      for(let l=0;l<3;l++){
+        ctx.fillStyle=GOLD;ctx.fillRect(monR.x-mw/2+3,monR.y-mh+3+l*3.5,mw*(.6-l*.1),1.2)
+      }
+    }
+    // Ergonomic executive chair with golden chevron on headrest
+    const chairPos=p(posto.x,posto.y+45)
+    sprite('chair',chairPos,units*.95)
+    const headrest=p(posto.x,posto.y+38,units*.6)
+    ctx.fillStyle=GOLD;ctx.beginPath()
+    ctx.moveTo(headrest.x-2.5,headrest.y-1.5);ctx.lineTo(headrest.x+2.5,headrest.y-1.5);ctx.lineTo(headrest.x,headrest.y+1.5);ctx.closePath();ctx.fill()
+
+    if(person){
+      const dot=p(posto.x-units*1.25,posto.y,units*.9)
+      ctx.fillStyle=person.ativa?'#4ade80':person.execucao.estado==='silencioso'?'#facc15':'#64748b'
+      ctx.beginPath();ctx.arc(dot.x,dot.y,2.2*scale,0,Math.PI*2);ctx.fill()
+    }
+  }
+
   ctx.save()
   try {
     ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high'
-    const background=ctx.createLinearGradient(0,0,0,h);background.addColorStop(0,'#11191d');background.addColorStop(.55,'#141b1e');background.addColorStop(1,'#0d1215')
+    // 1. Deep Space Command Center Background
+    const background=ctx.createLinearGradient(0,0,0,h)
+    background.addColorStop(0,'#090c0f')
+    background.addColorStop(.4,'#0e1216')
+    background.addColorStop(1,'#070a0c')
     ctx.fillStyle=background;ctx.fillRect(0,0,w,h)
-    // Plataforma contínua, sem grandes blocos verdes/ciano.
-    const floor=ctx.createLinearGradient(0,p(0,0).y,0,p(0,h).y)
-    floor.addColorStop(0,day>.5?'#3b3f3d':'#2b3235');floor.addColorStop(1,'#222a30')
-    shadow(p(w/2,h*.65),w*.54,h*.26,.48)
-    box(12,4,w-24,h-18,-8,8,'#333a40')
-    plane(12,4,w-24,h-18,0,floor,'#54584b')
-    for(let z=30;z<h;z+=45)line(p(16,z),p(w-16,z),'rgba(193,197,192,.065)',.65)
-    for(let x=30;x<w-16;x+=65)line(p(x,4),p(x,h-14),'rgba(193,197,192,.065)',.65)
-    line(p(15,h-16,1),p(w-15,h-16,1),'#d9bc58',1.6,5)
-    // Parede traseira: materiais e estações de navegação reais, sem skyline pixelado.
-    const top=p(18,6,91),bottom=p(18,6,2), wall=ctx.createLinearGradient(0,top.y,0,bottom.y)
-    wall.addColorStop(0,'#333a3d');wall.addColorStop(.45,'#1d292e');wall.addColorStop(1,'#172025')
-    poly([top,p(w-18,6,91),p(w-18,6,2),bottom],wall,'#596057')
-    line(top,p(w-18,6,91),'#e7cd83',2,3)
-    // Slatted side panels + frame; regular material pattern, not pixel city blocks.
-    const sideWidth=Math.min(115,w*.18)
-    for(let x=24;x<sideWidth;x+=7){line(p(x,6,10),p(x,6,84),'#494d43',2);line(p(w-x,6,10),p(w-x,6,84),'#494d43',2)}
-    const brand=p(w/2,6,62),brandWidth=Math.min(260,w*.42)
-    rect(brand.x-brandWidth/2,brand.y-17,brandWidth,40,'#10191d','#877545',5)
-    text('CASAL DO TRÁFEGO',brand.x,brand.y-2,Math.min(17,w/34),GOLD,'center',750)
-    text('ESTÚDIO OPERACIONAL',brand.x,brand.y+13,7,'#c7c2ac','center',500)
-    // Navigation consoles on a workbench, with separate targets and stable route IDs.
-    const navGap=6,navWidth=(w-64-5*navGap)/6
+
+    // 2. High-Tech Slate Floor Platform with Warm Amber Bevel
+    const floorTop=p(12,4,0), floorBottom=p(w-12,h-14,0)
+    const floor=ctx.createLinearGradient(0,floorTop.y,0,floorBottom.y)
+    floor.addColorStop(0,day>.5?'#2b3338':'#181e23')
+    floor.addColorStop(.5,'#14191d')
+    floor.addColorStop(1,'#0d1114')
+    shadow(p(w/2,h*.65),w*.56,h*.28,.55)
+    box(12,4,w-24,h-18,-10,10,'#20262b')
+    plane(12,4,w-24,h-18,0,floor,'#3d4540')
+
+    // Fine floor seam grid
+    for(let z=30;z<h;z+=42)line(p(16,z),p(w-16,z),'rgba(244,206,75,0.04)',.7)
+    for(let x=30;x<w-16;x+=58)line(p(x,4),p(x,h-14),'rgba(244,206,75,0.04)',.7)
+
+    // Luminous Golden Neon LED Floor Baseboard Runner
+    line(p(14,h-15,1),p(w-14,h-15,1),GOLD,2.2,8)
+    line(p(14,4,1),p(14,h-15,1),'rgba(244,206,75,0.3)',1,3)
+    line(p(w-14,4,1),p(w-14,h-15,1),'rgba(244,206,75,0.3)',1,3)
+
+    // 3. Rear Architectural Wall with Integrated Downlights
+    const top=p(18,6,96), bottom=p(18,6,2)
+    const wall=ctx.createLinearGradient(0,top.y,0,bottom.y)
+    wall.addColorStop(0,'#232a2f');wall.addColorStop(.5,'#151b1f');wall.addColorStop(1,'#101518')
+    poly([top,p(w-18,6,96),p(w-18,6,2),bottom],wall,'#3a4347')
+    line(top,p(w-18,6,96),GOLD,2.2,6)
+
+    // Warm ambient light cones from ceiling
+    for(let lx=w*.2;lx<=w*.85;lx+=w*.25){
+      const lp=p(lx,6,90)
+      const lg=ctx.createRadialGradient(lp.x,lp.y,2,lp.x,lp.y+50*scale,80*scale)
+      lg.addColorStop(0,'rgba(254,240,138,0.18)')
+      lg.addColorStop(1,'rgba(254,240,138,0)')
+      ctx.fillStyle=lg;ctx.beginPath();ctx.arc(lp.x,lp.y+30*scale,65*scale,0,Math.PI*2);ctx.fill()
+    }
+
+    // 4. Left Perspective Brand Wall (Monolith)
+    poly([p(18,6,94),p(Math.min(105,w*.15),8,94),p(Math.min(105,w*.15),h*.72,0),p(18,h*.72,0)],'#11171a','rgba(244,206,75,0.35)')
+    line(p(18,6,94),p(Math.min(105,w*.15),8,94),GOLD,1.5,4)
+    line(p(Math.min(105,w*.15),8,94),p(Math.min(105,w*.15),h*.72,0),GOLD,1.2,3)
+    const brandLeft=p(Math.min(65,w*.09),h*.32,45)
+    ctx.save();ctx.translate(brandLeft.x,brandLeft.y);ctx.rotate(-0.06)
+    ctx.fillStyle=GOLD;ctx.beginPath()
+    ctx.moveTo(0,-10);ctx.lineTo(10,5);ctx.lineTo(-10,5);ctx.closePath();ctx.fill()
+    text('CASAL DO TRÁFEGO',0,14,Math.max(7,9*scale),GOLD,'center',750)
+    text('OPERAÇÕES IA',0,24,Math.max(6,7*scale),'#cbd5e1','center',600)
+    text('PLANEJAMENTO EM REALIDADE',0,33,Math.max(5,6*scale),'#94a3b8','center',500)
+    ctx.restore()
+
+    // 5. Center Hub Brand Plaque
+    const brand=p(w/2,6,68), brandWidth=Math.min(280,w*.44)
+    rect(brand.x-brandWidth/2,brand.y-18,brandWidth,42,'#0f171b','#c8a245',6)
+    line({x:brand.x-brandWidth/2+8,y:brand.y-16},{x:brand.x+brandWidth/2-8,y:brand.y-16},GOLD,1.2,3)
+    text('CASAL DO TRÁFEGO',brand.x,brand.y-2,Math.min(17,w/33),GOLD,'center',750)
+    text('NÚCLEO OPERACIONAL DE AGENTES',brand.x,brand.y+13,Math.max(7,8*scale),'#cbd5e1','center',550)
+
+    // 6. Navigation Consoles on Sleek Stands
+    const navGap=6, navWidth=(w-64-5*navGap)/6
     NAV.forEach(([route,title,index],i)=>{
-      const x=32+i*(navWidth+navGap), a=p(x,70,34),b=p(x+navWidth,70,34)
-      const width=b.x-a.x,height=30*scale
-      box(x+navWidth*.43,65,navWidth*.14,8,0,15,'#444c4d')
-      rect(a.x,a.y,width,height,'#111c21','#686346',4)
-      line({x:a.x+4,y:a.y+height-2},{x:a.x+width-4,y:a.y+height-2},GOLD,.8,2)
-      text(index,a.x+6,a.y+8,6*scale,'#b5a361')
-      text(title,a.x+width/2,a.y+height*.60,Math.max(6.5,Math.min(10,width/11)),TEXT,'center',600)
+      const x=32+i*(navWidth+navGap), a=p(x,68,36), b=p(x+navWidth,68,36)
+      const width=b.x-a.x, height=30*scale
+      box(x+navWidth*.43,64,navWidth*.14,8,0,16,'#334155')
+      rect(a.x,a.y,width,height,'#0f172a','#64748b',5)
+      line({x:a.x+4,y:a.y+height-2},{x:a.x+width-4,y:a.y+height-2},GOLD,1,3)
+      text(index,a.x+7,a.y+8,Math.max(6.5,7*scale),'#facc15')
+      text(title,a.x+width/2,a.y+height*.62,Math.max(6.5,Math.min(10,width/10.5)),TEXT,'center',600)
       addHit(`navegacao:${route}`,{x:a.x,y:a.y,w:width,h:height},route)
     })
-    box(28,94,w-56,15,0,10,'#323b3d');line(p(28,109,10),p(w-28,109,10),'#d2bd77',1.2,3)
-    // Each island is created ONLY from layout.ilhas. No catalog/runtime decisions here.
+    box(28,94,w-56,15,0,10,'#1e293b')
+    line(p(28,109,10),p(w-28,109,10),GOLD,1.5,4)
+
+    // 7. Right Monolith
+    const rightP=p(w-32,h*.65,30)
+    poly([p(w-42,h*.55,55),p(w-18,h*.55,55),p(w-18,h*.75,0),p(w-42,h*.75,0)],'#11171a','rgba(244,206,75,0.4)')
+    line(p(w-42,h*.55,55),p(w-18,h*.55,55),GOLD,1.2,3)
+    ctx.fillStyle=GOLD;ctx.beginPath()
+    ctx.moveTo(rightP.x,-rightP.y+10);ctx.lineTo(rightP.x+6,-rightP.y+20);ctx.lineTo(rightP.x-6,-rightP.y+20);ctx.closePath()
+    text('MAIS POSSIBILIDADES',rightP.x,rightP.y+12,Math.max(5.5,6.5*scale),'#94a3b8','center',600)
+
+    // 8. Islands / Squad Cubicles
     layout.ilhas.forEach((ilha,idx)=>{
       const opacity=alpha(ilha);if(opacity<=.001)return
       ctx.save();ctx.globalAlpha*=opacity
-      plane(ilha.x+3,ilha.y+3,ilha.largura-6,ilha.altura-7,.3,idx%2?'#293337':'#2d3435','rgba(204,196,158,.19)')
-      line(p(ilha.x+8,ilha.y+ilha.altura-8,1),p(ilha.x+ilha.largura-8,ilha.y+ilha.altura-8,1),'#ba9d49',1,2)
-      // Entrance strip, name and capacity are existing data, never a fabricated number.
-      const label=p(ilha.x+14,ilha.y+14,0)
-      text(`${String(idx+1).padStart(2,'0')}  ${ilha.nome}`,label.x,label.y,Math.max(9,11*scale),TEXT,'left',650)
-      const end=p(ilha.x+ilha.largura-15,ilha.y+14)
-      text(`${ilha.mesas.length} / ${ilha.postos.length}`,end.x,end.y,Math.max(8,9*scale),MUTED,'right')
-      ctx.fillStyle=ilha.cor;ctx.beginPath();ctx.arc(label.x-6,label.y,2.5,0,Math.PI*2);ctx.fill()
-      glass(ilha.x+5,ilha.y+35,0,Math.min(ilha.altura-55,76),23)
-      glass(ilha.x+ilha.largura-5,ilha.y+35,0,Math.min(ilha.altura-55,76),23)
+
+      // Glowing Neon Floor Contour for this Cubicle
+      const f1=p(ilha.x+2,ilha.y+2,0), f2=p(ilha.x+ilha.largura-2,ilha.y+2,0)
+      const f3=p(ilha.x+ilha.largura-2,ilha.y+ilha.altura-2,0), f4=p(ilha.x+2,ilha.y+ilha.altura-2,0)
+      poly([f1,f2,f3,f4],idx%2?'#182025':'#1b2329','rgba(244,206,75,0.35)')
+      line(f1,f2,GOLD,1.5,5);line(f2,f3,GOLD,1.5,5)
+      line(f3,f4,GOLD,1.8,6);line(f4,f1,GOLD,1.5,5)
+
+      // Modern Partitions & Glass Dividers
+      glassPartition(ilha.x+4,ilha.y+15,ilha.largura-8,0,22)
+      glassPartition(ilha.x+4,ilha.y+15,0,Math.min(ilha.altura-25,80),22)
+      glassPartition(ilha.x+ilha.largura-4,ilha.y+15,0,Math.min(ilha.altura-25,80),22)
+
+      // Floating Sector Pill Badge hovering above the cubicle
+      const badgePos=p(ilha.x+ilha.largura/2,ilha.y+8,24)
+      floatingSectorBadge(ilha.nome,ilha.mesas.length,badgePos,ilha.cor||GOLD)
+
       ctx.restore()
-      const units=Math.max(32,Math.min(42,ilha.largura/(Math.min(4,Math.max(1,ilha.postos.length))*3.05)))
+
+      const units=Math.max(34,Math.min(44,ilha.largura/(Math.min(4,Math.max(1,ilha.postos.length))*3.0)))
       ilha.postos.forEach((posto,i)=>{
         const person=ilha.mesas[i]?.execucao
         objects.push({z:posto.y,ilha,draw:()=>{
-          const q=p(posto.x,posto.y+18)
-          shadow(p(posto.x,posto.y+8),units*1.48*scale,units*.67*scale,.50)
-          sprite(person?.execucao.estado==='trabalhando'||person?.execucao.estado==='silencioso'?'desk-on':'desk-off',q,units)
-          // Actual status only. Animation time is the caller's clock (pause preserved).
-          if(person){
-            const dot=p(posto.x-units*1.25,posto.y,units*.9)
-            ctx.fillStyle=person.ativa?'#95d8a0':person.execucao.estado==='silencioso'?'#d4b963':'#647076'
-            ctx.beginPath();ctx.arc(dot.x,dot.y,1.8*scale,0,Math.PI*2);ctx.fill()
-          }
+          drawWorkstation(posto,person,units)
         }})
-        objects.push({z:posto.y+23,ilha,draw:()=>{
-          sprite('chair',p(posto.x,posto.y+45),units*.95)
-        }})
-        if(!person){labels.push(()=>{
-          ctx.save();ctx.globalAlpha*=alpha(ilha);const q=p(posto.x,posto.y+70)
-          text('POSTO LIVRE',q.x,q.y,8,'#a9aba3','center');ctx.restore()
-        })}
+        if(!person){
+          labels.push(()=>{
+            if(opacity<.03)return
+            ctx.save();ctx.globalAlpha*=alpha(ilha)
+            const q=p(posto.x,posto.y+65,12)
+            availablePositionBadge(q)
+            ctx.restore()
+          })
+        }
       })
-      objects.push({z:ilha.y+40,ilha,draw:()=>plant(ilha.x+ilha.largura-18,ilha.y+44,23)})
+      objects.push({z:ilha.y+35,ilha,draw:()=>plant(ilha.x+ilha.largura-16,ilha.y+38,24)})
       if(ilha.tipo==='coworking'){
         objects.push({z:ilha.y+ilha.altura-20,ilha,draw:()=>{
           const q=p(ilha.x+ilha.largura/2,ilha.y+ilha.altura-19)
-          shadow(q,38*scale,12*scale);sprite('sofa',q,27)
+          shadow(q,42*scale,14*scale);sprite('sofa',q,28)
         }})
       }
     })
-    // Descanso keeps exactly the coordinates/occupants chosen by the original layout.
+
+    // 9. Conference Room ("Reuniões") in Lower Left
+    const confX=24, confZ=h-95, confW=Math.min(180,w*.24), confH=75
+    objects.push({z:confZ,draw:()=>{
+      const cp1=p(confX,confZ,0), cp2=p(confX+confW,confZ,0), cp3=p(confX+confW,confZ+confH,0), cp4=p(confX,confZ+confH,0)
+      poly([cp1,cp2,cp3,cp4],'#131a20','rgba(244,206,75,0.4)')
+      line(cp1,cp2,GOLD,1.5,4);line(cp2,cp3,GOLD,1.5,4);line(cp3,cp4,GOLD,1.8,6);line(cp4,cp1,GOLD,1.5,4)
+      glassPartition(confX+2,confZ+2,confW-4,0,26)
+      glassPartition(confX+2,confZ+2,0,confH-4,26)
+      glassPartition(confX+confW-2,confZ+2,0,confH-4,26)
+      // Boardroom table
+      const tbl=p(confX+confW/2,confZ+confH*.55,0)
+      shadow(tbl,45*scale,18*scale,.5)
+      box(confX+confW*.25,confZ+confH*.35,confW*.5,confH*.3,0,14,'#1e293b')
+      // Floating Reuniões Badge & Slogan
+      const confBadge=p(confX+confW/2,confZ+4,28)
+      floatingSectorBadge('Reuniões',6,confBadge,'#facc15')
+      const sign=p(confX+confW/2,confZ+confH*.7,22)
+      text('IDEIAS · PLANEJAMENTO · RESULTADOS',sign.x,sign.y,Math.max(6,7*scale),'#fef08a','center',600)
+      plant(confX+12,confZ+confH-12,25)
+    }})
+
+    // 10. Lounge / Área de Descanso
     const stopped=quadro.personagens.filter(({pose})=>pose.fase==='descanso')
     if(layout.descansoAberto){
-      const q=p(w/2,layout.descansoY-2)
-      text('LOUNGE / DESCANSO',q.x,q.y,8,GOLD,'center',650)
-      // Keep free reserved seats during arrival without fabricating agents.
+      const q=p(w/2,layout.descansoY-6,26)
+      floatingSectorBadge('Área de Descanso',layout.ocupantesDescanso,q,'#e2e8f0')
+      const wallSign=p(w/2,layout.descansoY+10,18)
+      text('BOAS IDEIAS TAMBÉM DESCANSAM',wallSign.x,wallSign.y,Math.max(7.5,9*scale),GOLD,'center',700)
       layout.mesas.filter(m=>m.execucao.execucao.estado==='parado'&&islands.get(m.execucao.squad)?.tipo!=='coworking').forEach(m=>{
-        objects.push({z:m.descanso.y-1,draw:()=>{shadow(p(m.descanso.x,m.descanso.y),24*scale,9*scale);sprite('sofa',p(m.descanso.x,m.descanso.y),24)}})
+        objects.push({z:m.descanso.y-1,draw:()=>{
+          shadow(p(m.descanso.x,m.descanso.y),26*scale,10*scale)
+          sprite('sofa',p(m.descanso.x,m.descanso.y),26)
+        }})
       })
     }
+
+    // 11. Characters / Agents
     quadro.personagens.forEach(({mesa,pose})=>{
-      const person=mesa.execucao,ilha=islands.get(person.squad),opacity=alpha(ilha)
+      const person=mesa.execucao, ilha=islands.get(person.squad), opacity=alpha(ilha)
       if(opacity<.03)return
-      const unit=Math.max(32,Math.min(42,(ilha?.largura??400)/(Math.min(4,Math.max(1,ilha?.postos.length??4))*3.0)))
+      const unit=Math.max(34,Math.min(44,(ilha?.largura??400)/(Math.min(4,Math.max(1,ilha?.postos.length??4))*3.0)))
       objects.push({z:pose.y+.5,ilha,draw:()=>{
         const selected=person.chave===quadro.selecionadoId
         const phase=faseSpriteStudio(pose,tempo,reduzirMovimento,person.ordem)
-        const q=p(pose.x,pose.y+18),hair=nearest(person.cabelo,HAIRS),skin=nearest(person.pele,SKINS)
-        shadow(q,15*scale,5.5*scale,.48)
-        if(selected){ctx.save();ctx.strokeStyle=GOLD;ctx.lineWidth=1.8;ctx.shadowColor=GOLD;ctx.shadowBlur=7;ctx.beginPath();ctx.ellipse(q.x,q.y+2,19*scale,7*scale,0,0,Math.PI*2);ctx.stroke();ctx.restore()}
+        const q=p(pose.x,pose.y+18), hair=nearest(person.cabelo,HAIRS), skin=nearest(person.pele,SKINS)
+        shadow(q,16*scale,6*scale,.5)
+
+        // Selected Golden Aura Ring on floor
+        if(selected){
+          ctx.save();ctx.strokeStyle=GOLD;ctx.lineWidth=2.2
+          ctx.shadowColor=GOLD;ctx.shadowBlur=9
+          ctx.beginPath();ctx.ellipse(q.x,q.y+2,21*scale,8*scale,0,0,Math.PI*2);ctx.stroke()
+          ctx.restore()
+        }
+
         const b=sprite(`agent-${hair}-${skin}-${phase.phase}-${phase.frame}`,q,unit)
-        // The colour of the squad is retained as a small badge, not a whole coloured carpet.
-        const badge=p(pose.x+12,pose.y+18,35)
-        ctx.fillStyle=person.destaque;ctx.beginPath();ctx.arc(badge.x,badge.y,2*scale,0,Math.PI*2);ctx.fill()
+
+        // Floating Animated Sleep Indicator Z z when resting
+        if(pose.fase==='descanso'){
+          const zt=reduzirMovimento?0:tempo
+          const zpos=p(pose.x+8,pose.y+10,48)
+          ctx.save();ctx.fillStyle=GOLD;ctx.font='700 11px Inter, sans-serif'
+          ctx.fillText('Z',zpos.x+Math.sin(zt*2)*2,zpos.y-Math.cos(zt*2)*2)
+          ctx.font='600 8px Inter, sans-serif'
+          ctx.fillText('z',zpos.x+7+Math.sin(zt*2+1)*2,zpos.y-6-Math.cos(zt*2+1)*2)
+          ctx.restore()
+        }
+
+        // Squad identity dot badge on character shoulder
+        const badge=p(pose.x+13,pose.y+18,36)
+        ctx.fillStyle=person.destaque;ctx.beginPath();ctx.arc(badge.x,badge.y,2.5*scale,0,Math.PI*2);ctx.fill()
         addHit(person.chave,{x:b.x-3,y:b.y-3,w:b.w+6,h:b.h+6})
+
         labels.push(()=>{
           if(opacity<.03)return
           ctx.save();ctx.globalAlpha*=opacity
-          const status=person.ativa?'#95d8a0':person.execucao.estado==='silencioso'?'#e0c564':'#9aa6ac'
-          nameTag(person.nome,p(pose.x,pose.y+36),person.chave,status,Math.max(80,Math.min(125,(ilha?.largura??400)/Math.min(4,Math.max(1,ilha?.postos.length??4))-8)),selected)
+          const status=person.ativa?'#4ade80':person.execucao.estado==='silencioso'?'#facc15':'#94a3b8'
+          nameTag(person.nome,p(pose.x,pose.y+36),person.chave,status,Math.max(85,Math.min(130,(ilha?.largura??400)/Math.min(4,Math.max(1,ilha?.postos.length??4))-8)),selected)
+          if(selected&&person.execucao.ferramenta){
+            const toolQ=p(pose.x,pose.y+18,52)
+            const toolTxt=person.execucao.ferramenta.slice(0,18)
+            rect(toolQ.x-36,toolQ.y-8,72,16,'rgba(15,23,42,0.95)',GOLD,4)
+            text(toolTxt,toolQ.x,toolQ.y,7.5,'#fef08a','center',600)
+          }
           ctx.restore()
         })
       }})
     })
+
+    // Sort objects by depth and render
     objects.sort((a,b)=>a.z-b.z).forEach(o=>{ctx.save();ctx.globalAlpha*=alpha(o.ilha);o.draw();ctx.restore()})
-    // Final foreground planters frame the space without introducing a fake occupied room.
-    plant(25,h-25,35);plant(w-25,h-25,35)
+
+    // Corner decorative planters
+    plant(25,h-24,36);plant(w-25,h-24,36)
     labels.forEach(draw=>draw())
-    if(!layout.ilhas.length){const q=p(w/2,h*.52);text('Nenhum ambiente visível neste filtro.',q.x,q.y,13,TEXT,'center');text('As salas seguem a atividade e a configuração existentes.',q.x,q.y+21,10,MUTED,'center')}
-    if(!image){text(falhaAtlas?'Objetos 3D indisponíveis — confira os arquivos da instalação.':'Carregando objetos do estúdio…',w/2,h-10,10,'#e8cd78','center')}
-    // Diagnostics are render facts, not operational telemetry.
+
+    if(!layout.ilhas.length){
+      const q=p(w/2,h*.52)
+      text('Nenhum ambiente visível neste filtro.',q.x,q.y,13,TEXT,'center')
+      text('As salas seguem a atividade e a configuração existentes.',q.x,q.y+21,10,MUTED,'center')
+    }
+    if(!image){
+      text(falhaAtlas?'Objetos 3D indisponíveis — confira os arquivos da instalação.':'Carregando objetos do estúdio…',w/2,h-10,10,GOLD,'center')
+    }
+
+    // Canvas dataset indicators
     ctx.canvas.dataset.officeRenderer='ct-studio-v1'
     ctx.canvas.dataset.officeAssets=image?'ready':falhaAtlas?'error':'loading'
     ctx.canvas.dataset.officeSpriteAgents=String(quadro.personagens.length)
