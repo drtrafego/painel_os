@@ -255,3 +255,152 @@
 
 .ct-office .ct-cost-total > div,.ct-office .ct-cost-total p { min-width:0; overflow-wrap:anywhere }
 .ct-office .ct-cost-total strong,.ct-office .ct-money-timestamp { overflow-wrap:anywhere }
+
+/* Abas de Lista de Agentes e Desempenho */
+.ct-office .ct-tab-list-view, .ct-office .ct-tab-perf-view {
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 580px;
+  background: #0f1317;
+  border-radius: 8px;
+}
+.ct-office .ct-agent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: left;
+}
+.ct-office .ct-agent-table th {
+  padding: 10px 12px;
+  color: #94a3b8;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid #232c32;
+  font-size: 10px;
+}
+.ct-office .ct-agent-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #1a2228;
+  color: #e2e8f0;
+  vertical-align: middle;
+}
+.ct-office .ct-agent-table tr:hover td {
+  background: #141b21;
+}
+.ct-office .ct-agent-table tr.ct-row-selected td {
+  background: #1d2221;
+  border-color: #f4ce4b;
+}
+.ct-office .ct-agent-table strong {
+  display: block;
+  font-weight: 600;
+  color: #f8fafc;
+}
+.ct-office .ct-agent-table small {
+  display: block;
+  color: #94a3b8;
+  font-size: 9.5px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ct-office .ct-squad-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  font-size: 10px;
+  background: #161e24;
+}
+.ct-office .ct-squad-badge i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.ct-office .ct-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+.ct-office .ct-status-pill.ct-pill-active {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+.ct-office .ct-status-pill.ct-pill-idle {
+  background: rgba(250, 204, 21, 0.15);
+  color: #facc15;
+  border: 1px solid rgba(250, 204, 21, 0.3);
+}
+.ct-office .ct-status-pill.ct-pill-rest {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+.ct-office .ct-inspect-btn {
+  padding: 4px 9px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ct-yellow);
+  background: #171d22;
+  border: 1px solid #3d3b2f;
+  border-radius: 6px;
+  transition: all .15s;
+}
+.ct-office .ct-inspect-btn:hover {
+  background: #242928;
+  border-color: var(--ct-yellow);
+  transform: translateY(-1px);
+}
+.ct-office .ct-perf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.ct-office .ct-perf-card {
+  padding: 14px;
+  background: #13181d;
+  border: 1px solid #28323a;
+  border-radius: 10px;
+}
+.ct-office .ct-perf-kicker {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ct-yellow);
+  margin-bottom: 6px;
+}
+.ct-office .ct-perf-card strong {
+  display: block;
+  font-size: 26px;
+  font-weight: 750;
+  color: #f8fafc;
+  font-variant-numeric: tabular-nums;
+}
+.ct-office .ct-perf-card p {
+  margin-top: 4px;
+  font-size: 10px;
+  color: #94a3b8;
+}
+.ct-office .ct-perf-breakdown {
+  padding: 14px;
+  background: #13181d;
+  border: 1px solid #28323a;
+  border-radius: 10px;
+}
+.ct-office .ct-perf-breakdown h4 {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ct-yellow);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}

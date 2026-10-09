@@ -1117,7 +1117,117 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
             </div>
           </div>
           <section className="ct-room" aria-label="Sala interativa em perspectiva">
-            <div ref={palcoRef} className="ct-room-scroll" data-testid="office-scroll-room"><canvas ref={canvasRef} tabIndex={0} role="group" aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`} onClick={tratarClique} onKeyDown={tratarTeclado} /></div>
+            <div
+              ref={palcoRef}
+              className="ct-room-scroll"
+              data-testid="office-scroll-room"
+              style={{ display: abaEscritorio === 'escritorio' ? 'block' : 'none' }}
+            >
+              <canvas
+                ref={canvasRef}
+                tabIndex={0}
+                role="group"
+                aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`}
+                onClick={tratarClique}
+                onKeyDown={tratarTeclado}
+              />
+            </div>
+
+            {abaEscritorio === 'lista' && (
+              <div className="ct-tab-list-view" data-testid="office-agent-list">
+                <table className="ct-agent-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Agente</th>
+                      <th scope="col">Squad</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Ferramenta</th>
+                      <th scope="col">Modelo</th>
+                      <th scope="col">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {execucoesVisiveis.map((item) => (
+                      <tr key={item.chave} className={item.chave === agenteSelecionadoId ? 'ct-row-selected' : ''}>
+                        <td>
+                          <strong>{item.nome}</strong>
+                          {item.execucao.tarefa && <small title={item.execucao.tarefa}>{item.execucao.tarefa}</small>}
+                        </td>
+                        <td>
+                          <span className="ct-squad-badge" style={{ borderColor: item.cor }}>
+                            <i style={{ backgroundColor: item.cor }} /> {item.squadNome}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`ct-status-pill ${item.ativa ? 'ct-pill-active' : item.execucao.estado === 'silencioso' ? 'ct-pill-idle' : 'ct-pill-rest'}`}>
+                            {item.ativa ? 'Ativo' : item.execucao.estado === 'silencioso' ? 'Silencioso' : 'Em descanso'}
+                          </span>
+                        </td>
+                        <td>{item.execucao.ferramenta || '—'}</td>
+                        <td>{item.execucao.modelo_legivel || item.execucao.modelo || '—'}</td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => selecionar(item.chave)}
+                            className="ct-inspect-btn"
+                          >
+                            Inspecionar ↗
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!execucoesVisiveis.length && (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                          Nenhum agente corresponde aos filtros atuais.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {abaEscritorio === 'desempenho' && (
+              <div className="ct-tab-perf-view" data-testid="office-perf-view">
+                <div className="ct-perf-grid">
+                  <div className="ct-perf-card">
+                    <span className="ct-perf-kicker">TAXA DE ATIVIDADE</span>
+                    <strong>{totalGeral > 0 ? Math.round((totalAtivos / totalGeral) * 100) : 0}%</strong>
+                    <p>{totalAtivos} de {totalGeral} agentes ativos na operação</p>
+                  </div>
+                  <div className="ct-perf-card">
+                    <span className="ct-perf-kicker">EM DESCANSO</span>
+                    <strong>{totalDescanso}</strong>
+                    <p>Agentes no lounge aguardando novas demandas</p>
+                  </div>
+                  <div className="ct-perf-card">
+                    <span className="ct-perf-kicker">SILENCIOSOS</span>
+                    <strong>{totalOciosos}</strong>
+                    <p>Postos de prontidão sem processos ativos</p>
+                  </div>
+                  <div className="ct-perf-card">
+                    <span className="ct-perf-kicker">SQUADS ATIVOS</span>
+                    <strong>{layout.ilhas.length}</strong>
+                    <p>Ambientes estruturados em funcionamento</p>
+                  </div>
+                </div>
+                <div className="ct-perf-breakdown">
+                  <h4>Distribuição de postos por squad</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                    {layout.ilhas.map((ilha) => (
+                      <div key={ilha.squad} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <i style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: ilha.cor }} />
+                          <strong>{ilha.nome}</strong>
+                        </span>
+                        <span style={{ fontFamily: 'monospace', color: '#facc15' }}>{ilha.mesas.length} posições</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
           <footer className="ct-room-footer">
             <span>{layout.ilhas.length} ambientes visíveis · {totalFixos} fixos{totalExtras ? ` · ${totalExtras} extras` : ''} · {layout.colunas} colunas</span>

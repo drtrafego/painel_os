@@ -471,10 +471,11 @@ export function desenharEscritorioGold(ctx:CanvasRenderingContext2D, quadro:Quad
     }
 
     // Canvas dataset indicators
-    ctx.canvas.dataset.officeRenderer='ct-studio-v1'
-    ctx.canvas.dataset.officeAssets=image?'ready':falhaAtlas?'error':'loading'
-    ctx.canvas.dataset.officeSpriteAgents=String(quadro.personagens.length)
-    ctx.canvas.dataset.officeSpriteResting=String(stopped.length)
+    ctx.canvas.dataset.officeRenderer = 'ct-office-integrado-v2'
+    ctx.canvas.dataset.officeVersion = '2.0.0'
+    ctx.canvas.dataset.officeAssets = image ? 'ready' : falhaAtlas ? 'error' : 'loading'
+    ctx.canvas.dataset.officeSpriteAgents = String(quadro.personagens.length)
+    ctx.canvas.dataset.officeSpriteResting = String(stopped.length)
   } finally {ctx.restore()}
   return hits
 }
