@@ -29,7 +29,7 @@ export interface PoseGold { x: number; y: number; sentado: number; andando: bool
 export interface QuadroGold {
   layout: PlantaGold; personagens: ReadonlyArray<{ mesa: MesaGold; pose: PoseGold }>
   progressoDia: number; tempo: number; reduzirMovimento: boolean
-  selecionadoId?: string | null; progressos?: ReadonlyMap<string, number>
+  selecionadoId?: string | null; hoverId?: string | null; progressos?: ReadonlyMap<string, number>
 }
 export interface HitGold { chave: string; x: number; y: number; largura: number; altura: number; modulo?: string }
 interface Frame { x:number; y:number; w:number; h:number; ax:number; ay:number; ppm:number }
@@ -417,6 +417,11 @@ export function desenharEscritorioGold(ctx:CanvasRenderingContext2D, quadro:Quad
           ctx.save();ctx.strokeStyle=GOLD;ctx.lineWidth=2.2
           ctx.shadowColor=GOLD;ctx.shadowBlur=9
           ctx.beginPath();ctx.ellipse(q.x,q.y+2,21*scale,8*scale,0,0,Math.PI*2);ctx.stroke()
+          ctx.restore()
+        } else if(person.chave===quadro.hoverId){
+          ctx.save();ctx.strokeStyle='rgba(74,222,128,0.6)';ctx.lineWidth=1.5
+          ctx.shadowColor='rgba(74,222,128,0.45)';ctx.shadowBlur=6
+          ctx.beginPath();ctx.ellipse(q.x,q.y+2,19*scale,7*scale,0,0,Math.PI*2);ctx.stroke()
           ctx.restore()
         }
 

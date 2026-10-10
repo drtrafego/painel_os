@@ -736,6 +736,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const progressoIlhasRef = useRef(new Map<PixelAgentSquad, number>())
   const tempoRef = useRef(0)
   const zoomAutomaticoRef = useRef(1)
+  const hoverIdRef = useRef<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [dimensoesPalco, setDimensoesPalco] = useState({ largura: 900, altura: 600, dpr: 1, larguraFisica: 900 })
   const [pausado, setPausado] = useState(false)
@@ -912,6 +913,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
           tempo: tempoRef.current,
           reduzirMovimento,
           selecionadoId: agenteSelecionadoId,
+          hoverId: hoverIdRef.current,
           progressos: progressosDoQuadro,
         })
       } catch (erroVisual) {
@@ -960,6 +962,23 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     const hit = [...hitsRef.current].reverse().find((item) => x >= item.x && x <= item.x + item.largura && y >= item.y && y <= item.y + item.altura)
     if (hit?.modulo && hit.modulo in POR_ID) { abrirModulo(hit.modulo as VistaId); return }
     if (hit) selecionar(hit.chave)
+  }
+  const tratarMovimento = (evento: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = evento.currentTarget.getBoundingClientRect()
+    const x = (evento.clientX - rect.left) / zoom
+    const y = (evento.clientY - rect.top) / zoom
+    const hit = [...hitsRef.current].reverse().find((item) => x >= item.x && x <= item.x + item.largura && y >= item.y && y <= item.y + item.altura)
+    if (hit) {
+      evento.currentTarget.style.cursor = 'pointer'
+      hoverIdRef.current = hit.chave
+    } else {
+      evento.currentTarget.style.cursor = 'default'
+      hoverIdRef.current = null
+    }
+  }
+  const tratarSaida = (evento: React.MouseEvent<HTMLCanvasElement>) => {
+    evento.currentTarget.style.cursor = 'default'
+    hoverIdRef.current = null
   }
   const tratarTeclado = (evento: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Enter', ' '].includes(evento.key) || execucoesVisiveis.length === 0) return
@@ -1129,6 +1148,8 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 role="group"
                 aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`}
                 onClick={tratarClique}
+                onMouseMove={tratarMovimento}
+                onMouseLeave={tratarSaida}
                 onKeyDown={tratarTeclado}
               />
             </div>
