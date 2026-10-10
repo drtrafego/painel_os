@@ -746,7 +746,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
   const [relogioDetalhe, setRelogioDetalhe] = useState(0)
   const [agoraAmbiente, setAgoraAmbiente] = useState(() => new Date())
-  const { statusLeitura, recebidoEm, falhouHaSegundos, erro: erroSonda } = useAgentesVivos()
+  const { dados: dadosSonda, statusLeitura, recebidoEm, falhouHaSegundos, erro: erroSonda } = useAgentesVivos()
 
   const modoAmbienteForcado = typeof window === 'undefined' ? 'auto' : ambienteForcadoDaUrl(window.location.search)
   const ambiente = useMemo<AmbienteVisual>(() => resolverAmbiente(agoraAmbiente, modoAmbienteForcado), [agoraAmbiente, modoAmbienteForcado])
@@ -993,6 +993,63 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
 
   const descricaoSonda = statusLeitura === 'confirmado' ? `Leitura ao vivo${recebidoEm ? ` · ${Math.max(0, Math.round((Date.now() - recebidoEm.getTime()) / 1000))}s` : ''}` : statusLeitura === 'consultando' ? 'Consultando dados vivos' : statusLeitura === 'leitura_vencida' ? `Leitura vencida · ${falhouHaSegundos ?? 0}s` : erroSonda || 'Sonda indisponível'
 
+  // Cada item vem de uma checagem própria, nunca de um único booleano da sonda.
+  // Sem fonte real pra uma afirmação, o item fica indeterminado: nunca inventa sucesso.
+  const saudeOperacao = useMemo(() => {
+    type EstadoChecagem = 'ok' | 'alerta' | 'falha' | 'indeterminado'
+    const severidade: Record<EstadoChecagem, number> = { ok: 0, indeterminado: 1, alerta: 2, falha: 3 }
+    const piorDe = (a: EstadoChecagem, b: EstadoChecagem): EstadoChecagem => (severidade[b] > severidade[a] ? b : a)
+
+    const instanteLeitura = recebidoEm ? `${Math.max(0, Math.round((Date.now() - recebidoEm.getTime()) / 1000))}s atrás` : null
+
+    const apiItem: { estado: EstadoChecagem; texto: string } =
+      statusLeitura === 'confirmado'
+        ? { estado: 'ok', texto: `APIs conectadas${instanteLeitura ? ` · ${instanteLeitura}` : ''}` }
+        : statusLeitura === 'consultando'
+        ? { estado: 'indeterminado', texto: 'APIs: consultando agora' }
+        : statusLeitura === 'leitura_vencida'
+        ? { estado: 'alerta', texto: `APIs com leitura vencida · ${falhouHaSegundos ?? 0}s` }
+        : { estado: 'falha', texto: `APIs indisponíveis${erroSonda ? ` · ${erroSonda}` : ''}` }
+
+    // 'confirmado' é a única leitura fresca. 'leitura_vencida' ainda tem dado, mas
+    // desatualizado: nenhuma afirmação derivada dele pode sair como 'ok'.
+    const pisoFrescor: EstadoChecagem = statusLeitura === 'confirmado' ? 'ok' : statusLeitura === 'leitura_vencida' ? 'alerta' : 'indeterminado'
+    const temDados = Boolean(dadosSonda) && statusLeitura !== 'indisponivel'
+
+    const avisosSonda = dadosSonda?.avisos?.length ?? 0
+    const indeterminados = dadosSonda?.contagem?.indeterminados ?? 0
+    const agentesItem: { estado: EstadoChecagem; texto: string } = !temDados
+      ? { estado: 'indeterminado', texto: 'Agentes: não verificado' }
+      : avisosSonda > 0
+      ? { estado: piorDe('alerta', pisoFrescor), texto: `Agentes com ${avisosSonda} aviso${avisosSonda > 1 ? 's' : ''} da sonda` }
+      : indeterminados > 0
+      ? { estado: piorDe('alerta', pisoFrescor), texto: `${indeterminados} agente(s) com estado indeterminado` }
+      : { estado: pisoFrescor, texto: pisoFrescor === 'alerta' ? 'Agentes saudáveis (leitura vencida)' : 'Agentes saudáveis' }
+
+    const contagem = dadosSonda?.contagem
+    const fluxosItem: { estado: EstadoChecagem; texto: string } = !temDados || !contagem
+      ? { estado: 'indeterminado', texto: 'Fluxos: não verificado' }
+      : { estado: pisoFrescor, texto: `${contagem.trabalhando} em execução · ${contagem.silencioso} em espera${pisoFrescor === 'alerta' ? ' (leitura vencida)' : ''}` }
+
+    // Nenhuma fonte de infraestrutura (CPU, disco, uptime de serviço) chega
+    // a este componente. Afirmar aqui seria inventar sucesso sem checagem.
+    const infraItem: { estado: EstadoChecagem; texto: string } = { estado: 'indeterminado', texto: 'Infraestrutura: não verificado' }
+
+    const itens = [apiItem, agentesItem, fluxosItem, infraItem]
+    const pior = itens.reduce<EstadoChecagem>((acc, item) => piorDe(acc, item.estado), 'ok')
+    return { itens, pior }
+  }, [dadosSonda, erroSonda, falhouHaSegundos, recebidoEm, statusLeitura])
+
+  const PILL_POR_ESTADO: Record<string, { texto: string; classe: string; dot: string }> = {
+    ok: { texto: 'Tudo verificado, sem alertas', classe: '', dot: 'ct-dot-green' },
+    alerta: { texto: 'Atenção: alerta ativo', classe: 'ct-health-pill-alerta', dot: 'ct-dot-amber' },
+    falha: { texto: 'Falha detectada', classe: 'ct-health-pill-falha', dot: 'ct-dot-falha' },
+    indeterminado: { texto: 'Parcialmente verificado', classe: 'ct-health-pill-indeterminado', dot: 'ct-dot-indeterminado' },
+  }
+  const SIMBOLO_POR_ESTADO: Record<string, string> = { ok: '✓', alerta: '⚠', falha: '✕', indeterminado: '–' }
+  const CLASSE_CHECK_POR_ESTADO: Record<string, string> = { ok: 'ct-check', alerta: 'ct-check-alerta', falha: 'ct-check-falha', indeterminado: 'ct-check-indeterminado' }
+  const pillSaude = PILL_POR_ESTADO[saudeOperacao.pior]
+
   return (
     <div className="ct-office" data-testid="pixel-office" data-office-visual="ct-gold" data-office-columns={layout.colunas} data-office-environment={ambiente.fase} data-office-day-progress={ambiente.progressoDia.toFixed(3)} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'} data-office-rest={layout.descansoAberto ? 'aberto' : 'encolhido'} data-office-resting={layout.ocupantesDescanso}>
       <header className="ct-header">
@@ -1065,6 +1122,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 className={`ct-pill ${filtroStatus === 'descanso' ? 'ct-pill-active-dark' : ''}`}
                 onClick={() => {
                   setFiltroStatus('descanso')
+                  aoAlternarSoAtivos?.(false)
                 }}
               >
                 <i className="ct-dot ct-dot-amber" /> Em descanso ({totalDescanso})
@@ -1076,6 +1134,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 className={`ct-pill ${filtroStatus === 'ociosos' ? 'ct-pill-active-dark' : ''}`}
                 onClick={() => {
                   setFiltroStatus('ociosos')
+                  aoAlternarSoAtivos?.(false)
                 }}
               >
                 <i className="ct-dot" style={{ backgroundColor: '#94a3b8' }} /> Ociosos ({totalOciosos})
@@ -1297,12 +1356,11 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               <span>Status da operação</span>
             </div>
             <div className="ct-health-status">
-              <span className="ct-health-pill"><i className="ct-dot ct-dot-green" /> Tudo em funcionamento</span>
+              <span className={`ct-health-pill ${pillSaude.classe}`} title={descricaoSonda}><i className={`ct-dot ${pillSaude.dot}`} /> {pillSaude.texto}</span>
               <ul className="ct-health-list">
-                <li><span className="ct-check">✓</span> APIs conectadas</li>
-                <li><span className="ct-check">✓</span> Agentes saudáveis</li>
-                <li><span className="ct-check">✓</span> Fluxos executando</li>
-                <li><span className="ct-check">✓</span> Infraestrutura estável</li>
+                {saudeOperacao.itens.map((item, indice) => (
+                  <li key={indice}><span className={CLASSE_CHECK_POR_ESTADO[item.estado]}>{SIMBOLO_POR_ESTADO[item.estado]}</span> {item.texto}</li>
+                ))}
               </ul>
             </div>
           </div>

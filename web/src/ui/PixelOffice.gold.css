@@ -249,6 +249,14 @@
 .ct-office .ct-health-list { list-style:none; margin:0; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:10px; color:#94a3b8 }
 .ct-office .ct-health-list li { display:flex; align-items:center; gap:5px }
 .ct-office .ct-check { color:#4ade80; font-size:11px; font-weight:700 }
+.ct-office .ct-check-alerta { color:var(--ct-yellow); font-size:11px; font-weight:700 }
+.ct-office .ct-check-falha { color:#f87171; font-size:11px; font-weight:700 }
+.ct-office .ct-check-indeterminado { color:#94a3b8; font-size:11px; font-weight:700 }
+.ct-office .ct-health-pill-alerta { color:var(--ct-yellow) }
+.ct-office .ct-health-pill-falha { color:#f87171 }
+.ct-office .ct-health-pill-indeterminado { color:#94a3b8 }
+.ct-office .ct-dot-falha { background:#f87171 }
+.ct-office .ct-dot-indeterminado { background:#94a3b8 }
 .ct-office .ct-quote-box { margin-bottom:14px; padding:10px 12px; background:#11161a; border-left:3px solid var(--ct-yellow); border-radius:0 8px 8px 0 }
 .ct-office .ct-quote-box p { font-size:11px; font-style:italic; line-height:1.5; color:#cbd5e1; margin:0 }
 .ct-office .ct-stats { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:15px }.ct-office .ct-stat { padding:9px; border:1px solid #3b3d32; border-radius:8px; background:#161b1c }.ct-office .ct-stat strong { display:block; font-size:21px; font-weight:600; color:#f6d968 }.ct-office .ct-stat span { font-size:9px; color:#aaa99b }
