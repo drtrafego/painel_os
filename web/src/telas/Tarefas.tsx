@@ -219,10 +219,12 @@ export function Tarefas({ estado, vista }: PropsTela) {
   const [soAtivos, setSoAtivos] = useState(() => rota.visao === 'ativos')
   const [agenteInspecionado, setAgenteInspecionado] = useState<string | null>(() => rota.execucao ?? null)
 
-  // Sincroniza com parâmetros de URL
+  // Sincroniza com parâmetros de URL nos dois sentidos: a URL é a fonte da
+  // verdade pra soAtivos, senão Voltar do navegador perde 'visao=ativos' e
+  // o filtro fica travado em true pra sempre.
   useEffect(() => {
+    setSoAtivos(rota.visao === 'ativos')
     if (rota.visao === 'ativos') {
-      setSoAtivos(true)
       setModoExibicao('office')
     }
     if (rota.execucao) {

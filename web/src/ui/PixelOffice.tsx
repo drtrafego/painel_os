@@ -1016,14 +1016,32 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     const pisoFrescor: EstadoChecagem = statusLeitura === 'confirmado' ? 'ok' : statusLeitura === 'leitura_vencida' ? 'alerta' : 'indeterminado'
     const temDados = Boolean(dadosSonda) && statusLeitura !== 'indisponivel'
 
-    const avisosSonda = dadosSonda?.avisos?.length ?? 0
-    const indeterminados = dadosSonda?.contagem?.indeterminados ?? 0
+    // Ausência do campo é diferente de zero confirmado: payload sem 'avisos' ou
+    // sem 'contagem' não prova que não há problema, só que ninguém checou.
+    const temContagem = Boolean(dadosSonda?.contagem)
+    const temAvisos = Array.isArray(dadosSonda?.avisos)
+    const avisosSonda = temAvisos ? (dadosSonda!.avisos as string[]).length : 0
+    const indeterminados = temContagem ? dadosSonda!.contagem.indeterminados ?? 0 : 0
+    const listaAgentes = Array.isArray(dadosSonda?.agentes) ? dadosSonda!.agentes : []
+    // Saúde agregada não basta: um agente pode ter contagem zerada no todo e
+    // ainda assim trazer problema/status de erro individual.
+    const agentesComProblema = listaAgentes.filter(
+      (agente) => Boolean(agente?.problema) || agente?.status === 'erro' || agente?.status === 'falha'
+    ).length
+    // Cada sinal (aviso, indeterminado, problema individual) é lido se o campo
+    // que o carrega estiver presente, mesmo que outro campo falte: campo ausente
+    // nunca é promovido a zero, mas também não apaga um alerta que outro campo
+    // já confirmou. Só a afirmação final de 'saudável' exige os três presentes.
     const agentesItem: { estado: EstadoChecagem; texto: string } = !temDados
       ? { estado: 'indeterminado', texto: 'Agentes: não verificado' }
-      : avisosSonda > 0
+      : agentesComProblema > 0
+      ? { estado: 'falha', texto: `${agentesComProblema} agente(s) com problema reportado` }
+      : temAvisos && avisosSonda > 0
       ? { estado: piorDe('alerta', pisoFrescor), texto: `Agentes com ${avisosSonda} aviso${avisosSonda > 1 ? 's' : ''} da sonda` }
-      : indeterminados > 0
+      : temContagem && indeterminados > 0
       ? { estado: piorDe('alerta', pisoFrescor), texto: `${indeterminados} agente(s) com estado indeterminado` }
+      : !temContagem || !temAvisos
+      ? { estado: 'indeterminado', texto: 'Agentes: não verificado' }
       : { estado: pisoFrescor, texto: pisoFrescor === 'alerta' ? 'Agentes saudáveis (leitura vencida)' : 'Agentes saudáveis' }
 
     const contagem = dadosSonda?.contagem

@@ -284,17 +284,36 @@ export function desenharEscritorioGold(ctx:CanvasRenderingContext2D, quadro:Quad
     }
   }
 
-  // Sala de reunião só entra onde a planta recebida deixa espaço livre de verdade.
+  // Sala de reunião só entra onde a planta recebida deixa espaço livre de verdade,
+  // fora do corredor por onde os bonecos andam (mesa->descanso usa SEMPRE a mesma
+  // coluna x=layout.corredorX, igual a calcularWaypoints/interpolarWaypoints em
+  // escritorio-animacao.ts). Largura de passagem reaproveita o mesmo footprint que
+  // já desenha o personagem andando (unidade(), sem ilha, é o valor-base do sprite).
+  const margemCorredor=unidade()
+  const corredorX0=layout.corredorX-margemCorredor, corredorX1=layout.corredorX+margemCorredor
+  const semCorredor=(x0:number,x1:number):Array<{x0:number;x1:number}>=>{
+    const partes:Array<{x0:number;x1:number}>=[]
+    if(x0<corredorX0)partes.push({x0,x1:Math.min(x1,corredorX0)})
+    if(x1>corredorX1)partes.push({x0:Math.max(x0,corredorX1),x1})
+    return partes.filter(seg=>seg.x1-seg.x0>0)
+  }
   const reservaReuniao=():{x:number;z:number;a:number;b:number}|null=>{
     const livres:Array<{x:number;z:number;a:number;b:number}>=[]
     colunas.forEach(c=>{
       const z0=c.fundo+18, z1=layout.descansoY-10
-      if(z1-z0>=78&&c.x1-c.x0>=180)livres.push({x:c.x0,z:z0,a:c.x1-c.x0,b:z1-z0})
+      if(z1-z0<78)return
+      semCorredor(c.x0,c.x1).forEach(seg=>{
+        if(seg.x1-seg.x0>=180)livres.push({x:seg.x0,z:z0,a:seg.x1-seg.x0,b:z1-z0})
+      })
     })
     if(layout.descansoAberto){
       const larguraLounge=Math.min(w-60,140+layout.ocupantesDescanso*44), xLounge=(w-larguraLounge)/2
       const z0=layout.descansoY+4, z1=h-14
-      if(z1-z0>=80&&xLounge-14-24>=180)livres.push({x:24,z:z0,a:xLounge-14-24,b:z1-z0})
+      if(z1-z0>=80){
+        semCorredor(24,xLounge-14).forEach(seg=>{
+          if(seg.x1-seg.x0>=180)livres.push({x:seg.x0,z:z0,a:seg.x1-seg.x0,b:z1-z0})
+        })
+      }
     }
     if(!livres.length)return null
     const melhor=livres.sort((m,n)=>n.a*n.b-m.a*m.b)[0]
