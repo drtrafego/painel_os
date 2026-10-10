@@ -1,3 +1,4 @@
+import { OfficeTacticalPanels } from '../ui/OfficeTacticalPanels'
 import { useMemo, useState, useEffect } from 'react'
 import { useAgentesVivos, montarResumoAgenteVivo, type ResumoAgenteVivo } from '../dados/useAgentesVivos'
 import { contarAgentesVivosNaContagem } from '../dados/agentes-vivos'
@@ -9,7 +10,7 @@ import { useRota } from '../nav/useRota'
 import type { PropsTela } from './Vazias'
 import type { AgenteVivo } from '../dados/tipos'
 
-/** Painel Executivo Integrado do Núcleo Operacional */
+/** Janela Estilo Pixel Art Retrô com Barra de Título e Botões */
 function PixelJanela({
   titulo,
   subtitulo,
@@ -27,23 +28,23 @@ function PixelJanela({
 }) {
   return (
     <div
-      className={`relative min-w-0 overflow-hidden rounded-2xl border border-[#383324]/80 bg-gradient-to-b from-[#15191d] via-[#101416] to-[#0c0f12] text-[#eeeade] shadow-[0_12px_32px_rgba(0,0,0,0.55)] transition-all duration-200 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-[#f4ce4b]/35 before:to-transparent ${className}`}
+      className={`min-w-0 border-4 border-black bg-[#1e293b] text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all ${className}`}
     >
-      <div className="flex items-center justify-between border-b border-[#2d291e]/80 bg-[#0e1215]/90 px-4 py-3 sm:px-5 backdrop-blur-sm">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="inline-block size-2 shrink-0 rounded-full bg-[#f4ce4b] shadow-[0_0_8px_#f4ce4b]" />
-          <span className="truncate text-xs font-bold uppercase tracking-wider text-[#f4ce4b]">
+      <div className="flex items-center justify-between border-b-4 border-black bg-[#0f172a] px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="inline-block size-3 shrink-0 bg-[#a3e635] shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]" />
+          <span className="truncate text-xs font-black uppercase tracking-wider text-[#facc15]">
             {titulo}
           </span>
-          {subtitulo && <span className="hidden truncate text-[11px] text-[#aaa99e] sm:inline">· {subtitulo}</span>}
+          {subtitulo && <span className="hidden text-[11px] text-slate-400 sm:inline">· {subtitulo}</span>}
         </div>
         {badge && (
-          <span className={`rounded-full border border-[#423c28] bg-[#1a1f23]/90 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider shadow-inner ${corBadge}`}>
+          <span className={`border-2 border-black bg-[#1e293b] px-2 py-0.5 font-mono text-[10px] font-bold uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${corBadge}`}>
             {badge}
           </span>
         )}
       </div>
-      <div className="p-4 sm:p-5 lg:p-6">{children}</div>
+      <div className="p-4 sm:p-5">{children}</div>
     </div>
   )
 }
@@ -60,26 +61,26 @@ function InspectorUnificadoAgente({
   const [detalhesTecnicosAbertos, setDetalhesTecnicosAbertos] = useState(false)
 
   return (
-    <div className="relative min-w-0 overflow-hidden rounded-xl border border-[#383324]/80 bg-gradient-to-b from-[#161a1e] to-[#0e1215] p-4 text-[#eeeade] shadow-[0_8px_24px_rgba(0,0,0,0.5)] space-y-3.5 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-[#f4ce4b]/30 before:to-transparent">
+    <div className="border-4 border-black bg-[#0f172a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-3.5 min-w-0">
       {/* Barra de Título do Inspector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2d291e] pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           <span
-            className={`size-2.5 shrink-0 rounded-full ${
-              resumo.estado === 'trabalhando' ? 'bg-[#a3e635] shadow-[0_0_8px_#a3e635] animate-ping' : 'bg-slate-500'
+            className={`size-3 shrink-0 ${
+              resumo.estado === 'trabalhando' ? 'bg-[#a3e635] animate-ping' : 'bg-slate-500'
             }`}
           />
           <div className="flex items-baseline gap-1.5 min-w-0">
-            <span className="text-sm sm:text-base font-bold uppercase tracking-wide text-[#f4ce4b] truncate">
+            <span className="text-sm sm:text-base font-black uppercase text-[#facc15] truncate">
               INSPETOR: {resumo.nome.toUpperCase()}
             </span>
-            <span className="text-[10px] text-[#aaa99e] font-mono shrink-0">
+            <span className="text-[10px] text-slate-400 font-mono shrink-0">
               ({resumo.id})
             </span>
           </div>
           {resumo.donoFormatado && (
             <span
-              className={`rounded border border-black/40 px-2 py-0.5 text-[10px] font-bold uppercase shadow-sm ${
+              className={`border border-black px-2 py-0.5 text-[10px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
                 classeDonoPixel(resumo.dono)
               }`}
             >
@@ -87,12 +88,12 @@ function InspectorUnificadoAgente({
             </span>
           )}
           <span
-            className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider shadow-sm ${
+            className={`border border-black px-2 py-0.5 text-[10px] font-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
               resumo.estado === 'trabalhando'
-                ? 'bg-[#a3e635]/20 text-[#a3e635] border-[#a3e635]/40'
+                ? 'bg-[#a3e635] text-black'
                 : resumo.estado === 'silencioso'
-                ? 'bg-[#facc15]/20 text-[#facc15] border-[#facc15]/40'
-                : 'bg-slate-700/50 text-[#aaa99e] border-[#3c3726]'
+                ? 'bg-[#facc15] text-black'
+                : 'bg-slate-600 text-white'
             }`}
           >
             {resumo.statusTexto.toUpperCase()}
@@ -102,7 +103,7 @@ function InspectorUnificadoAgente({
         <button
           type="button"
           onClick={aoFechar}
-          className="self-start sm:self-auto shrink-0 rounded-lg border border-[#3f3929] bg-[#1a1f23] px-3 py-1 text-xs font-semibold text-[#cfcbba] hover:border-[#f4ce4b] hover:text-[#f4ce4b] transition-colors flex items-center gap-1.5"
+          className="self-start sm:self-auto shrink-0 border-2 border-black bg-[#1e293b] px-3 py-1 text-xs font-bold text-slate-300 hover:bg-slate-700 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5"
         >
           <span>✕ FECHAR INSPETOR</span>
         </button>
@@ -277,85 +278,82 @@ export function Tarefas({ estado, vista }: PropsTela) {
   const totalRetornos = estado.agentes.reduce((s, a) => s + (a.retornos_registrados || 0), 0)
 
   return (
-    <div className="w-full max-w-none space-y-6 px-3 py-4 font-sans text-[#eeeade] sm:px-6 lg:px-8 xl:px-10">
+    <div className="w-full max-w-none space-y-5 px-3 py-4 font-mono sm:px-6 lg:px-8 xl:px-10">
       {/* O escritório aprovado já tem cabeçalho próprio; o cabeçalho legado fica nas visões antigas. */}
-      {modoExibicao !== 'office' && (
-        <div className="relative overflow-hidden rounded-2xl border border-[#383324]/80 bg-gradient-to-b from-[#181d22] via-[#121619] to-[#0c0f12] p-5 text-[#eeeade] shadow-[0_12px_32px_rgba(0,0,0,0.5)] before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-[#f4ce4b]/35 before:to-transparent">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <span className="inline-block size-3 rounded-full bg-[#f4ce4b] shadow-[0_0_8px_#f4ce4b] animate-pulse" />
-                <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-[#f4ce4b]">
-                  [ ESCRITÓRIO DOS AGENTES ]
-                </h1>
-              </div>
-              <p className="mt-2 text-xs sm:text-sm text-[#aaa99e] max-w-4xl leading-relaxed">
-                {vista.pergunta}
-              </p>
+      {modoExibicao !== 'office' && <div className="border-4 border-black bg-[#1e293b] p-4 sm:p-5 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="inline-block size-5 bg-[#a3e635] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] animate-pulse" />
+              <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wider text-[#facc15]">
+                [ 👾 ESCRITÓRIO DOS AGENTES ]
+              </h1>
             </div>
+            <p className="mt-2 text-xs sm:text-sm text-slate-300 max-w-4xl leading-relaxed">
+              {vista.pergunta}
+            </p>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-              {/* Alternador de Visualização */}
-              <div className="flex flex-wrap items-center rounded-xl border border-[#383324] bg-[#0e1215] p-1 shadow-inner" aria-label="Visualização dos agentes">
-                <button
-                  type="button"
-                  onClick={() => setModoExibicao('office')}
-                  aria-pressed={false}
-                  className="rounded-lg px-3 py-1.5 text-xs font-bold uppercase text-[#aaa99e] transition-all hover:text-[#eeeade]"
-                >
-                  🎮 ESCRITÓRIO VOXEL
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModoExibicao('terminal')}
-                  aria-pressed={modoExibicao === 'terminal'}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase transition-all ${
-                    modoExibicao === 'terminal'
-                      ? 'border border-[#38bdf8]/50 bg-[#0e2536] text-[#7dd3fc] shadow-sm'
-                      : 'text-[#aaa99e] hover:text-[#eeeade]'
-                  }`}
-                >
-                  📟 TERMINAL CRT
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModoExibicao('squad')}
-                  aria-pressed={modoExibicao === 'squad'}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase transition-all ${
-                    modoExibicao === 'squad'
-                      ? 'border border-[#f4ce4b]/50 bg-[#292518] text-[#f4ce4b] shadow-sm'
-                      : 'text-[#aaa99e] hover:text-[#eeeade]'
-                  }`}
-                >
-                  🗺️ MAPA DO SQUAD
-                </button>
-              </div>
-
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* Alternador de Visualização */}
+            <div className="flex flex-wrap items-center border-2 border-black bg-[#0f172a] p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" aria-label="Visualização dos agentes">
               <button
                 type="button"
-                onClick={() => ir('cofre', null, { visao: 'operacao' })}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#0284c7] bg-[#0369a1]/80 px-3.5 py-2 text-xs font-bold text-white shadow-[0_0_16px_rgba(2,132,199,0.3)] hover:bg-[#0284c7] transition-all"
+                onClick={() => setModoExibicao('office')}
+                aria-pressed={false}
+                className="px-3 py-1.5 text-xs font-black uppercase text-slate-400 transition-all hover:text-white"
               >
-                <span>🧠 CÉREBRO OPERACIONAL</span>
-                <span className="text-[10px]">↗</span>
+                🎮 ESCRITÓRIO VOXEL
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoExibicao('terminal')}
+                aria-pressed={modoExibicao === 'terminal'}
+                className={`px-3 py-1.5 text-xs font-black uppercase transition-all ${
+                  modoExibicao === 'terminal'
+                    ? 'bg-[#38bdf8] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                📟 TERMINAL CRT
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoExibicao('squad')}
+                aria-pressed={modoExibicao === 'squad'}
+                className={`px-3 py-1.5 text-xs font-black uppercase transition-all ${
+                  modoExibicao === 'squad'
+                    ? 'bg-[#facc15] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🗺️ MAPA DO SQUAD
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => ir('cofre', null, { visao: 'operacao' })}
+              className="border-2 border-black bg-[#0284c7] px-3.5 py-2 text-xs font-bold text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-[#0369a1]"
+            >
+              🧠 CÉREBRO OPERACIONAL
+            </button>
           </div>
         </div>
-      )}
+      </div>}
 
       {/* Faixa de Agentes Ativos (Trabalhando Agora) */}
       {modoExibicao !== 'office' && listaVivos.filter((a) => a.estado === 'trabalhando').length > 0 && (
-        <div className="rounded-xl border border-[#383324]/70 bg-gradient-to-r from-[#14181b] to-[#0f1316] p-3 shadow-md">
-          <div className="flex items-center justify-between gap-2 border-b border-[#2d291e] pb-2 mb-2">
-            <span className="text-[11px] font-bold text-[#84d99a] uppercase flex items-center gap-1.5">
-              <span className="size-2 bg-[#84d99a] rounded-full animate-ping" />
+        <div className="border-2 border-black bg-[#0f172a] p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-700/80 pb-2 mb-2">
+            <span className="text-[11px] font-bold text-[#a3e635] uppercase flex items-center gap-1.5">
+              <span className="size-2 bg-[#a3e635] rounded-full animate-ping" />
               Agentes trabalhando agora ({listaVivos.filter((a) => a.estado === 'trabalhando').length}):
             </span>
             <button
               type="button"
               onClick={() => abrirAgentesAtivos()}
-              className="text-[10px] font-bold text-[#f4ce4b] hover:underline"
+              className="text-[10px] font-bold text-[#38bdf8] hover:underline"
             >
               Ver todos no escritório ↗
             </button>
@@ -370,17 +368,17 @@ export function Tarefas({ estado, vista }: PropsTela) {
                     key={chave}
                     type="button"
                     onClick={() => abrirAgentesAtivos(chave)}
-                    className="flex items-center gap-2 rounded-lg border border-[#383324] bg-[#161b1e] px-2.5 py-1.5 text-xs text-left hover:border-[#84d99a] hover:bg-[#121619] transition-all shadow-sm"
+                    className="flex items-center gap-2 border border-slate-700 bg-[#1e293b] px-2.5 py-1.5 text-xs text-left hover:border-[#a3e635] hover:bg-[#0f172a] transition-all rounded shadow-sm"
                   >
-                    <span className="size-2 bg-[#84d99a] rounded-full" />
-                    <span className="font-bold text-[#eeeade]">{ag.nome || ag.id}</span>
+                    <span className="size-2 bg-[#a3e635] rounded-full" />
+                    <span className="font-bold text-white">{ag.nome || ag.id}</span>
                     {ag.dono && (
-                      <span className={`px-1 py-0.5 text-[9px] font-bold uppercase rounded ${classeDonoPixel(ag.dono)}`}>
+                      <span className={`px-1 py-0.5 text-[9px] font-black uppercase rounded ${classeDonoPixel(ag.dono)}`}>
                         {ag.dono}
                       </span>
                     )}
                     {ag.ferramenta && (
-                      <span className="text-[10px] text-[#aaa99e] font-mono">
+                      <span className="text-[10px] text-slate-400 font-mono">
                         · {ag.ferramenta}
                       </span>
                     )}
@@ -393,16 +391,16 @@ export function Tarefas({ estado, vista }: PropsTela) {
 
       {/* Alerta de Falha da Sonda Viva */}
       {modoExibicao !== 'office' && (erroVivos || vivos?.ok === false) && (
-        <div className="rounded-xl border border-red-900/60 bg-gradient-to-r from-red-950/70 to-[#1b0a0a] p-4 text-[#eeeade] shadow-md">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase text-red-400">
+        <div className="border-4 border-black bg-[#450a0a] p-4 text-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center gap-2 text-xs font-black uppercase text-[#f87171]">
             <span>⚠ FALHA NA SONDA DE AGENTES AO VIVO</span>
             {falhouHaSegundos !== null && (
-              <span className="rounded border border-red-800/80 bg-red-950/80 px-2 py-0.5 text-[10px] text-[#f4ce4b]">
+              <span className="border border-black bg-[#1e293b] px-2 py-0.5 text-[10px] text-[#facc15]">
                 {falhouHaSegundos === 0 ? 'sonda falhou na inicialização' : `sonda falhou há ${falhouHaSegundos}s`}
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-[#d5d0bf]">
+          <p className="mt-1 text-xs text-slate-200">
             {erroVivos || vivos?.erro || vivos?.motivo || 'Não foi possível confirmar os agentes ativos.'}
           </p>
         </div>
@@ -435,40 +433,11 @@ export function Tarefas({ estado, vista }: PropsTela) {
             tarefasDiretores={vivos?.tarefas_diretores}
           />
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#353024]/70 bg-gradient-to-r from-[#14181b] via-[#101416] to-[#0d1012] px-4 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.35)]">
-            <div className="flex items-center gap-2 text-[11px] font-medium tracking-wider text-[#b8b4a2]">
-              <span className="inline-block size-1.5 rounded-full bg-[#f4ce4b] shadow-[0_0_8px_#f4ce4b]" />
-              <span className="text-[10px] uppercase tracking-widest text-[#d8bd65]">Perspectivas Operacionais</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setModoExibicao('terminal')}
-                className="min-h-11 inline-flex items-center gap-1.5 rounded-lg border border-[#3f3929]/70 bg-[#161b1e] px-3.5 text-xs font-semibold tracking-wide text-[#dcd8c9] shadow-sm transition-all hover:border-[#f4ce4b]/70 hover:bg-[#1f2529] hover:text-[#f4ce4b] active:scale-95"
-              >
-                <span>📟</span>
-                <span>Terminal CRT</span>
-                <span className="text-[10px] text-[#8e875d]">↗</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setModoExibicao('squad')}
-                className="min-h-11 inline-flex items-center gap-1.5 rounded-lg border border-[#3f3929]/70 bg-[#161b1e] px-3.5 text-xs font-semibold tracking-wide text-[#dcd8c9] shadow-sm transition-all hover:border-[#f4ce4b]/70 hover:bg-[#1f2529] hover:text-[#f4ce4b] active:scale-95"
-              >
-                <span>🗺️</span>
-                <span>Mapa do Squad</span>
-                <span className="text-[10px] text-[#8e875d]">↗</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => ir('cofre', null, { visao: 'operacao' })}
-                className="min-h-11 inline-flex items-center gap-1.5 rounded-lg border border-[#38bdf8]/40 bg-[#0e1f2b]/60 px-3.5 text-xs font-semibold tracking-wide text-[#7dd3fc] shadow-[0_0_12px_rgba(56,189,248,0.1)] transition-all hover:border-[#38bdf8] hover:bg-[#0e2536] hover:text-white active:scale-95"
-              >
-                <span>🧠</span>
-                <span>Cérebro</span>
-                <span className="text-[10px] text-[#38bdf8]">↗</span>
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center justify-end gap-2 text-[10px] font-bold uppercase text-slate-400">
+            <span className="mr-auto">Outras visões</span>
+            <button type="button" onClick={() => setModoExibicao('terminal')} className="min-h-11 rounded border border-slate-700 bg-[#0f172a] px-3 hover:text-white">Terminal CRT</button>
+            <button type="button" onClick={() => setModoExibicao('squad')} className="min-h-11 rounded border border-slate-700 bg-[#0f172a] px-3 hover:text-white">Mapa do squad</button>
+            <button type="button" onClick={() => ir('cofre', null, { visao: 'operacao' })} className="min-h-11 rounded border border-slate-700 bg-[#0f172a] px-3 text-[#38bdf8]">Cérebro</button>
           </div>
         </section>
       ) : modoExibicao === 'terminal' ? (
@@ -562,15 +531,29 @@ export function Tarefas({ estado, vista }: PropsTela) {
         </PixelJanela>
       )}
 
-      {/* Faixa de KPIs Operacionais Premium */}
+      {/* CT Studio: mesmos dados e ações; muda somente a apresentação no modo office. */}
+      {modoExibicao === 'office' ? (
+        <OfficeTacticalPanels
+          totalVivos={totalVivos}
+          ativos={ativos}
+          catalogoTotal={catalogoPixel.length}
+          convocacoes={estado.resumo.convocacoes_total}
+          retornos={totalRetornos}
+          aprovacoes={aprovacoesPendentes}
+          departamentos={squadIds.map((id) => ({ id, nome: estado.squads[id]?.nome ?? id, quantidade: porSquad(estado, id).length }))}
+          totalAgentesDepartamento={estado.agentes.length}
+          aoAbrirAtivos={() => abrirAgentesAtivos()}
+          aoAbrirAprovacoes={() => ir('aprovacoes')}
+        />
+      ) : (<>
+      {/* Grid de KPIs Pixel Art */}
       <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <PixelKpi
           rotulo="AGENTES VIVOS"
           valor={totalVivos}
-          cor="text-[#84d99a]"
+          cor="text-[#a3e635]"
           nota={`${ativos} executando agora`}
           onClick={() => abrirAgentesAtivos()}
-          ativo={rota.visao === 'ativos'}
         />
         <PixelKpi
           rotulo="CATÁLOGO FROTA"
@@ -581,8 +564,8 @@ export function Tarefas({ estado, vista }: PropsTela) {
         <PixelKpi
           rotulo="APROVAÇÕES PENDENTES"
           valor={aprovacoesPendentes.length}
-          cor={aprovacoesPendentes.length > 0 ? 'text-[#f4ce4b]' : 'text-[#84d99a]'}
-          nota={aprovacoesPendentes.length > 0 ? 'aguardando decisão humana' : 'em conformidade'}
+          cor="text-[#facc15]"
+          nota="aguardando decisão humana"
           onClick={() => ir('aprovacoes')}
         />
         <PixelKpi
@@ -605,78 +588,45 @@ export function Tarefas({ estado, vista }: PropsTela) {
         />
       </div>
 
-      {/* Painéis Táticos Integrados */}
+      {/* Janelas Secundárias de Trabalho dos Agentes */}
       <div className="grid min-w-0 gap-5 lg:grid-cols-2">
         <PixelJanela
           titulo="FILA DE APROVAÇÕES DE AGENTES"
           badge={`${aprovacoesPendentes.length} PENDENTES`}
-          corBadge={aprovacoesPendentes.length > 0 ? 'text-[#f4ce4b]' : 'text-[#84d99a]'}
+          corBadge={aprovacoesPendentes.length > 0 ? 'text-[#facc15]' : 'text-[#a3e635]'}
         >
           {aprovacoesPendentes.length > 0 ? (
             <div className="space-y-2.5">
               {aprovacoesPendentes.slice(0, 6).map((item) => (
                 <div
                   key={item.id}
-                  className="group flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-[#3b3527]/70 bg-gradient-to-r from-[#171c20] to-[#111518] p-3 shadow-sm hover:border-[#f4ce4b]/50 transition-all"
+                  className="flex flex-wrap items-center justify-between gap-2 border-2 border-black bg-[#0f172a] p-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="inline-block size-2 shrink-0 rounded-full bg-[#f4ce4b] shadow-[0_0_8px_#f4ce4b] animate-pulse" />
-                      <span className="truncate font-mono text-xs font-bold text-[#eeeade]">
+                      <span className="inline-block size-2 rounded-full bg-[#facc15]" />
+                      <span className="truncate font-mono text-xs font-bold text-white">
                         {item.titulo || item.id}
                       </span>
                     </div>
-                    <span className="mt-1 block text-[11px] text-[#aaa99e]">
-                      Origem: <span className="text-[#ded9c5]">{item.origem}</span> · Tipo: <span className="text-[#ded9c5]">{item.tipo}</span>
+                    <span className="mt-0.5 block text-[10.5px] text-slate-400">
+                      Origem: {item.origem} · Tipo: {item.tipo}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-[#f4ce4b]/40 bg-[#f4ce4b]/15 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#f4ce4b]">
-                      {item.estado}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => ir('aprovacoes')}
-                      className="rounded-lg border border-[#3f3929] bg-[#1a1f23] px-2 py-1 text-[10px] font-semibold text-[#d8bd65] hover:border-[#f4ce4b] hover:text-[#f4ce4b] transition-colors"
-                      title="Analisar aprovação"
-                    >
-                      Analisar ↗
-                    </button>
-                  </div>
+                  <span className="border border-black bg-[#facc15]/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-[#facc15]">
+                    {item.estado}
+                  </span>
                 </div>
               ))}
               {aprovacoesPendentes.length > 6 && (
-                <div className="flex items-center justify-between pt-1 text-[11px] text-[#aaa99e]">
-                  <span>+ {aprovacoesPendentes.length - 6} item(ns) aguardando na fila</span>
-                  <button
-                    type="button"
-                    onClick={() => ir('aprovacoes')}
-                    className="font-semibold text-[#f4ce4b] hover:underline"
-                  >
-                    Ver todos na Central de Aprovações ↗
-                  </button>
+                <div className="text-center text-[11px] text-slate-400 pt-1">
+                  + {aprovacoesPendentes.length - 6} item(ns) aguardando na fila
                 </div>
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-[#2e3a32]/60 bg-gradient-to-b from-[#111915]/50 to-[#0c120f]/60 p-6 sm:p-7 text-center">
-              <div className="flex size-10 items-center justify-center rounded-full border border-[#34d399]/40 bg-[#14231b] text-base text-[#34d399] shadow-[0_0_16px_rgba(52,211,153,0.2)]">
-                ✓
-              </div>
-              <h4 className="mt-3 text-sm font-bold uppercase tracking-wider text-[#84d99a]">
-                Toda a frota operando em conformidade
-              </h4>
-              <p className="mt-1.5 max-w-md text-xs text-[#aaa99e] leading-relaxed">
-                Nenhuma solicitação pendente de liberação humana no momento. Todos os agentes atuam com autonomia autorizada.
-              </p>
-              <button
-                type="button"
-                onClick={() => ir('aprovacoes')}
-                className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg border border-[#3a443b] bg-[#142018] px-3.5 py-1.5 text-xs font-semibold text-[#84d99a] transition-all hover:border-[#84d99a] hover:bg-[#1a2d20]"
-              >
-                <span>Consultar histórico de aprovações</span>
-                <span className="text-[10px]">↗</span>
-              </button>
+            <div className="p-6 text-center text-xs text-slate-400 border-2 border-dashed border-slate-700 bg-[#0f172a]/50">
+              Nenhuma aprovação pendente no momento. Toda a frota está liberada para execução.
             </div>
           )}
         </PixelJanela>
@@ -686,43 +636,29 @@ export function Tarefas({ estado, vista }: PropsTela) {
           badge={`${estado.agentes.length} AGENTES`}
           corBadge="text-[#38bdf8]"
         >
-          <div className="space-y-3.5">
+          <div className="space-y-4">
             {squadIds.map((squadId) => {
               const squadAgentes = porSquad(estado, squadId)
               const nome = estado.squads[squadId]?.nome ?? squadId
-              const chave = squadId.toLowerCase()
-              const configCor = CORES_DEPARTAMENTO[chave] ?? {
-                bar: 'bg-gradient-to-r from-[#eaca56] to-[#f4ce4b]',
-                dot: 'bg-[#f4ce4b]',
-              }
               return (
                 <PixelLinha
                   key={squadId}
                   nome={nome}
                   valor={squadAgentes.length}
                   total={estado.agentes.length}
-                  cor={configCor.bar}
-                  corDot={configCor.dot}
+                  cor="bg-[#38bdf8]"
                 />
               )
             })}
           </div>
-          <p className="mt-4 border-t border-[#2d291e] pt-2.5 text-[11px] text-[#aaa99e]">
+          <p className="mt-4 border-t border-slate-700 pt-2.5 text-[10.5px] text-slate-400">
             Mede o efetivo catalogado em cada departamento ativo do painel.
           </p>
         </PixelJanela>
       </div>
+      </>)}
     </div>
   )
-}
-
-const CORES_DEPARTAMENTO: Record<string, { bar: string; dot: string }> = {
-  conteudo: { bar: 'bg-gradient-to-r from-[#38bdf8] to-[#60a5fa]', dot: 'bg-[#38bdf8]' },
-  comercial: { bar: 'bg-gradient-to-r from-[#34d399] to-[#10b981]', dot: 'bg-[#34d399]' },
-  financeiro: { bar: 'bg-gradient-to-r from-[#f4ce4b] to-[#f59e0b]', dot: 'bg-[#f4ce4b]' },
-  conhecimento: { bar: 'bg-gradient-to-r from-[#c084fc] to-[#a855f7]', dot: 'bg-[#c084fc]' },
-  operacao: { bar: 'bg-gradient-to-r from-[#fb923c] to-[#f97316]', dot: 'bg-[#fb923c]' },
-  diretoria: { bar: 'bg-gradient-to-r from-[#f4ce4b] to-[#fbbf24]', dot: 'bg-[#f4ce4b]' },
 }
 
 function PixelKpi({
@@ -753,44 +689,22 @@ function PixelKpi({
             }
           : undefined
       }
-      className={`group relative min-w-0 overflow-hidden rounded-xl border p-4 sm:p-5 transition-all duration-200 ${
-        ativo
-          ? 'border-[#f4ce4b] bg-gradient-to-b from-[#24261c] to-[#14181a] shadow-[0_0_24px_rgba(244,206,75,0.22)]'
-          : 'border-[#383324]/65 bg-gradient-to-b from-[#161a1e] via-[#121619] to-[#0d1013] shadow-[0_6px_20px_rgba(0,0,0,0.45)]'
-      } ${
-        clicavel
-          ? 'cursor-pointer hover:-translate-y-0.5 hover:border-[#f4ce4b]/70 hover:shadow-[0_10px_26px_rgba(0,0,0,0.6)]'
-          : ''
-      } before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-[#f4ce4b]/30 before:to-transparent`}
+      className={`border-4 border-black bg-[#0f172a] p-4 sm:p-5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all ${
+        clicavel ? 'cursor-pointer hover:-translate-y-0.5 hover:border-slate-500' : ''
+      } ${ativo ? 'ring-4 ring-[#facc15] bg-[#1e293b]' : ''}`}
     >
-      <div className="flex items-center justify-between gap-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a8a493]">
-          {rotulo}
-        </span>
+      <div className="flex items-center justify-between gap-1 text-[11px] font-black uppercase tracking-wider text-slate-400">
+        <span>{rotulo}</span>
         {clicavel && (
-          <span
-            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-medium tracking-wide transition-colors ${
-              ativo
-                ? 'border-[#f4ce4b] bg-[#f4ce4b]/20 text-[#f4ce4b]'
-                : 'border-[#453e2b] bg-[#1a1f23] text-[#cfcbba] group-hover:border-[#f4ce4b]/60 group-hover:text-[#f4ce4b]'
-            }`}
-          >
-            {ativo ? 'Ativo' : 'Acessar'}
-            <span className="text-[10px]">↗</span>
+          <span className="text-[10px] font-mono text-[#facc15]">
+            {ativo ? '▲ FECHAR' : '▼ ABRIR'}
           </span>
         )}
       </div>
-      <div className="mt-2.5 flex items-baseline gap-2">
-        <span className={`text-2xl sm:text-3xl font-black font-mono tracking-tight tabular-nums ${cor}`}>
-          {valor !== null && valor !== undefined ? valor : '—'}
-        </span>
+      <div className={`mt-2 text-3xl sm:text-4xl font-black tabular-nums ${cor}`}>
+        {valor !== null && valor !== undefined ? valor : 'sem dado'}
       </div>
-      {nota && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[#aaa99e]">
-          <span className="inline-block size-1 rounded-full bg-[#f4ce4b]/70" />
-          <span className="truncate">{nota}</span>
-        </div>
-      )}
+      {nota && <div className="mt-1.5 text-[10px] font-medium text-slate-400">{nota}</div>}
     </div>
   )
 }
@@ -799,8 +713,7 @@ function PixelLinha({
   nome,
   valor,
   total,
-  cor = 'bg-gradient-to-r from-[#eaca56] to-[#f4ce4b]',
-  corDot = 'bg-[#f4ce4b]',
+  cor = 'bg-[#a3e635]',
   onClick,
   clicavel = false,
 }: {
@@ -808,12 +721,10 @@ function PixelLinha({
   valor?: number
   total?: number | null
   cor?: string
-  corDot?: string
   onClick?: () => void
   clicavel?: boolean
 }) {
-  const percentual = total && valor !== undefined ? Math.round((valor / total) * 100) : 0
-  const fracao = total && valor !== undefined ? Math.min(100, Math.max(0, (valor / total) * 100)) : 0
+  const fracao = total && valor !== undefined ? Math.min(100, (valor / total) * 100) : 0
   const isClickable = Boolean(onClick || clicavel)
   return (
     <div
@@ -827,32 +738,19 @@ function PixelLinha({
             }
           : undefined
       }
-      className={`group space-y-1.5 ${
-        isClickable ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
+      className={`space-y-1.5 ${
+        isClickable ? 'cursor-pointer hover:opacity-85 transition-opacity' : ''
       }`}
     >
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`size-1.5 shrink-0 rounded-full ${corDot}`} />
-          <span className="truncate font-semibold tracking-wide text-[#eeeade]">{nome}</span>
-        </div>
-        <div className="flex items-center gap-2 font-mono text-[11px] shrink-0">
-          <span className="font-bold text-[#f4ce4b] tabular-nums">
-            {valor ?? '—'}{' '}
-            <span className="text-[10px] font-normal text-[#aaa99e]">
-              {valor === 1 ? 'agente' : 'agentes'}
-            </span>
-          </span>
-          <span className="text-[#6d6b5e]">·</span>
-          <span className="text-[#a8a594] tabular-nums">{percentual}%</span>
-          {isClickable && <span className="ml-0.5 text-[10px] text-[#f4ce4b]">↗</span>}
-        </div>
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="truncate font-semibold uppercase text-slate-200">{nome}</span>
+        <span className="font-black tabular-nums text-white">
+          {valor ?? 'sem dado'}
+          {isClickable && <span className="ml-1 text-[10px] text-[#facc15]">▼</span>}
+        </span>
       </div>
-      <div className="relative h-2 w-full overflow-hidden rounded-full bg-[#14181a] border border-[#2b2f33]/80">
-        <div
-          className={`h-full ${cor} rounded-full transition-all duration-500 ease-out`}
-          style={{ width: `${fracao}%` }}
-        />
+      <div className="h-3 border-2 border-black bg-[#0f172a] p-0.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+        <div className={`h-full ${cor} transition-all duration-300`} style={{ width: `${fracao}%` }} />
       </div>
     </div>
   )

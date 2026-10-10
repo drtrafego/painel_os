@@ -153,22 +153,6 @@ function escurecer(hex: string, fator = 0.55) {
   return `#${canais.map((canal) => canal.toString(16).padStart(2, '0')).join('')}`
 }
 
-function rgba(hex: string, alfa: number) {
-  const limpo = hex.replace('#', '')
-  if (limpo.length !== 6) return `rgba(80, 110, 105, ${alfa})`
-  const [r, g, b] = [0, 2, 4].map((i) => Number.parseInt(limpo.slice(i, i + 2), 16))
-  return `rgba(${r}, ${g}, ${b}, ${alfa})`
-}
-
-function misturarHex(noite: string, dia: string, progressoDia: number) {
-  const ler = (hex: string) => {
-    const limpo = hex.replace('#', '')
-    return [0, 2, 4].map((i) => Number.parseInt(limpo.slice(i, i + 2), 16))
-  }
-  const a = ler(noite); const b = ler(dia); const t = limitar(progressoDia)
-  return `#${a.map((canal, indice) => Math.round(canal + (b[indice] - canal) * t).toString(16).padStart(2, '0')).join('')}`
-}
-
 function normalizarPapel(valor?: string | null) {
   return (valor || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
 }
@@ -755,6 +739,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const progressoIlhasRef = useRef(new Map<PixelAgentSquad, number>())
   const tempoRef = useRef(0)
   const zoomAutomaticoRef = useRef(1)
+  const hoverIdRef = useRef<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [dimensoesPalco, setDimensoesPalco] = useState({ largura: 900, altura: 600, dpr: 1, larguraFisica: 900 })
   const [pausado, setPausado] = useState(false)
@@ -778,12 +763,41 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     return () => media.removeEventListener('change', atualizar)
   }, [])
 
+  const [termoBusca, setTermoBusca] = useState('')
+  const [abaEscritorio, setAbaEscritorio] = useState<'escritorio' | 'lista' | 'desempenho'>('escritorio')
+  const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativos' | 'descanso' | 'ociosos'>(soAtivos ? 'ativos' : 'todos')
+
+  useEffect(() => {
+    if (soAtivos && filtroStatus !== 'ativos') {
+      setFiltroStatus('ativos')
+    } else if (!soAtivos && filtroStatus === 'ativos') {
+      setFiltroStatus('todos')
+    }
+  }, [soAtivos])
+
   const todasExecucoes = useMemo(() => montarExecucoesVisuais(agentes, catalogo, estado), [agentes, catalogo, estado])
   const { abertos: squadsSobDemandaAbertos, saindo: squadsSobDemandaSaindo } = useSquadsSobDemanda(todasExecucoes)
   const execucoesVisiveis = useMemo(() => {
-    const porAtividade = soAtivos ? todasExecucoes.filter((execucao) => execucao.ativa) : todasExecucoes
-    return filtrarSquadsSobDemanda(porAtividade, squadsSobDemandaAbertos)
-  }, [soAtivos, squadsSobDemandaAbertos, todasExecucoes])
+    let filtradas = todasExecucoes
+    if (filtroStatus === 'ativos' || soAtivos) {
+      filtradas = filtradas.filter((execucao) => execucao.ativa)
+    } else if (filtroStatus === 'descanso') {
+      filtradas = filtradas.filter((execucao) => execucao.execucao.estado === 'parado')
+    } else if (filtroStatus === 'ociosos') {
+      filtradas = filtradas.filter((execucao) => execucao.execucao.estado === 'silencioso')
+    }
+
+    if (termoBusca.trim()) {
+      const termo = termoBusca.toLowerCase().trim()
+      filtradas = filtradas.filter((execucao) =>
+        execucao.nome.toLowerCase().includes(termo) ||
+        execucao.squadNome.toLowerCase().includes(termo) ||
+        Boolean(execucao.execucao.papel && execucao.execucao.papel.toLowerCase().includes(termo))
+      )
+    }
+
+    return filtrarSquadsSobDemanda(filtradas, squadsSobDemandaAbertos)
+  }, [filtroStatus, soAtivos, squadsSobDemandaAbertos, termoBusca, todasExecucoes])
   // O nome principal da mesa é desenhado com 7,5 px no canvas. Em tela física
   // de celular, sua escala nunca pode deixá-lo abaixo de 9 px. A sobra vira
   // rolagem DENTRO do palco, não overflow da página. A conta inclui o DPR,
@@ -800,6 +814,9 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   // obrigaria o desenho a voltar a encolher e tornaria os nomes ilegíveis.
   const zoomMaximoSeguro = ZOOM_MAX
   const totalAtivos = todasExecucoes.filter((execucao) => execucao.ativa).length
+  const totalDescanso = todasExecucoes.filter((execucao) => execucao.execucao.estado === 'parado').length
+  const totalOciosos = todasExecucoes.filter((execucao) => execucao.execucao.estado === 'silencioso').length
+  const totalGeral = todasExecucoes.length
   const totalFixos = todasExecucoes.filter((execucao) => !execucao.temporaria).length
   const totalExtras = todasExecucoes.filter((execucao) => execucao.temporaria).length
   const selecionada = todasExecucoes.find((execucao) => execucao.chave === agenteSelecionadoId) || execucoesVisiveis[0]
@@ -858,170 +875,11 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    let ativo = true
     let quadro = 0
     let anterior = performance.now()
     let ultimoDetalhe = 0
-    let ativo = true
-    let goldDisponivel = true
-
-    const poligono = (pontos: number[][], preenchimento: string) => {
-      ctx.fillStyle = preenchimento; ctx.beginPath()
-      pontos.forEach((ponto, indice) => indice ? ctx.lineTo(ponto[0], ponto[1]) : ctx.moveTo(ponto[0], ponto[1]))
-      ctx.closePath(); ctx.fill()
-    }
-    const bloco = (x: number, y: number, largura: number, profundidade: number, altura: number, topo: string, frente: string, lado: string) => {
-      const a = [x - largura / 2 - profundidade * 0.15, y - profundidade * 0.32 - altura]
-      const b = [x + largura / 2 - profundidade * 0.15, y - profundidade * 0.32 - altura]
-      const e = [x + largura / 2 + profundidade * 0.15, y + profundidade * 0.32 - altura]
-      const f = [x - largura / 2 + profundidade * 0.15, y + profundidade * 0.32 - altura]
-      poligono([f, e, [e[0], e[1] + altura], [f[0], f[1] + altura]], frente)
-      poligono([b, e, [e[0], e[1] + altura], [b[0], b[1] + altura]], lado)
-      poligono([a, b, e, f], topo)
-    }
-    const texto = (valor: string, x: number, y: number, tamanho: number, cor = '#d6e4da', alinhamento: CanvasTextAlign = 'center', peso = 500) => {
-      ctx.fillStyle = cor; ctx.textAlign = alinhamento; ctx.font = `${peso} ${tamanho}px "JetBrains Mono", ui-monospace, monospace`; ctx.fillText(valor, x, y)
-    }
-    const cadeira = (x: number, y: number) => {
-      bloco(x, y, 27, 26, 9, '#5a777a', '#31484f', '#263c43'); bloco(x, y + 9, 28, 6, 26, '#779295', '#405d65', '#2c474f')
-    }
-    const desenharObjeto = (mesa: MesaVisual) => {
-      const { x, y, execucao } = mesa; const ox = x + 24; const oy = y - 8; ctx.fillStyle = execucao.destaque
-      if (execucao.objeto === 'radar') { ctx.beginPath(); ctx.arc(ox, oy - 6, 5.6, 0, Math.PI * 2); ctx.strokeStyle = execucao.destaque; ctx.lineWidth = 2.8; ctx.stroke(); ctx.fillRect(ox + 4, oy, 8, 3) }
-      else if (execucao.objeto === 'qualidade') texto('✓', ox, oy, 12, execucao.destaque, 'center', 900)
-      else if (execucao.objeto === 'arte') { ctx.fillRect(ox - 8, oy - 11, 7, 7); ctx.fillStyle = '#facc15'; ctx.fillRect(ox, oy - 11, 7, 7); ctx.fillStyle = '#38bdf8'; ctx.fillRect(ox - 4, oy - 3, 7, 7) }
-      else if (execucao.objeto === 'texto') { ctx.save(); ctx.translate(ox, oy - 4); ctx.rotate(-0.55); ctx.fillRect(-1, -10, 4, 18); ctx.restore() }
-      else if (execucao.objeto === 'metricas') { ctx.fillRect(ox - 8, oy - 4, 4, 7); ctx.fillRect(ox - 1, oy - 10, 4, 13); ctx.fillRect(ox + 6, oy - 15, 4, 18) }
-      else if (execucao.objeto === 'envio') poligono([[ox - 10, oy - 10], [ox + 10, oy - 4], [ox - 6, oy + 3]], execucao.destaque)
-      else if (execucao.objeto === 'codigo') texto('</>', ox, oy - 1, 7.5, execucao.destaque, 'center', 800)
-      else { ctx.fillRect(ox - 6, oy - 10, 10, 10); ctx.fillRect(ox + 4, oy - 8, 4, 6) }
-    }
-    const desenharMesa = (mesa: Pick<MesaVisual, 'x' | 'y'> & { execucao?: ExecucaoVisual }) => {
-      const { x, y, execucao } = mesa
-      const t = ambiente.progressoDia
-      ctx.fillStyle = `rgba(0,0,0,${0.22 + 0.08 * t})`; ctx.beginPath(); ctx.ellipse(x + 5, y + 20, 43, 23, 0, 0, Math.PI * 2); ctx.fill()
-      bloco(x - 25, y + 3, 7, 9, 28, '#d6b181', '#705037', '#58422f'); bloco(x + 25, y + 5, 7, 9, 28, '#d6b181', '#705037', '#58422f')
-      bloco(x, y, 68, 42, 9, '#ceac7b', '#9a7650', '#755435'); bloco(x, y - 11, 33, 6, 30, '#516e72', '#1b303b', '#10232b')
-      ctx.fillStyle = execucao?.ativa ? '#163d48' : '#112328'; ctx.fillRect(x - 14, y - 38, 26, 19)
-      if (execucao?.ativa) {
-        for (let linha = 0; linha < 3; linha += 1) { ctx.fillStyle = linha === 0 ? execucao.cor : '#77a6a0'; ctx.fillRect(x - 10, y - 34 + linha * 5, 14 - linha * 3, 2) }
-      } else if (execucao?.execucao.estado === 'silencioso' && Math.floor(tempoRef.current * 2) % 2 === 0) { ctx.fillStyle = '#82aaa5'; ctx.fillRect(x - 10, y - 29, 3, 3) }
-      bloco(x, y + 5, 22, 12, 3, '#c1cfb9', '#7a8d84', '#4d655f'); if (execucao) desenharObjeto(mesa as MesaVisual); cadeira(x, y + 34)
-      if (execucao) {
-        execucao.rotulos.forEach((rotulo, indice) => texto(rotulo, x, y + 62 + indice * 9, indice === 0 ? 7.5 : 6.5, indice === 0 ? misturarHex('#f4ead0', '#1f2d2e', t) : misturarHex('#c7d5cf', '#43575a', t), 'center', 650))
-        if (execucao.temporaria && execucao.squad !== SALA_MISTA) texto('+ TEMP', x, y + 81, 7, '#76501b', 'center', 800)
-      } else texto('LIVRE', x, y + 64, 7, '#43575a', 'center', 800)
-    }
     const progressosDoQuadro = new Map<PixelAgentSquad, number>()
-    const comTransformacaoDoAmbiente = (ilha: IlhaVisual, desenharConteudo: () => void) => {
-      const progresso = progressosDoQuadro.get(ilha.squad) ?? 1
-      if (progresso >= 0.999) { desenharConteudo(); return }
-      const escalaX = 0.72 + progresso * 0.28
-      const escalaY = 0.18 + progresso * 0.82
-      const centroX = ilha.x + ilha.largura / 2
-      const baseY = ilha.y + ilha.altura
-      ctx.save(); ctx.globalAlpha *= 0.12 + progresso * 0.88; ctx.translate(centroX, baseY); ctx.scale(escalaX, escalaY); ctx.translate(-centroX, -baseY)
-      desenharConteudo(); ctx.restore()
-    }
-    const desenharPlanta = (x: number, y: number, escala = 1) => {
-      ctx.save(); ctx.translate(x, y); ctx.scale(escala, escala)
-      bloco(0, 0, 19, 20, 18, '#859487', '#56665c', '#37483f')
-      bloco(-4, -17, 21, 22, 20, '#8ab77a', '#567f4e', '#395c43')
-      bloco(7, -24, 14, 16, 20, '#9acb82', '#6a935c', '#456c49')
-      ctx.restore()
-    }
-    const desenharSala = () => {
-      const { largura, altura } = layout
-      const t = ambiente.progressoDia
-      const parede = misturarHex('#071a21', '#c9a77b', t)
-      const piso = misturarHex('#303943', '#a9bec7', t)
-      ctx.fillStyle = piso; ctx.fillRect(0, 0, largura, altura)
-      ctx.fillStyle = parede; ctx.fillRect(8, 10, largura - 16, 100)
-
-      // Noite: janelões, cidade iluminada e concreto polido.
-      ctx.save(); ctx.globalAlpha = 1 - t
-      ctx.fillStyle = '#08131c'; ctx.fillRect(10, 14, largura - 20, 94)
-      for (let x = 12; x < largura - 10; x += 70) {
-        const alturaPredio = 13 + (hashTexto(`predio:${x}`) % 27)
-        ctx.fillStyle = '#122b3c'; ctx.fillRect(x, 106 - alturaPredio, 48, alturaPredio)
-        for (let janelaY = 106 - alturaPredio + 6; janelaY < 104; janelaY += 8) for (let janelaX = x + 7; janelaX < x + 42; janelaX += 12) {
-          ctx.fillStyle = (hashTexto(`${x}:${janelaY}:${janelaX}`) % 3 === 0) ? '#f6c765' : '#467ba0'; ctx.fillRect(janelaX, janelaY, 4, 3)
-        }
-      }
-      ctx.strokeStyle = '#294555'; ctx.lineWidth = 3
-      for (let x = 10; x < largura; x += 82) { ctx.beginPath(); ctx.moveTo(x, 13); ctx.lineTo(x, 108); ctx.stroke() }
-      ctx.beginPath(); ctx.moveTo(10, 106); ctx.lineTo(largura - 10, 106); ctx.stroke(); ctx.restore()
-
-      // Dia: lambris de madeira clara, prateleiras, plantas e lousa.
-      ctx.save(); ctx.globalAlpha = t
-      ctx.fillStyle = '#d4b285'; ctx.fillRect(10, 14, largura - 20, 94)
-      for (let x = 12; x < largura - 10; x += 18) { ctx.fillStyle = x % 36 ? '#bd986b' : '#e0c395'; ctx.fillRect(x, 15, 2, 91) }
-      for (const shelfX of [44, largura / 2 - 150, largura / 2 + 110, largura - 115]) {
-        ctx.fillStyle = '#906843'; ctx.fillRect(shelfX, 30, 74, 4); ctx.fillStyle = '#ecd9b5'; ctx.fillRect(shelfX + 4, 25, 12, 5); ctx.fillStyle = '#6f9d68'; ctx.fillRect(shelfX + 24, 21, 12, 9); ctx.fillStyle = '#a57843'; ctx.fillRect(shelfX + 50, 22, 15, 8)
-      }
-      const lousaX = Math.max(96, largura / 2 - 250); ctx.fillStyle = '#eee6d5'; ctx.fillRect(lousaX, 50, 110, 36); ctx.strokeStyle = '#a68b68'; ctx.lineWidth = 2; ctx.strokeRect(lousaX, 50, 110, 36)
-      for (const [x, y, cor] of [[lousaX + 12, 58, '#ef8d61'], [lousaX + 37, 70, '#62a9ca'], [lousaX + 67, 58, '#f0bf3e']] as Array<[number, number, string]>) { ctx.fillStyle = cor; ctx.fillRect(x, y, 11, 8) }
-      ctx.restore()
-
-      const ladrilhoA = misturarHex('#2c353e', '#aebfc6', t); const ladrilhoB = misturarHex('#29313a', '#a8bac1', t)
-      for (let y = 110; y < altura - 8; y += 96) for (let x = 10; x < largura - 10; x += 96) { ctx.fillStyle = (Math.floor(x / 96) + Math.floor(y / 96)) % 2 ? ladrilhoA : ladrilhoB; ctx.fillRect(x, y, 95, 95) }
-      ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1
-      for (let y = 110; y < altura - 8; y += 96) { ctx.beginPath(); ctx.moveTo(10, y + 0.5); ctx.lineTo(largura - 10, y + 0.5); ctx.stroke() }
-      for (let x = 10; x < largura - 10; x += 96) { ctx.beginPath(); ctx.moveTo(x + 0.5, 110); ctx.lineTo(x + 0.5, altura - 8); ctx.stroke() }
-      if (t > 0) poligono([[18, 110], [90, 110], [210, altura - 15], [80, altura - 15]], `rgba(255,246,216,${0.10 * t})`)
-      ctx.fillStyle = misturarHex('#172b30', '#9c7a55', t); ctx.fillRect(12, 110, 6, altura - 120); ctx.fillRect(largura - 18, 110, 6, altura - 120)
-      desenharPlanta(38, altura - 37, 1.1); desenharPlanta(largura - 38, altura - 37, 1.1)
-      if (t > 0.5) { desenharPlanta(84, 42, 0.42); desenharPlanta(largura - 88, 42, 0.42); desenharPlanta(largura * 0.25, 42, 0.38) }
-      const corNeon = misturarHex('#59b9ff', '#51412a', t)
-      if (t < 0.9) { ctx.save(); ctx.shadowColor = '#47b8ff'; ctx.shadowBlur = 10 * (1 - t); texto('G4ST4OVIB3', largura / 2, 58, 21, corNeon, 'center', 900); ctx.restore() }
-      else texto('G4ST4OVIB3', largura / 2, 58, 21, '#3b2f22', 'center', 900)
-      texto('casaldotrafego.com', largura / 2, 80, 9, misturarHex('#9eb9ba', '#6e5b43', t), 'center', 650)
-      layout.ilhas.forEach((ilha) => {
-        comTransformacaoDoAmbiente(ilha, () => {
-          const baseTapete = misturarHex('#26383b', '#c3cfd2', t)
-          ctx.fillStyle = 'rgba(0,0,0,0.16)'; ctx.fillRect(ilha.x + 4, ilha.y + 6, ilha.largura, ilha.altura)
-          ctx.fillStyle = ilha.compacta ? misturarHex('#42686b', baseTapete, 0.85) : misturarHex(ilha.cor, baseTapete, 0.72); ctx.fillRect(ilha.x, ilha.y, ilha.largura, ilha.altura)
-          ctx.strokeStyle = rgba(escurecer(ilha.cor, 0.7), 0.55); ctx.lineWidth = 1; ctx.strokeRect(ilha.x + 0.5, ilha.y + 0.5, ilha.largura - 1, ilha.altura - 1)
-          if (ilha.tipo === 'coworking') { ctx.fillStyle = '#193b3e'; ctx.fillRect(ilha.x - 5, ilha.y, 5, ilha.altura); ctx.fillStyle = '#90a69d'; ctx.fillRect(ilha.x - 3, ilha.y + 28, 1, ilha.altura - 34) }
-          ctx.fillStyle = ilha.compacta ? '#42686b' : ilha.cor; ctx.fillRect(ilha.x, ilha.y, ilha.largura, 6)
-          const corRotuloIlha = misturarHex('#e7dec3', '#1f2d2e', t)
-          texto(ilha.nome, ilha.x + 13, ilha.y + 22, 9, corRotuloIlha, 'left', 750); texto(ilha.tipo === 'coworking' ? `${ilha.mesas.length} / ${ilha.postos.length}` : `${ilha.mesas.length}`, ilha.x + ilha.largura - 13, ilha.y + 22, 9, corRotuloIlha, 'right', 750)
-          ilha.postos.forEach((posto, indice) => desenharMesa({ ...posto, execucao: ilha.mesas[indice]?.execucao }))
-          if (ilha.tipo === 'coworking') {
-            const sofaX = ilha.x + ilha.largura / 2; const sofaY = ilha.y + ilha.altura - 24
-            bloco(sofaX, sofaY, 92, 28, 12, '#688b83', '#355953', '#294a47'); bloco(sofaX, sofaY - 12, 88, 8, 21, '#779991', '#42645e', '#31534e')
-            texto(ilha.compacta ? 'COWORKING DISPONÍVEL' : 'SOFÁ / PAUSA', sofaX, sofaY + 12, 5.3, ilha.compacta ? '#86a6a2' : '#cde1d8', 'center', 800)
-          }
-          if (SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)) {
-            const progresso = progressosDoQuadro.get(ilha.squad) ?? 1; const centro = ilha.x + ilha.largura / 2; const base = ilha.y + ilha.altura - 2; const painel = 31 * (1 - progresso)
-            if (progresso < 0.999) { ctx.fillStyle = '#13282b'; ctx.fillRect(centro - 32, base - 38, painel, 38); ctx.fillRect(centro + 32 - painel, base - 38, painel, 38); ctx.strokeStyle = rgba(ilha.cor, 0.9); ctx.strokeRect(centro - 33, base - 39, 66, 39) }
-          }
-        })
-      })
-      const larguraDescanso = Math.min(largura - 60, 140 + layout.ocupantesDescanso * 44)
-      const xDescanso = (largura - larguraDescanso) / 2
-      const alturaDescanso = layout.altura - layout.descansoY - 10
-      ctx.fillStyle = '#214747'; ctx.fillRect(xDescanso, layout.descansoY, larguraDescanso, alturaDescanso); ctx.fillStyle = '#496b63'; ctx.fillRect(xDescanso + 3, layout.descansoY - 2, larguraDescanso - 6, 5); texto(layout.descansoAberto ? 'DESCANSO' : 'DESCANSO · VAZIO', xDescanso + larguraDescanso - 12, layout.descansoY + 17, 7, '#e0d5af', 'right', 800)
-    }
-    const desenharBoneco = (mesa: MesaVisual, estadoAnimacao: EstadoAnimacaoBoneco) => {
-      const personagem = mesa.execucao; const pose = poseDoEstado(estadoAnimacao, layout.corredorX); const selecionado = personagem.chave === agenteSelecionadoId
-      const passo = pose.andando ? Math.sin(tempoRef.current * 13 + personagem.ordem) * 4 : 0; const flutuar = pose.andando ? Math.abs(Math.sin(tempoRef.current * 13 + personagem.ordem)) * 0.9 : 0; const deslocamento = pose.sentado * 7
-      const digitando = pose.fase === 'trabalhando' && !reduzirMovimento ? Math.sin(tempoRef.current * 17 + personagem.ordem) * 2 : 0
-      ctx.save(); ctx.translate(pose.x, pose.y - flutuar); ctx.fillStyle = '#12252760'; ctx.beginPath(); ctx.ellipse(0, 4, 17, 6, 0, 0, Math.PI * 2); ctx.fill()
-      if (selecionado) { ctx.strokeStyle = '#fff1b2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 5, 21, 8, 0, 0, Math.PI * 2); ctx.stroke() }
-      bloco(-6, 1 + passo, 8, 10, pose.sentado ? 9 : 17, '#607783', '#314653', '#213541'); bloco(6, 1 - passo, 8, 10, pose.sentado ? 9 : 17, '#607783', '#314653', '#213541')
-      bloco(-6, 4 + passo, 9, 13, 4, '#d5d9c8', '#8e9b93', '#64796c'); bloco(6, 4 - passo, 9, 13, 4, '#d5d9c8', '#8e9b93', '#64796c'); bloco(0, -15 + deslocamento, 22, 17, 20, personagem.cor, personagem.corEscura, personagem.corEscura)
-      for (const lado of [-1, 1]) { const bracoY = pose.sentado ? -25 + deslocamento + digitando * lado : -12 + passo * lado; bloco(lado * 14, bracoY, 6, 12, pose.sentado ? 12 : 16, personagem.cor, personagem.corEscura, personagem.corEscura); bloco(lado * 14, bracoY - 1, 6, 7, 4, personagem.pele, escurecer(personagem.pele, 0.83), '#9a684c') }
-      bloco(0, -36 + deslocamento, 19, 18, 17, personagem.pele, escurecer(personagem.pele, 0.83), '#9a684c'); bloco(0, -47 + deslocamento, 20, 19, 9, personagem.cabelo, escurecer(personagem.cabelo, 0.68), escurecer(personagem.cabelo, 0.58))
-      if (personagem.acessorio === 0) { ctx.fillStyle = personagem.destaque; ctx.fillRect(-10, -43 + deslocamento, 20, 3) }
-      if (personagem.acessorio === 1) { ctx.strokeStyle = '#d8efe7'; ctx.lineWidth = 1.4; ctx.strokeRect(-8, -37 + deslocamento, 7, 4); ctx.strokeRect(1, -37 + deslocamento, 7, 4) }
-      if (personagem.acessorio === 2) { ctx.fillStyle = personagem.destaque; ctx.fillRect(9, -33 + deslocamento, 4, 10) }
-      if (personagem.acessorio === 3) { ctx.fillStyle = '#e8d8a9'; ctx.fillRect(-10, -51 + deslocamento, 20, 3) }
-      if (personagem.acessorio === 4) { ctx.fillStyle = personagem.destaque; ctx.fillRect(-3, -17 + deslocamento, 5, 7) }
-      if (personagem.ativa) { ctx.fillStyle = '#d4f79f'; ctx.fillRect(16, -41 + deslocamento, 4, 4) }
-      if (selecionado) texto('▼', 0, -64 + deslocamento, 11, '#fff0ae')
-      if (selecionado && pose.fase === 'trabalhando' && personagem.execucao.ferramenta) { const ferramenta = formatarRotulo(personagem.execucao.ferramenta, '', 13); const larguraBalao = Math.max(44, ferramenta.length * 5.5 + 10); ctx.fillStyle = '#102529ee'; ctx.fillRect(-larguraBalao / 2, -72 + deslocamento, larguraBalao, 14); ctx.fillStyle = personagem.cor; ctx.fillRect(-larguraBalao / 2, -72 + deslocamento, 2, 14); texto(ferramenta, 0, -62 + deslocamento, 7, '#e8f0ec', 'center', 700) }
-      ctx.restore(); hitsRef.current.push({ chave: personagem.chave, x: pose.x - 25, y: pose.y - 70, largura: 50, altura: 82 })
-    }
     const estadoDaMesa = (mesa: MesaVisual, agoraMs: number) => {
       const posMesa = { x: mesa.x - layout.corredorX, y: mesa.y + 24 }; const posDescanso = { x: mesa.descanso.x - layout.corredorX, y: mesa.descanso.y }; const alvo = alvoDaExecucao(mesa.execucao)
       const anteriorEstado = animacoesRef.current.get(mesa.execucao.animacaoChave)
@@ -1051,31 +909,19 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, 0, 0); ctx.clearRect(0, 0, layout.largura, layout.altura)
       const estados = layout.mesas.map((mesa) => ({ mesa, estado: estadoDaMesa(mesa, agoraAnimacaoMs) }))
       estados.sort((a, b) => a.estado.y - b.estado.y)
-      if (goldDisponivel) {
-        try {
-          hitsRef.current = desenharEscritorioGold(ctx, {
-            layout,
-            personagens: estados.map(({ mesa, estado }) => ({ mesa, pose: poseDoEstado(estado, layout.corredorX) })),
-            progressoDia: ambiente.progressoDia,
-            tempo: tempoRef.current,
-            reduzirMovimento,
-            selecionadoId: agenteSelecionadoId,
-            progressos: progressosDoQuadro,
-          })
-        } catch (erroVisual) {
-          // Falha visual não deve afetar agentes, dados ou a navegação do painel.
-          goldDisponivel = false
-          console.warn('PixelOffice: desenho CT indisponível; usando desenho anterior.', erroVisual)
-        }
-      }
-      if (!goldDisponivel) {
-        ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, 0, 0)
-        ctx.clearRect(0, 0, layout.largura, layout.altura)
-        desenharSala(); hitsRef.current = []
-        estados.forEach(({ mesa, estado }) => {
-          const ilha = layout.ilhas.find((item) => item.squad === mesa.execucao.squad)
-          if (ilha) comTransformacaoDoAmbiente(ilha, () => desenharBoneco(mesa, estado)); else desenharBoneco(mesa, estado)
+      try {
+        hitsRef.current = desenharEscritorioGold(ctx, {
+          layout,
+          personagens: estados.map(({ mesa, estado }) => ({ mesa, pose: poseDoEstado(estado, layout.corredorX) })),
+          progressoDia: ambiente.progressoDia,
+          tempo: tempoRef.current,
+          reduzirMovimento,
+          selecionadoId: agenteSelecionadoId,
+          hoverId: hoverIdRef.current,
+          progressos: progressosDoQuadro,
         })
+      } catch (erroVisual) {
+        console.warn('PixelOffice: erro na renderização visual CT.', erroVisual)
       }
       canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeNamePx = String((7.5 * zoom * dpr).toFixed(2)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0); canvas.dataset.officeRest = layout.descansoAberto ? 'aberto' : 'encolhido'; canvas.dataset.officeResting = String(layout.ocupantesDescanso); canvas.dataset.officeEnvironment = ambiente.fase; canvas.dataset.officeDayProgress = ambiente.progressoDia.toFixed(3); canvas.dataset.officeDemandSquads = layout.ilhas.filter((ilha) => SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)).map((ilha) => ilha.squad).join('|')
       quadro = requestAnimationFrame(desenhar)
@@ -1121,6 +967,23 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     if (hit?.modulo && hit.modulo in POR_ID) { abrirModulo(hit.modulo as VistaId); return }
     if (hit) selecionar(hit.chave)
   }
+  const tratarMovimento = (evento: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = evento.currentTarget.getBoundingClientRect()
+    const x = (evento.clientX - rect.left) / zoom
+    const y = (evento.clientY - rect.top) / zoom
+    const hit = [...hitsRef.current].reverse().find((item) => x >= item.x && x <= item.x + item.largura && y >= item.y && y <= item.y + item.altura)
+    if (hit) {
+      evento.currentTarget.style.cursor = 'pointer'
+      hoverIdRef.current = hit.chave
+    } else {
+      evento.currentTarget.style.cursor = 'default'
+      hoverIdRef.current = null
+    }
+  }
+  const tratarSaida = (evento: React.MouseEvent<HTMLCanvasElement>) => {
+    evento.currentTarget.style.cursor = 'default'
+    hoverIdRef.current = null
+  }
   const tratarTeclado = (evento: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Enter', ' '].includes(evento.key) || execucoesVisiveis.length === 0) return
     evento.preventDefault(); let indice = execucoesVisiveis.findIndex((execucao) => execucao.chave === agenteSelecionadoId); if (indice < 0) indice = 0
@@ -1140,13 +1003,256 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
         <div role="region" className="ct-main" aria-label="Escritório e painéis operacionais">
           <ParedeEscritorio uso={estado?.uso_planos} gastos={gastosIA} tarefas={tarefasDaParede} tarefasSolicitadas={tarefasSolicitadas} descricaoSonda={descricaoSonda} leituraConfirmada={statusLeitura === 'confirmado'} />
           <div className="ct-toolbar" role="toolbar" aria-label="Controles do escritório">
-            <span className="ct-room-label"><i className="ct-dot ct-dot-amber" />Escritório vivo <span className="ct-tag">{execucoesVisiveis.length} visíveis</span></span>
-            <button type="button" className="ct-button" onClick={() => aoAlternarSoAtivos?.(!soAtivos)} aria-pressed={soAtivos}>Só ativos</button>
-            <button type="button" className="ct-button" onClick={() => setPausado((valor) => !valor)} aria-pressed={pausado}>{pausado ? 'Retomar' : 'Pausar'}</button>
-            <div className="ct-zoom"><button type="button" aria-label="Afastar sala" onClick={() => setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, zoomMaximoSeguro))}>−</button><button type="button" title="Repor enquadramento" onClick={() => setZoom(zoomAutomaticoRef.current)}>{Math.round(zoom * 100)}%</button><button type="button" aria-label="Aproximar sala" onClick={() => setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))}>+</button></div>
+            <div className="ct-toolbar-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={abaEscritorio === 'escritorio'}
+                className={`ct-tab-btn ${abaEscritorio === 'escritorio' ? 'ct-tab-active' : ''}`}
+                onClick={() => setAbaEscritorio('escritorio')}
+              >
+                <span aria-hidden="true">💺</span> Escritório IA
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={abaEscritorio === 'lista'}
+                className={`ct-tab-btn ${abaEscritorio === 'lista' ? 'ct-tab-active' : ''}`}
+                onClick={() => setAbaEscritorio('lista')}
+              >
+                <span aria-hidden="true">☰</span> Lista de Agentes
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={abaEscritorio === 'desempenho'}
+                className={`ct-tab-btn ${abaEscritorio === 'desempenho' ? 'ct-tab-active' : ''}`}
+                onClick={() => setAbaEscritorio('desempenho')}
+              >
+                <span aria-hidden="true">📊</span> Desempenho
+              </button>
+            </div>
+
+            <div className="ct-filter-pills" role="radiogroup" aria-label="Filtrar por status">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={filtroStatus === 'todos'}
+                className={`ct-pill ${filtroStatus === 'todos' ? 'ct-pill-active-gold' : ''}`}
+                onClick={() => {
+                  setFiltroStatus('todos')
+                  aoAlternarSoAtivos?.(false)
+                }}
+              >
+                Todos ({totalGeral})
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={filtroStatus === 'ativos'}
+                className={`ct-pill ${filtroStatus === 'ativos' ? 'ct-pill-active-dark' : ''}`}
+                onClick={() => {
+                  setFiltroStatus('ativos')
+                  aoAlternarSoAtivos?.(true)
+                }}
+              >
+                <i className="ct-dot ct-dot-green" /> Ativos ({totalAtivos})
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={filtroStatus === 'descanso'}
+                className={`ct-pill ${filtroStatus === 'descanso' ? 'ct-pill-active-dark' : ''}`}
+                onClick={() => {
+                  setFiltroStatus('descanso')
+                }}
+              >
+                <i className="ct-dot ct-dot-amber" /> Em descanso ({totalDescanso})
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={filtroStatus === 'ociosos'}
+                className={`ct-pill ${filtroStatus === 'ociosos' ? 'ct-pill-active-dark' : ''}`}
+                onClick={() => {
+                  setFiltroStatus('ociosos')
+                }}
+              >
+                <i className="ct-dot" style={{ backgroundColor: '#94a3b8' }} /> Ociosos ({totalOciosos})
+              </button>
+            </div>
+
+            <div className="ct-search-box">
+              <span className="ct-search-icon" aria-hidden="true">🔍</span>
+              <input
+                type="text"
+                value={termoBusca}
+                onChange={(e) => setTermoBusca(e.target.value)}
+                placeholder="Buscar agente..."
+                aria-label="Buscar agente pelo nome ou squad"
+                className="ct-search-input"
+              />
+              {termoBusca && (
+                <button type="button" onClick={() => setTermoBusca('')} className="ct-search-clear">×</button>
+              )}
+            </div>
+
+            <div className="ct-toolbar-actions">
+              <button
+                type="button"
+                className="ct-button"
+                onClick={() => aoAlternarSoAtivos?.(!soAtivos)}
+                aria-pressed={soAtivos}
+              >
+                Só ativos
+              </button>
+              <button
+                type="button"
+                className="ct-button"
+                onClick={() => setPausado((valor) => !valor)}
+                aria-pressed={pausado}
+              >
+                {pausado ? 'Retomar' : 'Pausar'}
+              </button>
+              <div className="ct-zoom">
+                <button
+                  type="button"
+                  aria-label="Afastar sala"
+                  onClick={() => setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, zoomMaximoSeguro))}
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  title="Repor enquadramento"
+                  onClick={() => setZoom(zoomAutomaticoRef.current)}
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  aria-label="Aproximar sala"
+                  onClick={() => setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))}
+                >
+                  +
+                </button>
+              </div>
+            </div>
           </div>
           <section className="ct-room" aria-label="Sala interativa em perspectiva">
-            <div ref={palcoRef} className="ct-room-scroll" data-testid="office-scroll-room"><canvas ref={canvasRef} tabIndex={0} role="group" aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`} onClick={tratarClique} onKeyDown={tratarTeclado} /></div>
+            <div
+              ref={palcoRef}
+              className="ct-room-scroll"
+              data-testid="office-scroll-room"
+              style={{ display: abaEscritorio === 'escritorio' ? 'block' : 'none' }}
+            >
+              <canvas
+                ref={canvasRef}
+                tabIndex={0}
+                role="group"
+                aria-label={`Escritório com ${execucoesVisiveis.length} agentes. Use as setas para escolher ou toque um boneco.`}
+                onClick={tratarClique}
+                onMouseMove={tratarMovimento}
+                onMouseLeave={tratarSaida}
+                onKeyDown={tratarTeclado}
+              />
+            </div>
+
+            {abaEscritorio === 'lista' && (
+              <div className="ct-tab-list-view" data-testid="office-agent-list">
+                <table className="ct-agent-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Agente</th>
+                      <th scope="col">Squad</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Ferramenta</th>
+                      <th scope="col">Modelo</th>
+                      <th scope="col">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {execucoesVisiveis.map((item) => (
+                      <tr key={item.chave} className={item.chave === agenteSelecionadoId ? 'ct-row-selected' : ''}>
+                        <td>
+                          <strong>{item.nome}</strong>
+                          {item.execucao.tarefa && <small title={item.execucao.tarefa}>{item.execucao.tarefa}</small>}
+                        </td>
+                        <td>
+                          <span className="ct-squad-badge" style={{ borderColor: item.cor }}>
+                            <i style={{ backgroundColor: item.cor }} /> {item.squadNome}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`ct-status-pill ${item.ativa ? 'ct-pill-active' : item.execucao.estado === 'silencioso' ? 'ct-pill-idle' : 'ct-pill-rest'}`}>
+                            {item.ativa ? 'Ativo' : item.execucao.estado === 'silencioso' ? 'Silencioso' : 'Em descanso'}
+                          </span>
+                        </td>
+                        <td>{item.execucao.ferramenta || '—'}</td>
+                        <td>{item.execucao.modelo_legivel || item.execucao.modelo || '—'}</td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => selecionar(item.chave)}
+                            className="ct-inspect-btn"
+                          >
+                            Inspecionar ↗
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!execucoesVisiveis.length && (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                          Nenhum agente corresponde aos filtros atuais.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {abaEscritorio === 'desempenho' && (
+              <div className="ct-tab-perf-view" data-testid="office-perf-view">
+                <div className="ct-perf-grid">
+                  <div className="ct-perf-card">
+                    <span className="ct-perf-kicker">TAXA DE ATIVIDADE</span>
+                    <strong>{totalGeral > 0 ? Math.round((totalAtivos / totalGeral) * 100) : 0}%</strong>
+                    <p>{totalAtivos} de {totalGeral} agentes ativos na operação</p>
+                  </div>
+                  <div className="ct-perf-card">
+                    <span className="ct-perf-kicker">EM DESCANSO</span>
+                    <strong>{totalDescanso}</strong>
+                    <p>Agentes no lounge aguardando novas demandas</p>
+                  </div>
+                  <div className="ct-perf-card">
+                    <span className="ct-perf-kicker">SILENCIOSOS</span>
+                    <strong>{totalOciosos}</strong>
+                    <p>Postos de prontidão sem processos ativos</p>
+                  </div>
+                  <div className="ct-perf-card">
+                    <span className="ct-perf-kicker">SQUADS ATIVOS</span>
+                    <strong>{layout.ilhas.length}</strong>
+                    <p>Ambientes estruturados em funcionamento</p>
+                  </div>
+                </div>
+                <div className="ct-perf-breakdown">
+                  <h4>Distribuição de postos por squad</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                    {layout.ilhas.map((ilha) => (
+                      <div key={ilha.squad} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <i style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: ilha.cor }} />
+                          <strong>{ilha.nome}</strong>
+                        </span>
+                        <span style={{ fontFamily: 'monospace', color: '#facc15' }}>{ilha.mesas.length} posições</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
           <footer className="ct-room-footer">
             <span>{layout.ilhas.length} ambientes visíveis · {totalFixos} fixos{totalExtras ? ` · ${totalExtras} extras` : ''} · {layout.colunas} colunas</span>
@@ -1155,8 +1261,56 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
           </footer>
         </div>
         <aside className="ct-inspector" aria-label="Detalhe do agente">
-          <span className="ct-kicker">OPERAÇÃO / AGENTES</span><h3>Inteligência<br />em movimento.</h3>
-          <div className="ct-stats"><div className="ct-stat"><strong>{totalAtivos}</strong><span>Trabalhando / catálogo vivo</span></div><div className="ct-stat"><strong>{layout.ocupantesDescanso}</strong><span>Descansando / sala visível</span></div><div className="ct-stat"><strong>{execucoesVisiveis.length}</strong><span>Agentes visíveis</span></div><div className="ct-stat"><strong>{layout.ilhas.length}</strong><span>Ambientes abertos</span></div></div>
+          <span className="ct-kicker">OPERAÇÃO / AGENTES</span>
+          <h3>Inteligência<br />em movimento.</h3>
+          <p className="ct-inspector-subtitle">AGENTES TRABALHAM ENQUANTO VOCÊ VAI MAIS LONGE.</p>
+
+          <div className="ct-section-summary">
+            <div className="ct-summary-title">
+              <span>Agentes</span>
+              <span className="ct-summary-total">{totalGeral} posições totais</span>
+            </div>
+            <div className="ct-status-breakdown">
+              <div><i className="ct-dot ct-dot-green" /> <span>{totalAtivos} ativos</span></div>
+              <div><i className="ct-dot ct-dot-amber" /> <span>{totalDescanso} em descanso</span></div>
+              <div><i className="ct-dot" style={{ backgroundColor: '#94a3b8' }} /> <span>{totalOciosos} ociosos</span></div>
+            </div>
+          </div>
+
+          <div className="ct-section-summary">
+            <div className="ct-summary-title">
+              <span>Squads</span>
+              <span className="ct-summary-total">{layout.ilhas.length}</span>
+            </div>
+            <div className="nx-squad-list">
+              {layout.ilhas.map(ilha => (
+                <div key={ilha.squad} className="ct-squad-item">
+                  <span><i style={{ backgroundColor: ilha.cor }} />{ilha.nome}</span>
+                  <b>{ilha.mesas.length} <span>›</span></b>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="ct-section-summary ct-op-health">
+            <div className="ct-summary-title">
+              <span>Status da operação</span>
+            </div>
+            <div className="ct-health-status">
+              <span className="ct-health-pill"><i className="ct-dot ct-dot-green" /> Tudo em funcionamento</span>
+              <ul className="ct-health-list">
+                <li><span className="ct-check">✓</span> APIs conectadas</li>
+                <li><span className="ct-check">✓</span> Agentes saudáveis</li>
+                <li><span className="ct-check">✓</span> Fluxos executando</li>
+                <li><span className="ct-check">✓</span> Infraestrutura estável</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="ct-quote-box">
+            <p>“Disciplina hoje.<br />Liberdade amanhã.”</p>
+          </div>
+
           {selecionada && agenteSelecionadoId ? <div className="ct-selection">
             <div className="ct-selection-header"><span className="ct-director-avatar" style={{ borderColor: selecionada.cor }} aria-hidden="true">{selecionada.nome.slice(0, 1)}</span><div><h4 data-testid="office-agent-name">{selecionada.nome}</h4><div className="ct-squad">{selecionada.squadNome}{selecionada.squad === SALA_MISTA ? ' · COMPARTILHADO' : selecionada.temporaria ? ' · TEMPORÁRIO' : ' · FIXO'}</div></div></div>
             <div className="ct-phase">{rotuloFase(faseSelecionada, selecionada.ativa)}</div>
@@ -1171,7 +1325,6 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
             <details className="ct-relations"><summary>Agentes lançados por esta execução</summary>{renderizarArvoreLancados(montarArvoreLancadosPor(agentes, referenciasDoAgente(selecionada.execucao)))}</details>
           </div> : <div className="ct-selection"><p>Selecione um boneco para ver sua execução aqui. Os detalhes aparecem uma única vez, sem substituir as tarefas solicitadas.</p></div>}
           <details className="nx-launchers"><summary>Execuções por lançador</summary><ListaDeLancadores grupos={gruposLancadores} catalogo={catalogo} execucoes={todasExecucoes} aoSelecionar={selecionar} /></details>
-          <div className="nx-squad-list"><h4>Ambientes abertos</h4>{layout.ilhas.map(ilha => <div key={ilha.squad}><span><i style={{ backgroundColor: ilha.cor }} />{ilha.nome}</span><b>{ilha.mesas.length}</b></div>)}</div>
           <p className="ct-inspector-note">Trabalhando: vai à mesa e permanece digitando.<br />Silencioso: permanece na mesa.<br />Parado: segue o descanso configurado.<br />Abertura dos ambientes e presença vêm da operação, não do desenho.</p>
         </aside>
       </div>
