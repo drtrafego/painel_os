@@ -478,6 +478,8 @@ const movement = new Map<string, { x: number; y: number; direction: Direction }>
 const walkingState = new Map<string, boolean>()
 let lastWalkEventAt = 0
 
+type PasseioAmbiente = { x: number; y: number; direction: Direction }
+
 type CharacterAppearance = { key: string; shirt: string; hair: string; skin: string; accent: string }
 
 const CHARACTER_ACCENTS = ['#e1b657', '#74c7c7', '#cf6f70', '#9c82d0', '#8cbd72']
@@ -608,6 +610,20 @@ function directionFor(key: string, pose: PoseRpg): Direction {
   return direction
 }
 
+function passeioAmbiente(chave: string, pose: PoseRpg, tempo: number, reduzirMovimento: boolean): PasseioAmbiente | null {
+  if (reduzirMovimento || pose.andando || pose.fase !== 'silencioso') return null
+  const seed = stableHash(chave)
+  const duracao = 4.8 + (seed % 5) * 0.65
+  const progresso = (tempo / duracao + ((seed >>> 8) % 1000) / 1000) % 1
+  const deslocamento = progresso < 0.5 ? progresso * 4 - 1 : 3 - progresso * 4
+  const amplitude = 15 + seed % 4
+  return {
+    x: round(deslocamento * amplitude),
+    y: round(Math.sin(progresso * Math.PI * 2) * 2),
+    direction: progresso < 0.5 ? 'right' : 'left',
+  }
+}
+
 function drawCharacter(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement | null,
@@ -620,19 +636,23 @@ function drawCharacter(
   const island = quadro.layout.ilhas.find((item) => item.squad === person.squad)
   const opacity = alphaForIsland(quadro, island)
   if (opacity < 0.03) return null
-  const point = project(pose.x, pose.y + 18)
-  const direction = directionFor(person.animacaoChave, pose)
+  const passeio = passeioAmbiente(person.chave, pose, quadro.tempo, quadro.reduzirMovimento)
+  const pontoBase = project(pose.x, pose.y + 18)
+  const point = { x: pontoBase.x + (passeio?.x ?? 0), y: pontoBase.y + (passeio?.y ?? 0) }
+  const directionReal = directionFor(person.animacaoChave, pose)
+  const direction = pose.andando ? directionReal : passeio?.direction ?? directionReal
   const row = { down: 0, left: 1, right: 2, up: 3 }[direction]
-  const walking = pose.andando && !quadro.reduzirMovimento
+  const walking = !quadro.reduzirMovimento && (pose.andando || passeio !== null)
   const frame = walking ? Math.floor(quadro.tempo * 8 + person.ordem) % 3 : 1
   const cellWidth = 1254 / 3
   const cellHeight = 1254 / 4
-  const width = pose.sentado > 0.5 ? 58 : 62
-  const height = pose.sentado > 0.5 ? 56 : 64
+  const sentado = pose.sentado > 0.5 && !passeio
+  const width = sentado ? 58 : 62
+  const height = sentado ? 56 : 64
   const idleOffsetY = quadro.reduzirMovimento ? 0 : round(Math.sin(quadro.tempo * 1.7 + person.ordem * 0.8) * 1.25)
   const spritePoint = { x: point.x, y: point.y + idleOffsetY }
   const x = round(spritePoint.x - width / 2)
-  const y = round(spritePoint.y - height + (pose.sentado > 0.5 ? 5 : 0))
+  const y = round(spritePoint.y - height + (sentado ? 5 : 0))
   const selected = person.chave === quadro.selecionadoId
   const hovered = person.chave === quadro.hoverId
 
