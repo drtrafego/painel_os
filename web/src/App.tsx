@@ -10,8 +10,7 @@ import { POR_ID } from './nav/rotas'
 import type { FiltroId } from './ui/Acoes'
 import type { Agente } from './dados/tipos'
 import { obterFaixaPadrao, type FaixaDeData } from './ui/SeletorDeData'
-import './ui/PixelOffice.gold.css'
-import './ui/office-studio/studio.css'
+import './ui/PixelOffice.css'
 
 // Cada tela vira um chunk próprio. A moldura, a autenticação e o estado ficam
 // no bundle inicial; só o conteúdo da rota escolhida é baixado depois. O

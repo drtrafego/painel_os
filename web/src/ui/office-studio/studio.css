@@ -1,12 +1,3 @@
-/* CT Studio: escopo local. Nenhum token global, rota, KPI ou permissão é reescrito. */
-.ct-office[data-office-visual="ct-gold"] .ct-body { align-items:start; }
-.ct-office[data-office-visual="ct-gold"] .ct-main { align-self:start; background:#11181c; }
-.ct-office[data-office-visual="ct-gold"] .ct-room { background:#10171b; }
-.ct-office[data-office-visual="ct-gold"] .ct-room canvas { image-rendering:auto; }
-/* O inspetor longo deixa de criar um retângulo vazio abaixo do escritório. */
-@media (min-width:851px) {
-  .ct-office[data-office-visual="ct-gold"] .ct-inspector { max-height:940px; overflow:auto; scrollbar-width:thin; scrollbar-color:#6b6040 #151b1e; }
-}
 .ct-tactical { --tac-gold:#ecd071; --tac-text:#eee9db; --tac-muted:#b2b4ad; --tac-line:#393f3c; color:var(--tac-text); font-family:Inter,system-ui,sans-serif; padding:22px clamp(12px,2vw,26px) 24px; margin:0; background:linear-gradient(165deg,#192124,#10171b 62%); border-top:1px solid #60583c; box-sizing:border-box; min-width:0; color-scheme:dark; }
 .ct-tactical *, .ct-tactical *::before, .ct-tactical *::after { box-sizing:border-box; }
 .ct-tactical h2,.ct-tactical h3,.ct-tactical p { margin:0; }

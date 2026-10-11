@@ -1,13 +1,13 @@
 import characterAtlasUrl from './pixel-office-rpg/character-walk-4dir.png'
 import environmentAtlasUrl from './pixel-office-rpg/environment-atlas.png'
 import {
-  compactacaoStudio,
-  projeterStudio,
-  type HitGold,
-  type IlhaGold,
-  type PoseGold,
-  type QuadroGold,
-} from './PixelOffice.gold'
+  compactacaoRpg,
+  projetarRpg,
+  type HitRpg,
+  type IlhaRpg,
+  type PoseRpg,
+  type QuadroRpg,
+} from './PixelOffice.rpg-data'
 
 type Point = { x: number; y: number }
 type Direction = 'down' | 'left' | 'right' | 'up'
@@ -162,12 +162,12 @@ function atlasPattern(ctx: CanvasRenderingContext2D, image: HTMLImageElement | n
   return pattern
 }
 
-function projection(layout: QuadroGold['layout']) {
-  const { mapa } = compactacaoStudio(layout)
-  const origin = projeterStudio(layout, 0, 0, 0)
-  const unitX = projeterStudio(layout, 1, 0, 0)
-  const unitY = projeterStudio(layout, 0, 1, 0)
-  const unitElevation = projeterStudio(layout, 0, 0, 1)
+function projection(layout: QuadroRpg['layout']) {
+  const { mapa } = compactacaoRpg(layout)
+  const origin = projetarRpg(layout, 0, 0, 0)
+  const unitX = projetarRpg(layout, 1, 0, 0)
+  const unitY = projetarRpg(layout, 0, 1, 0)
+  const unitElevation = projetarRpg(layout, 0, 0, 1)
   const basisX = { x: unitX.x - origin.x, y: unitX.y - origin.y }
   const basisY = { x: unitY.x - origin.x, y: unitY.y - origin.y }
   const basisElevation = { x: unitElevation.x - origin.x, y: unitElevation.y - origin.y }
@@ -180,14 +180,14 @@ function projection(layout: QuadroGold['layout']) {
   }
 }
 
-function alphaForIsland(quadro: QuadroGold, island?: IlhaGold) {
+function alphaForIsland(quadro: QuadroRpg, island?: IlhaRpg) {
   return island ? clamp(quadro.progressos?.get(island.squad) ?? 1) : 1
 }
 
 type SceneCache = { key: string; canvas: HTMLCanvasElement }
 let sceneCache: SceneCache | null = null
 
-function sceneKey(quadro: QuadroGold) {
+function sceneKey(quadro: QuadroRpg) {
   const { layout } = quadro
   return JSON.stringify([
     assetVersion,
@@ -315,7 +315,7 @@ function drawRoomSign(ctx: CanvasRenderingContext2D, sign: RoomSign, navigation:
   ctx.restore()
 }
 
-function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaGold, project: ReturnType<typeof projection>, index: number, wallTopLimit: number): RoomSign {
+function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: ReturnType<typeof projection>, index: number, wallTopLimit: number): RoomSign {
   const color = validColor(island.cor, PALETTE.gold)
   const corners = [
     project(island.x, island.y),
@@ -389,7 +389,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaGold, project: Retu
   }
 }
 
-function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroGold, image: HTMLImageElement | null) {
+function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg, image: HTMLImageElement | null) {
   const { layout } = quadro
   const width = round(layout.largura)
   const height = round(layout.altura)
@@ -460,7 +460,7 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroGold, imag
   drawSprite(ctx, image, ENVIRONMENT_SPRITES.plant, width - 50, height - 56, 38, 49)
 }
 
-function staticScene(quadro: QuadroGold, image: HTMLImageElement | null) {
+function staticScene(quadro: QuadroRpg, image: HTMLImageElement | null) {
   if (typeof document === 'undefined') return null
   const key = sceneKey(quadro)
   if (sceneCache?.key === key) return sceneCache.canvas
@@ -485,7 +485,7 @@ const CHARACTER_HAIR = ['#302d29', '#5a3825', '#c08a48', '#1f2c36', '#6b3546', '
 const characterSpriteCache = new Map<string, HTMLCanvasElement>()
 let characterSpriteCacheVersion = -1
 
-function appearanceFor(person: QuadroGold['personagens'][number]['mesa']['execucao']): CharacterAppearance {
+function appearanceFor(person: QuadroRpg['personagens'][number]['mesa']['execucao']): CharacterAppearance {
   const seed = stableHash(person.chave)
   const shirt = validColor(person.cor, ['#4e91a8', '#b87553', '#8f6bb3', '#639462'][seed % 4])
   const hair = validColor(person.cabelo, CHARACTER_HAIR[Math.floor(seed / 7) % CHARACTER_HAIR.length])
@@ -594,7 +594,7 @@ function recordWalkEvent(key: string, walking: boolean) {
   walkingState.set(key, walking)
 }
 
-function directionFor(key: string, pose: PoseGold): Direction {
+function directionFor(key: string, pose: PoseRpg): Direction {
   const previous = movement.get(key)
   let direction: Direction = pose.fase === 'trabalhando' || pose.fase === 'silencioso' ? 'up' : 'down'
   if (pose.andando && previous) {
@@ -611,8 +611,8 @@ function directionFor(key: string, pose: PoseGold): Direction {
 function drawCharacter(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement | null,
-  quadro: QuadroGold,
-  character: QuadroGold['personagens'][number],
+  quadro: QuadroRpg,
+  character: QuadroRpg['personagens'][number],
   project: ReturnType<typeof projection>,
 ) {
   const { mesa, pose } = character
@@ -683,12 +683,12 @@ function drawName(ctx: CanvasRenderingContext2D, name: string, point: Point, col
   ctx.fillText(label, x + 13, y + 9)
 }
 
-export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: QuadroGold): HitGold[] {
+export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: QuadroRpg): HitRpg[] {
   const startedAt = typeof performance === 'undefined' ? 0 : performance.now()
   const environment = loadImage(environmentAtlasUrl, 'environment')
   const characters = loadImage(characterAtlasUrl, 'character')
   const project = projection(quadro.layout)
-  const hits: HitGold[] = []
+  const hits: HitRpg[] = []
   const labels: Array<{ name: string; point: Point; color: string; selected: boolean }> = []
 
   ctx.save()

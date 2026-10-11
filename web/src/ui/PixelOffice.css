@@ -1,5 +1,5 @@
 /* Exclusivo do escritório. Não modifica :root, body, navegação ou outras telas. */
-.ct-office[data-office-visual="ct-gold"] {
+.ct-office[data-office-visual="ct-rpg"] {
   --ct-yellow:#f4ce4b; --ct-muted:#aaa99e; --ct-text:#eeeade; --ct-border:#3b3930;
   color:var(--ct-text); background:#0f1114; border:1px solid #37352a; border-radius:18px;
   overflow:hidden; min-width:0; font-family:Inter,system-ui,-apple-system,sans-serif;
@@ -223,14 +223,10 @@
 .ct-office .ct-room-label { margin-right:auto; display:flex; align-items:center; gap:7px; font-size:12px; font-weight:600 }
 .ct-office .ct-zoom { display:flex; align-items:center; border:1px solid #4a4636; border-radius:7px; overflow:hidden }
 .ct-office .ct-zoom button { min-height:36px; min-width:34px; border:0; background:#191e20; color:#ddd5b7; font-size:14px }.ct-office .ct-zoom button[title] { border-inline:1px solid #4a4636; font-size:10px; min-width:44px }
-.ct-office .ct-renderer-switch { display:flex; align-items:center; border:1px solid #4a4636; border-radius:7px; overflow:hidden }
-.ct-office .ct-renderer-switch button { min-height:36px; border:0; padding:5px 9px; color:#aaa99e; background:#121719; font-size:9px; font-weight:700; letter-spacing:.06em }
-.ct-office .ct-renderer-switch button + button { border-left:1px solid #4a4636 }
-.ct-office .ct-renderer-switch button[aria-pressed="true"] { color:#171810; background:#f4ce4b }
 .ct-office .ct-room { min-width:0; position:relative; background:#111519 }
 .ct-office .ct-room-scroll { height:clamp(420px,53vh,610px); width:100%; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#917638 #101417 }
 .ct-office .ct-room canvas { display:block; max-width:none; cursor:pointer; touch-action:pan-x pan-y }
-.ct-office[data-office-renderer="rpg"] .ct-room canvas { image-rendering:pixelated; background:#081013 }
+.ct-office .ct-room canvas { image-rendering:pixelated; background:#081013 }
 .ct-office .ct-room canvas:focus-visible { outline:2px solid var(--ct-yellow); outline-offset:-3px }
 .ct-office .ct-room-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; min-height:30px; padding:8px 16px; background:#0f1316; border-top:1px solid #38392d; font-size:9px; color:#b7b4a4 }
 .ct-office .ct-legend { display:flex; gap:10px; flex-wrap:wrap }.ct-office .ct-legend > span { display:flex; align-items:center; gap:4px }.ct-office .ct-legend i { display:inline-block; width:5px; height:5px; border-radius:50% }
@@ -508,9 +504,3 @@
   .ct-office .ct-scene-hud-actions button svg { width:13px; height:13px; }
   .ct-office .ct-hud-drawer { top:auto; right:0; bottom:0; left:0; width:100%; max-height:82dvh; border-radius:16px 16px 0 0; }
 }
-
-/* Mantém a prioridade do palco sobre os overrides legados do Núcleo. */
-.ct-office[data-office-visual="ct-gold"] .ct-body { display:block; }
-.ct-office[data-office-visual="ct-gold"] .ct-room-scroll { height:clamp(540px,calc(100dvh - 190px),820px); }
-@media (max-width:850px) { .ct-office[data-office-visual="ct-gold"] .ct-room-scroll { height:clamp(520px,calc(100dvh - 190px),720px); } }
-@media (max-width:480px) { .ct-office[data-office-visual="ct-gold"] .ct-room-scroll { height:calc(100dvh - 210px); min-height:500px; } }

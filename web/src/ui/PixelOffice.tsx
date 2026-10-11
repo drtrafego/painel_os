@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { desenharEscritorioGold } from './PixelOffice.gold'
 import { desenharEscritorioRpg } from './PixelOffice.rpg'
 import { PainelTarefas, PainelUsoPlanos } from './PixelOffice.wall'
 import { montarTarefasParede, type GastosIA } from './PixelOffice.wall-data'
@@ -30,8 +29,6 @@ import { agruparAgentesAtivosPorLancador, totalDeAgentesAgrupados, type GrupoLan
 
 export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, obterAtivosNoCatalogo }
 
-export type OfficeRenderer = 'gold' | 'rpg'
-
 interface PixelOfficeProps {
   agentes: AgenteVivo[]
   catalogo?: PixelAgent[]
@@ -46,8 +43,6 @@ interface PixelOfficeProps {
   tarefasDiretores?: TarefasDiretores | null
   /** Solicitações reais. Ausência nunca é preenchida com execução técnica da sonda. */
   tarefasSolicitadas?: QuadroTarefasSolicitadas | null
-  /** Renderer inicial. O seletor da toolbar continua permitindo comparação local. */
-  rendererInicial?: OfficeRenderer
 }
 
 type ObjetoMesa = 'codigo' | 'texto' | 'arte' | 'radar' | 'metricas' | 'qualidade' | 'envio' | 'cafe'
@@ -744,7 +739,7 @@ function useSquadsSobDemanda(execucoes: ExecucaoVisual[]) {
   return { abertos, saindo }
 }
 
-export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos, aoAbrirCerebro, gastosIA, tarefasDiretores, tarefasSolicitadas, rendererInicial = 'rpg' }: PixelOfficeProps) {
+export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSelecionarAgente, agenteSelecionadoId, soAtivos = false, aoAlternarSoAtivos, aoAbrirCerebro, gastosIA, tarefasDiretores, tarefasSolicitadas }: PixelOfficeProps) {
   const { ir: abrirModulo } = useRota()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const palcoRef = useRef<HTMLDivElement | null>(null)
@@ -782,10 +777,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const [abaEscritorio, setAbaEscritorio] = useState<'escritorio' | 'lista' | 'desempenho'>('escritorio')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativos' | 'descanso' | 'ociosos'>(soAtivos ? 'ativos' : 'todos')
   const [painelHudAberto, setPainelHudAberto] = useState<'uso' | 'tarefas' | null>(null)
-  const [rendererAtivo, setRendererAtivo] = useState<OfficeRenderer>(rendererInicial)
   const debugWalk = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug_walk') === '1'
-
-  useEffect(() => setRendererAtivo(rendererInicial), [rendererInicial])
 
   useEffect(() => {
     if (soAtivos && filtroStatus !== 'ativos') {
@@ -943,18 +935,16 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
           hoverId: hoverIdRef.current,
           progressos: progressosDoQuadro,
         }
-        hitsRef.current = rendererAtivo === 'rpg'
-          ? desenharEscritorioRpg(ctx, frame)
-          : desenharEscritorioGold(ctx, frame)
+        hitsRef.current = desenharEscritorioRpg(ctx, frame)
       } catch (erroVisual) {
-        console.warn(`PixelOffice: erro no renderer ${rendererAtivo}.`, erroVisual)
+        console.warn('PixelOffice: erro no renderer RPG.', erroVisual)
       }
       canvas.dataset.officeActiveAway = String(estados.filter(({ mesa, estado }) => mesa.execucao.ativa && estado.fase !== 'trabalhando').length); canvas.dataset.officeWorking = String(estados.filter(({ estado }) => estado.fase === 'trabalhando').length); canvas.dataset.officeAgents = String(estados.length); canvas.dataset.officeColumns = String(layout.colunas); canvas.dataset.officeZoom = String(Math.round(zoom * 100)); canvas.dataset.officeNamePx = String((7.5 * zoom * dpr).toFixed(2)); canvas.dataset.officeCommercial = layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? (squadsSobDemandaSaindo.has('comercial') ? 'saindo' : 'aberto') : 'fechado'; canvas.dataset.officeCoworking = String(layout.ilhas.find((ilha) => ilha.squad === SALA_MISTA)?.mesas.length || 0); canvas.dataset.officeRest = layout.descansoAberto ? 'aberto' : 'encolhido'; canvas.dataset.officeResting = String(layout.ocupantesDescanso); canvas.dataset.officeEnvironment = ambiente.fase; canvas.dataset.officeDayProgress = ambiente.progressoDia.toFixed(3); canvas.dataset.officeDemandSquads = layout.ilhas.filter((ilha) => SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)).map((ilha) => ilha.squad).join('|'); canvas.dataset.officeDebugWalk = debugWalk && !reduzirMovimento ? 'active' : 'off'
       quadro = requestAnimationFrame(desenhar)
     }
     quadro = requestAnimationFrame(desenhar)
     return () => { ativo = false; cancelAnimationFrame(quadro) }
-  }, [agenteSelecionadoId, ambiente, dimensoesPalco.dpr, layout, pausado, reduzirMovimento, rendererAtivo, squadsSobDemandaSaindo, zoom])
+  }, [agenteSelecionadoId, ambiente, dimensoesPalco.dpr, layout, pausado, reduzirMovimento, squadsSobDemandaSaindo, zoom])
 
   const selecionar = (chave: string) => aoSelecionarAgente?.(chave)
   const visualDoAgente = (agente: AgenteVivo) => todasExecucoes.find((visual) => visual.execucao === agente)
@@ -1095,7 +1085,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const pillSaude = PILL_POR_ESTADO[saudeOperacao.pior]
 
   return (
-    <div className="ct-office" data-testid="pixel-office" data-office-visual="ct-gold" data-office-renderer={rendererAtivo} data-office-columns={layout.colunas} data-office-environment={ambiente.fase} data-office-day-progress={ambiente.progressoDia.toFixed(3)} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'} data-office-rest={layout.descansoAberto ? 'aberto' : 'encolhido'} data-office-resting={layout.ocupantesDescanso}>
+    <div className="ct-office" data-testid="pixel-office" data-office-visual="ct-rpg" data-office-columns={layout.colunas} data-office-environment={ambiente.fase} data-office-day-progress={ambiente.progressoDia.toFixed(3)} data-office-commercial={layout.ilhas.some((ilha) => ilha.squad === 'comercial') ? 'aberto' : 'fechado'} data-office-rest={layout.descansoAberto ? 'aberto' : 'encolhido'} data-office-resting={layout.ocupantesDescanso}>
       <header className="ct-header">
         <div className="ct-brand"><img src={logoCasal} alt="Casal do Tráfego — CT" width={54} height={54} /><div><span className="ct-kicker">CASAL DO TRÁFEGO / PAINEL OS</span><h2>O escritório da sua operação.</h2></div></div>
         <div className="ct-header-status"><span className="ct-tag" data-testid="office-environment">{ambiente.rotulo}</span><span className={`ct-tag ${statusLeitura === 'confirmado' ? 'ct-tag-live' : ''}`} title={descricaoSonda}><i className={`ct-dot ${statusLeitura === 'confirmado' ? 'ct-dot-green' : 'ct-dot-amber'}`} />{statusLeitura === 'confirmado' ? 'AO VIVO' : 'VERIFICAR SONDA'}</span>{aoAbrirCerebro && <button type="button" className="ct-button" onClick={aoAbrirCerebro}>Cérebro ↗</button>}</div>
@@ -1237,24 +1227,6 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                   onClick={() => setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))}
                 >
                   +
-                </button>
-              </div>
-              <div className="ct-renderer-switch" role="group" aria-label="Estilo visual do escritório">
-                <button
-                  type="button"
-                  aria-pressed={rendererAtivo === 'rpg'}
-                  onClick={() => setRendererAtivo('rpg')}
-                  data-testid="office-renderer-rpg"
-                >
-                  RPG
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={rendererAtivo === 'gold'}
-                  onClick={() => setRendererAtivo('gold')}
-                  data-testid="office-renderer-gold"
-                >
-                  Gold
                 </button>
               </div>
             </div>
