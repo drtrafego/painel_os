@@ -51,6 +51,7 @@ const NAVIGATION_HEIGHT = 23
 const ROOM_NAVIGATION_GAP = 8
 const ROOM_SIGN_HEIGHT = 21
 const ROOM_SIGN_FURNITURE_GAP = 3
+export const RAIO_PASSEIO_X = 15
 
 let environmentAtlas: HTMLImageElement | null = null
 let characterAtlas: HTMLImageElement | null = null
@@ -610,17 +611,37 @@ function directionFor(key: string, pose: PoseRpg): Direction {
   return direction
 }
 
+function ruidoPasseio(chave: string, ciclo: number, canal: string) {
+  return stableHash(`${chave}:${ciclo}:${canal}`) / 0xffffffff
+}
+
 function passeioAmbiente(chave: string, pose: PoseRpg, tempo: number, reduzirMovimento: boolean): PasseioAmbiente | null {
   if (reduzirMovimento || pose.andando || pose.fase !== 'silencioso') return null
-  const seed = stableHash(chave)
-  const duracao = 4.8 + (seed % 5) * 0.65
-  const progresso = (tempo / duracao + ((seed >>> 8) % 1000) / 1000) % 1
-  const deslocamento = progresso < 0.5 ? progresso * 4 - 1 : 3 - progresso * 4
-  const amplitude = 15 + seed % 4
+  const ciclo = Math.floor(tempo / 20)
+  const inicioDoCiclo = ciclo * 20
+  const espera = 3 + ruidoPasseio(chave, ciclo, 'espera') * 7
+  const duracaoCaminhada = 2 + ruidoPasseio(chave, ciclo, 'duracao') * 3
+  const progresso = (tempo - inicioDoCiclo - espera) / duracaoCaminhada
+  if (progresso < 0 || progresso > 1) return null
+
+  const lado = ruidoPasseio(chave, ciclo, 'lado') < 0.5 ? -1 : 1
+  const amplitude = 18 + ruidoPasseio(chave, ciclo, 'amplitude') * 5
+  const faseUm = ruidoPasseio(chave, ciclo, 'fase-um') * Math.PI * 2
+  const faseDois = ruidoPasseio(chave, ciclo, 'fase-dois') * Math.PI * 2
+  const deslocar = (passo: number) => {
+    const arco = Math.sin(passo * Math.PI)
+    const harmonia = 1 + Math.sin(passo * Math.PI * 2 + faseUm) * 0.12 + Math.sin(passo * Math.PI * 5 + faseDois) * 0.05
+    return {
+      x: lado * Math.min(RAIO_PASSEIO_X, amplitude * arco * harmonia),
+      y: arco * (Math.sin(passo * Math.PI * 2 + faseDois) * 2 + Math.sin(passo * Math.PI * 4 + faseUm) * 1.2),
+    }
+  }
+  const atual = deslocar(progresso)
+  const proximo = deslocar(Math.min(1, progresso + 0.015))
   return {
-    x: round(deslocamento * amplitude),
-    y: round(Math.sin(progresso * Math.PI * 2) * 2),
-    direction: progresso < 0.5 ? 'right' : 'left',
+    x: round(atual.x),
+    y: round(atual.y),
+    direction: proximo.x < atual.x ? 'left' : 'right',
   }
 }
 

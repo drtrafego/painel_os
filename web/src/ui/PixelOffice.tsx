@@ -525,15 +525,19 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     ...(grupos.has(SALA_MISTA) ? [SALA_MISTA] : []),
   ]
   const larguraIlha = 400
-  const margemX = 24
-  const vaoX = 18
+  const margemX = 16
+  const vaoX = 10
   const margemTopo = 128
+  const espacamentoMesaY = 96
+  const espacamentoMesaXMaximo = 100
+  const colunasDaIlha = (squad: PixelAgentSquad, quantidade: number) =>
+    squad === SALA_MISTA ? Math.min(3, quantidade) : Math.min(5, Math.max(1, quantidade))
   const alturas = new Map<PixelAgentSquad, number>()
   ordemSquads.forEach((squad) => {
     const quantidade = squad === SALA_MISTA ? Math.max(3, grupos.get(squad)?.length || 0) : grupos.get(squad)?.length || 0
-    const colunasMesa = squad === SALA_MISTA ? Math.min(3, quantidade) : Math.min(4, Math.max(1, quantidade))
+    const colunasMesa = colunasDaIlha(squad, quantidade)
     const linhasMesa = Math.ceil(quantidade / colunasMesa)
-    alturas.set(squad, 76 + linhasMesa * 112 + (squad === SALA_MISTA ? 72 : 0))
+    alturas.set(squad, 76 + linhasMesa * espacamentoMesaY + (squad === SALA_MISTA ? 72 : 0))
   })
 
   const distribuir = (colunas: number) => {
@@ -598,16 +602,17 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     const lista = grupos.get(squad) || []
     const coworking = squad === SALA_MISTA
     const capacidade = coworking ? Math.max(3, lista.length) : lista.length
-    const colunasMesa = coworking ? Math.min(3, capacidade) : Math.min(4, Math.max(1, capacidade))
+    const colunasMesa = colunasDaIlha(squad, capacidade)
     const alturaIlha = alturas.get(squad) || 0
     const x = margemX + coluna * (larguraIlhaFinal + vaoX)
     const mesasIlha: MesaVisual[] = []
     const postos: Array<{ x: number; y: number }> = []
+    const intervalo = Math.min(espacamentoMesaXMaximo, larguraIlhaFinal / colunasMesa)
+    const inicioGradeX = x + (larguraIlhaFinal - intervalo * colunasMesa) / 2
     for (let posicao = 0; posicao < capacidade; posicao += 1) {
       const colunaMesa = posicao % colunasMesa
       const linhaMesa = Math.floor(posicao / colunasMesa)
-      const intervalo = larguraIlhaFinal / colunasMesa
-      postos.push({ x: x + intervalo * (colunaMesa + 0.5), y: y + 70 + linhaMesa * 112 })
+      postos.push({ x: inicioGradeX + intervalo * (colunaMesa + 0.5), y: y + 70 + linhaMesa * espacamentoMesaY })
     }
     lista.forEach((execucao, posicao) => {
       const posto = postos[posicao]

@@ -1,6 +1,8 @@
 import type { AgenteVivo } from './tipos.ts'
 import { montarCatalogoPixel, normalizarIdentidadeAgente, PIXEL_AGENTS, PIXEL_AGENT_SQUADS } from './pixel-agents.ts'
 import * as PixelOfficeModulo from '../ui/PixelOffice.tsx'
+import { RAIO_PASSEIO_X } from '../ui/PixelOffice.rpg.ts'
+import { compactacaoRpg, projetarRpg } from '../ui/PixelOffice.rpg-data.ts'
 import {
   SQUADS_SOB_DEMANDA,
   calcularLayoutSala,
@@ -191,6 +193,43 @@ const desktopZoomAlto = calcularLayoutSala(
 )
 const alturaCssDesktopZoomAlto = Math.round(desktopZoomAlto.altura * desktopZoomAlto.zoomSugerido)
 conferir('desktop ampliado ocupa ao menos 90% da altura do palco', alturaCssDesktopZoomAlto >= 420 * 0.9, `${alturaCssDesktopZoomAlto}/420`)
+
+const cenarioDenso = Array.from({ length: 15 }, (_, indice) => ({
+  ...catalogoVisual[0],
+  chave: `densidade-${indice}`,
+  animacaoChave: `densidade-${indice}`,
+  ordem: indice,
+}))
+const layoutsDensos = [10, 12, 15].map((quantidade) =>
+  calcularLayoutSala(cenarioDenso.slice(0, quantidade), { larguraDisponivel: 990, alturaDisponivel: 600 }),
+)
+const gradesDensas = layoutsDensos.map((layout) => {
+  const postos = layout.ilhas[0].postos
+  return {
+    colunas: new Set(postos.map((posto) => posto.x)).size,
+    linhas: new Set(postos.map((posto) => posto.y)).size,
+    intervaloX: postos[1].x - postos[0].x,
+    intervaloY: postos[5].y - postos[0].y,
+  }
+})
+conferir('10 a 15 agentes usam fileiras de cinco mesas', gradesDensas.every((grade) => grade.colunas === 5), JSON.stringify(gradesDensas))
+conferir('10, 12 e 15 agentes ocupam respectivamente 2, 3 e 3 linhas', gradesDensas.map((grade) => grade.linhas).join(',') === '2,3,3', JSON.stringify(gradesDensas))
+conferir('grade densa limita o vão horizontal entre mesas a 100 px', gradesDensas.every((grade) => grade.intervaloX <= 100), JSON.stringify(gradesDensas))
+conferir('grade densa preserva 96 px entre linhas para mesa e personagem', gradesDensas.every((grade) => grade.intervaloY === 96), JSON.stringify(gradesDensas))
+const layoutDensoMobile = calcularLayoutSala(cenarioDenso, { larguraDisponivel: 360, alturaDisponivel: 420, zoomMinimo: 1.2 })
+const primeiraFileiraMobile = layoutDensoMobile.ilhas[0].postos.slice(0, 5)
+const mapaDensoMobile = compactacaoRpg(layoutDensoMobile).mapa
+const centrosProjetadosMobile = primeiraFileiraMobile.map((posto) =>
+  projetarRpg(layoutDensoMobile, mapaDensoMobile(posto.x, posto.y + 42), posto.y + 42),
+)
+const distanciaHorizontalProjetada = Math.min(...centrosProjetadosMobile.slice(1).map((ponto, indice) =>
+  Math.hypot(ponto.x - centrosProjetadosMobile[indice].x, ponto.y - centrosProjetadosMobile[indice].y),
+))
+conferir(
+  'passeio lateral não cruza hitbox da mesa vizinha no mobile',
+  distanciaHorizontalProjetada >= 34 + RAIO_PASSEIO_X * 2,
+  `${distanciaHorizontalProjetada}/${34 + RAIO_PASSEIO_X * 2}`,
+)
 
 const globais: AgenteVivo[] = [
   ...Array.from({ length: 3 }, (_, indice) => ({
