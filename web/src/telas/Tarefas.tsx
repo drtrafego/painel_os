@@ -535,18 +535,27 @@ export function Tarefas({ estado, vista }: PropsTela) {
 
       {/* CT Studio: mesmos dados e ações; muda somente a apresentação no modo office. */}
       {modoExibicao === 'office' ? (
-        <OfficeTacticalPanels
-          totalVivos={totalVivos}
-          ativos={ativos}
-          catalogoTotal={catalogoPixel.length}
-          convocacoes={estado.resumo.convocacoes_total}
-          retornos={totalRetornos}
-          aprovacoes={aprovacoesPendentes}
-          departamentos={squadIds.map((id) => ({ id, nome: estado.squads[id]?.nome ?? id, quantidade: porSquad(estado, id).length }))}
-          totalAgentesDepartamento={estado.agentes.length}
-          aoAbrirAtivos={() => abrirAgentesAtivos()}
-          aoAbrirAprovacoes={() => ir('aprovacoes')}
-        />
+        <details className="ct-operation-details">
+          <summary>
+            <span>
+              <small>PAINÉIS TÁTICOS</small>
+              <strong>Detalhes da operação</strong>
+            </span>
+            <span aria-hidden="true">⌄</span>
+          </summary>
+          <OfficeTacticalPanels
+            totalVivos={totalVivos}
+            ativos={ativos}
+            catalogoTotal={catalogoPixel.length}
+            convocacoes={estado.resumo.convocacoes_total}
+            retornos={totalRetornos}
+            aprovacoes={aprovacoesPendentes}
+            departamentos={squadIds.map((id) => ({ id, nome: estado.squads[id]?.nome ?? id, quantidade: porSquad(estado, id).length }))}
+            totalAgentesDepartamento={estado.agentes.length}
+            aoAbrirAtivos={() => abrirAgentesAtivos()}
+            aoAbrirAprovacoes={() => ir('aprovacoes')}
+          />
+        </details>
       ) : (<>
       {/* Grid de KPIs Pixel Art */}
       <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">

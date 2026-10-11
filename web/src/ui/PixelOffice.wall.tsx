@@ -14,15 +14,20 @@ interface ParedeProps {
 
 /** Monitores HTML independentes: cotas, custos e tarefas não são execuções da sonda. */
 export function ParedeEscritorio({ uso, gastos, tarefas, tarefasSolicitadas, descricaoSonda, leituraConfirmada }: ParedeProps) {
+  return <div className="ct-wall" data-testid="office-wall">
+    <PainelUsoPlanos uso={uso} gastos={gastos} />
+    <PainelTarefas tarefas={tarefas} tarefasSolicitadas={tarefasSolicitadas} descricaoSonda={descricaoSonda} leituraConfirmada={leituraConfirmada} />
+  </div>
+}
+
+/** Conteúdo de capacidade reutilizado no drawer; não presume dado de billing. */
+export function PainelUsoPlanos({ uso, gastos }: Pick<ParedeProps, 'uso' | 'gastos'>) {
   const cotas = useMemo(() => montarCotas(uso), [uso])
   const totais = useMemo(() => totalizarGastos(gastos), [gastos])
-  const quadroSolicitado = useMemo(() => validarQuadroTarefas(tarefasSolicitadas), [tarefasSolicitadas])
-  const temFilaDiretores = tarefas.some(coluna => coluna.tarefas.length || coluna.avisos.length)
 
-  return <div className="ct-wall" data-testid="office-wall">
-    <section className="ct-display ct-costs nx-usage-wall" aria-label="Gastos de IAs em cinco horas e na semana">
+  return <section className="ct-display ct-costs nx-usage-wall" aria-label="Uso dos planos em cinco horas e na semana">
       <header className="ct-display-heading">
-        <div><span className="ct-kicker">MONITOR 01 / CAPACIDADE</span><h3>Gastos de IAs</h3></div>
+        <div><span className="ct-kicker">MONITOR 01 / CAPACIDADE</span><h3>Uso dos planos</h3></div>
         <span className="ct-tag">5h + semana</span>
       </header>
       {totais.length ? <div className="ct-cost-total">
@@ -43,8 +48,14 @@ export function ParedeEscritorio({ uso, gastos, tarefas, tarefasSolicitadas, des
       <footer className="ct-source"><i className={`ct-dot ${uso?.status === 'pronto' ? 'ct-dot-green' : 'ct-dot-amber'}`} /><span>{uso?.status === 'pronto' ? 'Uso recebido da fonte' : 'Uso sem leitura confirmada'}{uso?.atualizado_em ? ` · ${uso.atualizado_em}` : ''}</span></footer>
       <p className="ct-disclaimer">Percentual da cota, não dinheiro. A janela secundária do Codex não é tratada como semanal sem duração confirmada.</p>
     </section>
+}
 
-    <section className="ct-display ct-tasks nx-task-wall" aria-label="Tarefas de Renato e Luana">
+/** Conteúdo da fila reutilizado no drawer; continua separado das execuções da sonda. */
+export function PainelTarefas({ tarefas, tarefasSolicitadas, descricaoSonda, leituraConfirmada }: Pick<ParedeProps, 'tarefas' | 'tarefasSolicitadas' | 'descricaoSonda' | 'leituraConfirmada'>) {
+  const quadroSolicitado = useMemo(() => validarQuadroTarefas(tarefasSolicitadas), [tarefasSolicitadas])
+  const temFilaDiretores = tarefas.some(coluna => coluna.tarefas.length || coluna.avisos.length)
+
+  return <section className="ct-display ct-tasks nx-task-wall" aria-label="Tarefas de Renato e Luana">
       <header className="ct-display-heading">
         <div><span className="ct-kicker">MONITOR 02 / FILA</span><h3>Tarefas</h3></div>
         <span className="ct-tag" title={descricaoSonda}>{temFilaDiretores ? (leituraConfirmada ? 'Memória lida' : 'Leitura não confirmada') : 'Tarefa + data'}</span>
@@ -88,5 +99,4 @@ export function ParedeEscritorio({ uso, gastos, tarefas, tarefasSolicitadas, des
         {temFilaDiretores ? <><span className={`ct-dot ${leituraConfirmada ? 'ct-dot-green' : 'ct-dot-amber'}`} /><span>{descricaoSonda}. Agentes vivos continuam no escritório.</span></> : <span>{quadroSolicitado.status === 'pronto' ? `Fonte: ${quadroSolicitado.fonte}` : quadroSolicitado.erro || 'Solicitações são independentes das execuções técnicas dos agentes.'}</span>}
       </footer>
     </section>
-  </div>
 }

@@ -6,7 +6,6 @@
  */
 import atlasUrl from './office-studio/studio-atlas.webp'
 import atlasMetadata from './office-studio/studio-atlas.json'
-import './office-studio/studio.css'
 
 export interface PessoaGold {
   chave: string; animacaoChave: string; nome: string; squad: string; squadNome: string
