@@ -516,20 +516,27 @@ def testar_rota_real():
         "avisos": [],
         "tarefas_diretores": {
             "luana": {
-                "itens": [{
-                    "titulo": "segredo sk-1234567890abcdef token=abc123 Mariana Lopes",
-                    "responsavel": "sk-1234567890abcdef",
-                    "proximo_passo": "usar Bearer abcdefghijklmnop e key=abc123",
-                    "data": "sk-1234567890abcdef",
-                    "depende_de": "aguarda token=abc123",
-                    "ordem": "sk-1234567890abcdef",
-                    "em_andamento": "sk-1234567890abcdef",
-                    "prioridade": "sk-1234567890abcdef",
-                    "estado_tarefa": "sk-1234567890abcdef",
-                    "chave": "sk-1234567890abcdef",
-                    "sem_proximo_passo": True,
-                    "subtarefas": [{"titulo": "sub token=abc123 sk-1234567890abcdef", "ordem": 8, "estado": "quebrado"}],
-                }],
+                "itens": [
+                    {
+                        "titulo": "segredo sk-1234567890abcdef token=abc123 Mariana Lopes",
+                        "responsavel": "sk-1234567890abcdef",
+                        "proximo_passo": "usar Bearer abcdefghijklmnop e key=abc123",
+                        "data": "sk-1234567890abcdef",
+                        "depende_de": "aguarda token=abc123",
+                        "ordem": "sk-1234567890abcdef",
+                        "em_andamento": "sk-1234567890abcdef",
+                        "prioridade": "sk-1234567890abcdef",
+                        "estado_tarefa": "sk-1234567890abcdef",
+                        "chave": "sk-1234567890abcdef",
+                        "sem_proximo_passo": False,
+                        "subtarefas": [{"titulo": "sub token=abc123 sk-1234567890abcdef", "ordem": 8, "estado": "quebrado"}],
+                    },
+                    {
+                        "titulo": "tarefa concluída",
+                        "proximo_passo": "",
+                        "sem_proximo_passo": True,
+                    },
+                ],
                 "avisos": ["aviso com secret=abc123 " + ("x" * 200)] * 12,
                 "lido_em": "sk-1234567890abcdef",
             }
@@ -548,7 +555,8 @@ def testar_rota_real():
     conferir("rota regenera ordem", item["ordem"], 1)
     conferir("rota mascara dependência", item["depende_de"], "aguarda [segredo]")
     conferir("rota descarta estado inválido", item["estado_tarefa"], "ativa")
-    conferir("rota preserva flag sem próximo passo", item["sem_proximo_passo"], True)
+    conferir("rota exclui tarefa sem próximo passo", len(redigido["tarefas_diretores"]["luana"]["itens"]), 1)
+    conferir("rota preserva tarefa aberta", item["sem_proximo_passo"], False)
     conferir("rota redige subtarefa", item["subtarefas"], [{"titulo": "sub [segredo] [segredo]", "ordem": 1, "estado": "ativa"}])
     conferir("rota marca andamento único", item["em_andamento"], True)
     conferir("rota fixa responsável pelo dono", item["responsavel"], "Luana")

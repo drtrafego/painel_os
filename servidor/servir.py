@@ -666,7 +666,9 @@ def redigir_dados_agentes(dados: dict) -> dict:
             titulo = sanitizar_tarefa_publica(item.get("titulo"), 90)
             proximo_passo = sanitizar_tarefa_publica(item.get("proximo_passo"), 120)
             sem_proximo_passo = item.get("sem_proximo_passo") is True
-            if not titulo or (not proximo_passo and not sem_proximo_passo):
+            if sem_proximo_passo:
+                continue
+            if not titulo or not proximo_passo:
                 avisos_redigidos.append(f"item de tarefa incompleto omitido: {dono_normal}")
                 continue
             itens.append({
