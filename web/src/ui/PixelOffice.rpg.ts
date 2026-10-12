@@ -211,12 +211,18 @@ function sceneKey(quadro: QuadroRpg) {
 
 function navigationBounds(project: ReturnType<typeof projection>, width: number) {
   const navigationWidth = (width - 64) / NAV.length
+  // Y único pra toda a faixa: o project() de cada item isolado sobe junto com
+  // o telhado em perspectiva (quanto mais x, mais alto o ponto projetado), o
+  // que fazia os rótulos da navegação subirem em diagonal e ficarem difíceis
+  // de ler. A faixa é uma barra de navegação, não uma parede 3D: todo item
+  // ancora no Y do primeiro ponto, então a linha inteira fica horizontal.
+  const baselineY = project(32, NAVIGATION_Y, 12).y - 12
   return NAV.map(([, label], index) => {
     const a = project(32 + navigationWidth * index, NAVIGATION_Y, 12)
     const b = project(32 + navigationWidth * (index + 1) - 4, NAVIGATION_Y, 12)
     const x = Math.min(a.x, b.x)
     const itemWidth = Math.max(32, Math.abs(b.x - a.x))
-    return { label, x, y: a.y - 12, width: itemWidth, height: NAVIGATION_HEIGHT }
+    return { label, x, y: baselineY, width: itemWidth, height: NAVIGATION_HEIGHT }
   })
 }
 
@@ -423,7 +429,10 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg, image
     ctx.fillStyle = PALETTE.gold
     ctx.fillRect(x, y + 20, itemWidth, 3)
     ctx.fillStyle = PALETTE.cream
-    ctx.font = '700 7px "JetBrains Mono", monospace'
+    // 7px grudava as letras (glifo bold nesse tamanho esbarra no vizinho e
+    // "AGENTES" virava ilegível). 8px é o menor tamanho que ainda sai limpo
+    // nesta fonte, mesmo valor já usado nas placas de sala (drawRoomSign).
+    ctx.font = '700 8px "JetBrains Mono", monospace'
     ctx.fillText(label, x + itemWidth / 2, y + 11)
   })
 

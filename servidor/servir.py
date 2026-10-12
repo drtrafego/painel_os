@@ -51,6 +51,7 @@ de decisão e envio, `data/aprovacoes.json` por substituição atômica.
 """
 
 import base64
+import fcntl
 import hashlib
 import hmac
 import json
@@ -107,6 +108,11 @@ except ModuleNotFoundError:
             redigir_texto_livre = None
 DIST = RAIZ / "web" / "dist"
 COLETOR = RAIZ / "coletor" / "coletar_estado.py"
+# O cron e a rota /api/estado compartilham esta trava: abrir o painel nao
+# pode iniciar uma segunda coleta pesada enquanto a rodada agendada ainda roda.
+COLETOR_LOCK = Path("/tmp/painel_os_coletor.lock")
+COLETOR_TIMEOUT_S = 90
+COLETOR_LOCK_BUSY_RC = 75
 # 20/09/2026: o snapshot REAL vive em `data/`, igual aprovacoes.json e
 # cofre.json (fora do git, permissao 700). NUNCA apontar de volta para
 # `web/src/dados/estado.json`: aquele arquivo e a fixture sintetica que o
@@ -421,11 +427,16 @@ def _medir_estado() -> bytes:
     inicio = time.monotonic()
     erro = None
     try:
+        # -E 75 diferencia "ja existe uma coleta" de uma falha real.
+        # A prioridade menor protege os bots e o timeout impede processo orfao.
         r = subprocess.run(
-            [sys.executable, str(COLETOR)],
-            capture_output=True, text=True, timeout=120,
+            ["/usr/bin/flock", "-n", "-E", str(COLETOR_LOCK_BUSY_RC),
+             str(COLETOR_LOCK), "/usr/bin/nice", "-n", "15",
+             "/usr/bin/timeout", "-k", "10", str(COLETOR_TIMEOUT_S),
+             sys.executable, str(COLETOR)],
+            capture_output=True, text=True, timeout=COLETOR_TIMEOUT_S + 15,
         )
-        if r.returncode != 0:
+        if r.returncode not in (0, COLETOR_LOCK_BUSY_RC):
             erro_bruto = (r.stderr or "coletor falhou sem mensagem").strip()[:400]
             erro = _sanitizar_erro_publico(erro_bruto)
     except (OSError, subprocess.SubprocessError) as e:
