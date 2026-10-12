@@ -613,21 +613,21 @@ function drawCharacterSprite(
       : ROBOT_VARIANTS[stableHash(person.chave) % ROBOT_VARIANTS.length]
   const image = loadRobotImage(direction === 'up' ? variant.back : variant.front)
   if (!image) return false
-  // Aproveita o tronco do arquivo existente, sem reduzir cabeça e ombros
-  // junto com as pernas de uma figura em pé (especialmente nos humanos).
-  const sourceHeight = image.naturalHeight * (seatedAtDesk ? person.tipoVisual === 'humano' ? .64 : .82 : 1)
+  // Humanos usam o tronco na pose sentada. Robôs mantêm o PNG inteiro
+  // e a escala de pé: a mesa oculta o corpo, sem ampliar um recorte de 82%.
+  const sourceHeight = image.naturalHeight * (seatedAtDesk && person.tipoVisual === 'humano' ? .64 : 1)
   const ratio = image.naturalWidth / sourceHeight
-  const targetHeight = height + 5 * CHARACTER_SCALE
+  const targetHeight = person.tipoVisual === 'robo' ? 69 * CHARACTER_SCALE : height + 5 * CHARACTER_SCALE
   const targetWidth = targetHeight * ratio
+  const drawY = round(y - 5 * CHARACTER_SCALE)
   ctx.save()
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(image, 0, 0, image.naturalWidth, sourceHeight, round(x + (width - targetWidth) / 2), round(y + height - targetHeight), round(targetWidth), round(targetHeight))
+  ctx.drawImage(image, 0, 0, image.naturalWidth, sourceHeight, round(x + (width - targetWidth) / 2), drawY, round(targetWidth), round(targetHeight))
   if (person.tipoVisual === 'humano' && human) {
     // Recoloração só na renderização. Preserva cabeça/cabelo; o recorte
     // inferior inclui roupa e mãos, pois o PNG não possui máscara de tecido.
     const drawX = round(x + (width - targetWidth) / 2)
-    const drawY = round(y + height - targetHeight)
     const drawWidth = round(targetWidth)
     const drawHeight = round(targetHeight)
     const clothingTop = drawY + drawHeight * (image.naturalHeight * .23 / sourceHeight)
@@ -743,13 +743,14 @@ function drawCharacter(
     // permanecem atrás dele, com antebraços apoiados em direção ao teclado.
     drawSmoothFurniture(ctx, 'desk', mesaPoint.x - 31, mesaPoint.y - 28, 62, 45)
     const hands = person.tipoVisual === 'humano' ? validColor(person.pele, '#d9a47d') : '#d5e4ec'
+    // Dois apoios curtos junto ao teclado (y - 14), abaixo do monitor.
+    // Sem cotovelos contornando a tela ou ligação entre as duas mãos.
     for (const side of [-1, 1]) {
-      ctx.strokeStyle = person.tipoVisual === 'humano' ? '#35414d' : validColor(person.cor, '#526171'); ctx.lineWidth = 5; ctx.lineCap = 'round'
-      ctx.beginPath(); ctx.moveTo(mesaPoint.x + side * 17, mesaPoint.y - 23)
-      ctx.lineTo(mesaPoint.x + side * 14, mesaPoint.y - 14)
-      ctx.lineTo(mesaPoint.x + side * 8, mesaPoint.y - 12); ctx.stroke()
+      ctx.strokeStyle = person.tipoVisual === 'humano' ? '#35414d' : validColor(person.cor, '#526171'); ctx.lineWidth = 3; ctx.lineCap = 'round'
+      ctx.beginPath(); ctx.moveTo(mesaPoint.x + side * 11, mesaPoint.y - 11)
+      ctx.lineTo(mesaPoint.x + side * 7, mesaPoint.y - 14); ctx.stroke()
       ctx.fillStyle = hands
-      ctx.beginPath(); ctx.ellipse(mesaPoint.x + side * 8, mesaPoint.y - 12, 3, 2, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.ellipse(mesaPoint.x + side * 7, mesaPoint.y - 14, 2, 1.5, 0, 0, Math.PI * 2); ctx.fill()
     }
   }
   const statusColor = person.ativa ? PALETTE.live : person.execucao.estado === 'silencioso' ? PALETTE.idle : PALETTE.rest
