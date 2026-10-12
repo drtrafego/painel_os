@@ -109,3 +109,10 @@
  .nx-architecture{padding-block:7px}.nx-station{min-height:41px;padding-block:5px}
  .nx-footer{min-height:32px;padding-block:5px}
 }
+
+/* CT-VISUAL-VIDEO-2026-10-12: a primeira tela deve mostrar o escritorio, nao so os controles. */
+@media(min-width:1001px){
+ .nx-shell .ct-room-scroll{height:clamp(520px,calc(100dvh - 215px),840px)}
+ .nx-shell .ct-body{grid-template-columns:minmax(0,1fr) 215px}
+ .nx-shell .ct-toolbar{padding-block:5px}
+}

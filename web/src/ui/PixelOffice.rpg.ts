@@ -192,6 +192,22 @@ function drawSmoothFurniture(ctx: CanvasRenderingContext2D, kind: 'desk' | 'chai
     const wood = ctx.createLinearGradient(x, y + height * .24, x + width * .15, y + height * .62)
     wood.addColorStop(0, '#e6bd79'); wood.addColorStop(.42, '#c99250'); wood.addColorStop(1, '#ad733b')
     roundedPanel(ctx, x, y + height * .24, width, height * .36, 5, wood, '#e7be7b', .7)
+    // CT-VISUAL-VIDEO-2026-10-12: volume e materiais das estacoes; nao acrescenta monitores falsos.
+    ctx.shadowColor = 'transparent'
+    ctx.fillStyle = '#613f2b88'
+    ctx.fillRect(x + 3, y + height * .595, width - 6, 2)
+    ctx.strokeStyle = '#ffe6b177'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(x + 5, y + height * .275)
+    ctx.lineTo(x + width - 5, y + height * .275)
+    ctx.stroke()
+    ctx.fillStyle = '#b7825366'
+    ctx.fillRect(x + width * .1, y + height * .77, width * .63, 1)
+    ctx.fillStyle = '#deba81'
+    for (const level of [.675, .755, .835]) {
+      ctx.fillRect(x + width * .815, y + height * level, width * .05, 1)
+    }
     ctx.shadowColor = 'transparent'
     roundedPanel(ctx, x + 4, y + height * .27, width - 8, 2, 1, '#ffe2a75c')
     ctx.shadowColor = 'transparent'
@@ -200,17 +216,31 @@ function drawSmoothFurniture(ctx: CanvasRenderingContext2D, kind: 'desk' | 'chai
     ctx.fillStyle = '#c8b994'; ctx.fillRect(x + width * .1, y + height * .48, width * .18, 1)
     ctx.fillStyle = '#fff5db'; ctx.fillRect(x + width * .23, y + height * .32, width * .05, 2)
     ctx.fillStyle = '#222a32'; ctx.fillRect(x + width * .82, y + height * .27, width * .07, height * .14)
-    ctx.fillStyle = '#526171'; ctx.fillRect(x + width * .82, y + height * .27, width * .07, 1)
+    ctx.fillStyle = '#75858b'; ctx.fillRect(x + width * .82, y + height * .27, width * .07, 1)
+    ctx.strokeStyle = '#7a8b93'
+    ctx.lineWidth = .8
+    ctx.beginPath()
+    ctx.arc(x + width * .92, y + height * .34, Math.max(1.2, width * .025), -.85, .85)
+    ctx.stroke()
     ctx.fillStyle = '#222a32'
     ctx.fillRect(x + width * .47, y + height * .23, width * .06, height * .12)
     ctx.fillRect(x + width * .39, y + height * .34, width * .23, 2)
+    ctx.fillStyle = '#7c9aa6'
+    for (let key = 0; key < 6; key++) {
+      ctx.fillRect(x + width * (.402 + key * .033), y + height * .35, width * .025, 1)
+    }
     roundedPanel(ctx, x + width * .34, y, width * .32, height * .3, 2, '#222a32', '#526171', .7)
     // Atrás da mesa, o ocupante olha para a tela; a câmera vê a carcaça.
     ctx.fillStyle = '#222a32'; ctx.fillRect(x + width * .38, y + height * .32, width * .27, 2)
     ctx.fillStyle = '#d09a51'; ctx.fillRect(x + width * .81, y + height * .73, width * .09, 1)
   } else if (kind === 'chair') {
     contactShadow(ctx, x + width / 2, y + height, width * .6, 4)
-    roundedPanel(ctx, x + width * .18, y, width * .64, height * .56, 4, '#526171', '#687789', .8)
+    const upholstery = ctx.createLinearGradient(x, y, x + width, y + height * .55)
+    upholstery.addColorStop(0, '#a3b1b4')
+    upholstery.addColorStop(.42, '#6b8090')
+    upholstery.addColorStop(1, '#364b5b')
+    roundedPanel(ctx, x + width * .18, y, width * .64, height * .56, 4.5, upholstery, '#425767', 1)
+    roundedPanel(ctx, x + width * .24, y + height * .08, width * .51, height * .34, 3, '#d0d9d517')
     ctx.shadowColor = 'transparent'
     roundedPanel(ctx, x + width * .08, y + height * .5, width * .84, height * .22, 3, '#35414d')
     ctx.strokeStyle = '#35414d'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x + width / 2, y + height * .68); ctx.lineTo(x + width / 2, y + height * .9); ctx.moveTo(x + width * .2, y + height); ctx.lineTo(x + width / 2, y + height * .88); ctx.lineTo(x + width * .8, y + height); ctx.stroke()
@@ -590,6 +620,17 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   polygon(ctx, [project(11, 30, 38), project(11, height - 30, 38), project(11, height - 30, 8), project(11, 30, 8)], '#8ebac433', '#8ebac4', .6)
   const trimLeft = project(14, 6, 9), trimRight = project(width - 14, 6, 9)
   ctx.strokeStyle = '#d8b76b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(trimLeft.x, trimLeft.y); ctx.lineTo(trimRight.x, trimRight.y); ctx.stroke()
+  // CT-VISUAL-VIDEO-2026-10-12: luz de parede arquitetonica, sem pixels neon sobre o piso.
+  for (const ratio of [.12, .88]) {
+    const point = project(width * ratio, 6, 63)
+    const halo = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, 42)
+    halo.addColorStop(0, '#fff1c277')
+    halo.addColorStop(.5, '#f5cc801c')
+    halo.addColorStop(1, '#f5cc8000')
+    ctx.fillStyle = halo
+    ctx.fillRect(point.x - 42, point.y - 42, 84, 84)
+    roundedPanel(ctx, point.x - 2.5, point.y - 11, 5, 22, 2, '#f7e2b6', '#c59750', .8)
+  }
   const sign = project(width / 2, 7, 60)
   roundedPanel(ctx, sign.x - 84, sign.y - 15, 168, 29, 7, '#17243aee', '#d8b76b', 1.5)
   ctx.fillStyle = PALETTE.cream
@@ -640,6 +681,17 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   layout.ilhas.forEach((island) => {
     roomSigns.push(drawRoom(island, project, wallTopLimit))
 
+    // CT-VISUAL-VIDEO-2026-10-12: postos vazios desenham apenas moveis; nao geram agente.
+    const ocupados = new Set(island.mesas.map(desk => `${Math.round(desk.x)}:${Math.round(desk.y)}`))
+    island.postos.forEach(posto => {
+      if (ocupados.has(`${Math.round(posto.x)}:${Math.round(posto.y)}`)) return
+      const point = project(posto.x, posto.y + 18)
+      ctx.save()
+      ctx.globalAlpha = .78
+      drawSmoothFurniture(ctx, 'chair', point.x - 13, point.y - 35, 26, 34)
+      drawSmoothFurniture(ctx, 'desk', point.x - 31, point.y - 28, 62, 45)
+      ctx.restore()
+    })
     island.mesas.forEach((desk) => {
       const point = project(desk.x, desk.y + 18)
       drawSmoothFurniture(ctx, 'chair', point.x - 13, point.y - 35, 26, 34)
@@ -858,7 +910,7 @@ function drawCharacter(
 
 function drawName(ctx: CanvasRenderingContext2D, name: string, point: Point, color: string, selected: boolean) {
   const label = name.length > 20 ? `${name.slice(0, 19)}…` : name
-  ctx.font = '700 8px "JetBrains Mono", monospace'
+  ctx.font = '700 10px Inter, Arial, sans-serif'
   const width = Math.max(50, Math.min(126, round(ctx.measureText(label).width) + 18))
   const x = round(point.x - width / 2)
   const y = round(point.y + 6)

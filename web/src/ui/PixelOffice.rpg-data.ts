@@ -57,7 +57,8 @@ export function statusSeguroDaExecucao(person: PessoaRpg) {
 
 type Point = { x: number; y: number }
 type Coluna = { x0: number; x1: number; topo: number; fundo: number; fator: number }
-const CAMERA = { cisalhamento: .10, subida: .035, profundidade: .78, topo: 104 } as const
+// CT-VISUAL-VIDEO-2026-10-12: projecao 3/4 aplicada igualmente a objetos e cliques.
+const CAMERA = { cisalhamento: .18, subida: .085, profundidade: .76, topo: 104 } as const
 const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, Number.isFinite(value) ? value : min))
 
 function camera(width: number, height: number): (x: number, z: number, elevation?: number) => Point {
