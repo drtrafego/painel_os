@@ -254,7 +254,7 @@ function navigationBounds(project: ReturnType<typeof projection>, width: number)
   })
 }
 
-type RoomSign = { name: string; color: string; anchor: Point; area: Bounds; furniture: ReadonlyArray<Bounds> }
+type RoomSign = { name: string; anchor: Point; area: Bounds; furniture: ReadonlyArray<Bounds> }
 
 function boundsOverlap(a: Bounds, b: Bounds) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
@@ -362,7 +362,6 @@ function drawRoom(island: IlhaRpg, project: ReturnType<typeof projection>, wallT
   const right = project(firstRow[firstRow.length - 1].x + 40, first.y - 55)
   return {
     name: island.nome,
-    color: validColor(island.cor, PALETTE.gold),
     anchor: { x: (left.x + right.x) / 2, y: Math.max(wallTopLimit + ROOM_SIGN_HEIGHT / 2, left.y) },
     area: {
       x: left.x - 30, y: Math.max(wallTopLimit, left.y - ROOM_SIGN_HEIGHT),
@@ -434,8 +433,10 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
     const left = Math.min(...layout.ilhas.map((island) => island.x))
     const top = Math.min(...layout.ilhas.map((island) => island.y))
     const right = Math.max(...layout.ilhas.map((island) => island.x + island.largura))
-    const bottom = Math.max(...layout.ilhas.map((island) => island.y + island.altura))
-    // Um campo greige contínuo inclui os corredores, sem cartões ou sombras por sala.
+    const bottom = layout.descansoAberto
+      ? height - 14
+      : Math.max(...layout.ilhas.map((island) => island.y + island.altura))
+    // O mesmo piso inclui corredores e descanso, sem uma segunda zona de cor.
     polygon(ctx, [project(left, top), project(right, top), project(right, bottom), project(left, bottom)], '#b9b6ae')
   }
   layout.ilhas.forEach((island) => {
@@ -461,8 +462,6 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   if (layout.descansoAberto) {
     const loungeWidth = Math.min(width - 60, 140 + layout.ocupantesDescanso * 44)
     const x = (width - loungeWidth) / 2
-    const corners = [project(x, layout.descansoY), project(x + loungeWidth, layout.descansoY), project(x + loungeWidth, height - 14), project(x, height - 14)]
-    polygon(ctx, corners, '#77766e', '#b9b6ae', .8)
     const label = project(x + 8, layout.descansoY + 8)
     roundedPanel(ctx, label.x - 4, label.y - 8, 76, 16, 3, '#202b35', '#99a6a7', .6)
     ctx.fillStyle = '#f2f1e9'
