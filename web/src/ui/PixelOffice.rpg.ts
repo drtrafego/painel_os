@@ -214,6 +214,57 @@ function projection(layout: QuadroRpg['layout']) {
   }
 }
 
+function drawSceneDecor(ctx: CanvasRenderingContext2D, layout: QuadroRpg['layout'], project: ReturnType<typeof projection>) {
+  // Mobília de cena: não gera postos, ocupantes, etiquetas pessoais ou hits.
+  // O corredor entre a última fileira e o lounge já pertence ao piso aprovado.
+  const box = (x: number, y: number, width: number, depth: number, bottom: number, height: number, top: string, front: string, side: string) => {
+    const a = project(x, y, bottom + height), b = project(x + width, y, bottom + height)
+    const c = project(x + width, y + depth, bottom + height), d = project(x, y + depth, bottom + height)
+    polygon(ctx, [d, c, project(x + width, y + depth, bottom), project(x, y + depth, bottom)], front)
+    polygon(ctx, [b, c, project(x + width, y + depth, bottom), project(x + width, y, bottom)], side)
+    polygon(ctx, [a, b, c, d], top)
+  }
+  const shadow = (x: number, y: number, width: number, depth: number) => {
+    polygon(ctx, [project(x - 2, y), project(x + width + 4, y), project(x + width + 4, y + depth + 4), project(x - 2, y + depth + 4)], '#40362626')
+  }
+  ctx.save()
+  const receptionWidth = Math.min(88, layout.largura * .2)
+  let receptionX = layout.largura * .24 - receptionWidth / 2
+  const loungeLeft = (layout.largura - Math.min(layout.largura - 60, 140 + layout.ocupantesDescanso * 44)) / 2
+  // Reserva a placa existente em plantas estreitas; um sofá basta nesse caso.
+  if (layout.descansoAberto && receptionX < loungeLeft + 120 && receptionX + receptionWidth > loungeLeft) receptionX = loungeLeft + 120
+  const receptionY = layout.descansoY + (layout.descansoAberto ? 16 : -8)
+  const counterHeight = layout.descansoAberto ? 30 : 17
+  shadow(receptionX, receptionY, receptionWidth, 21)
+  box(receptionX + 3, receptionY + 2, receptionWidth - 6, 18, 0, 4, '#b49a6a', '#947e59', '#947e59')
+  box(receptionX, receptionY, receptionWidth, 21, 4, counterHeight, '#ede1bf', '#d7c398', '#b49a6a')
+  box(receptionX - 2, receptionY - 1, receptionWidth + 4, 23, counterHeight + 4, 3, '#ede1bf', '#e2d4b3', '#c6b087')
+  // Painel rebaixado claro, sem monitor ou cadeira que sugiram agente extra.
+  polygon(ctx, [project(receptionX + 7, receptionY + 21, counterHeight - 3), project(receptionX + receptionWidth - 7, receptionY + 21, counterHeight - 3), project(receptionX + receptionWidth - 7, receptionY + 21, 9), project(receptionX + 7, receptionY + 21, 9)], '#e2d4b3')
+
+  if (layout.descansoAberto) {
+    const sofaWidth = Math.min(104, layout.largura * .21)
+    // Dois sofás atrás da fileira existente, com passagem entre os volumes.
+    // O limite frontal fica antes dos pés dos robôs; poses seguem intactas.
+    for (const center of [layout.largura * .55, layout.largura * .81]) {
+      const x = center - sofaWidth / 2, y = layout.descansoY + 10
+      if (x < receptionX + receptionWidth + 16 && x + sofaWidth > receptionX - 16) continue
+      shadow(x, y, sofaWidth, 25)
+      box(x + 4, y + 3, sofaWidth - 8, 21, 0, 4, '#293238', '#222a32', '#222a32')
+      box(x, y, sofaWidth, 25, 4, 9, '#616a6b', '#293238', '#35414d')
+      box(x, y, sofaWidth, 7, 13, 15, '#616a6b', '#465154', '#293238')
+      const cushionWidth = (sofaWidth - 19) / 2
+      for (let cushion = 0; cushion < 2; cushion += 1) {
+        box(x + 8 + cushion * (cushionWidth + 3), y + 9, cushionWidth, 14, 13, 3, '#616a6b', '#465154', '#35414d')
+      }
+      for (const armX of [x, x + sofaWidth - 6]) {
+        box(armX, y + 6, 6, 19, 13, 7, '#697273', '#35414d', '#293238')
+      }
+    }
+  }
+  ctx.restore()
+}
+
 function alphaForIsland(quadro: QuadroRpg, island?: IlhaRpg) {
   return island ? clamp(quadro.progressos?.get(island.squad) ?? 1) : 1
 }
@@ -499,6 +550,8 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   roomSigns.forEach((sign) => {
     signsPlaced.push(drawRoomSign(ctx, { ...sign, furniture: [...furniture, ...signsPlaced] }, navigation))
   })
+
+  drawSceneDecor(ctx, layout, project)
 
   if (layout.descansoAberto) {
     const loungeWidth = Math.min(width - 60, 140 + layout.ocupantesDescanso * 44)
