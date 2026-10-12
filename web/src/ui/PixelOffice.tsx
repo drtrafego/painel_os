@@ -533,13 +533,13 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   const margemX = 16
   const vaoX = 10
   const margemTopo = 128
-  const espacamentoMesaY = 96
-  const espacamentoMesaXMaximo = 100
+  const espacamentoMesaY = 88
+  const espacamentoMesaXMaximo = 96
   const colunasDaIlha = (squad: PixelAgentSquad, quantidade: number) =>
     squad === SALA_MISTA ? Math.min(3, quantidade) : Math.min(5, Math.max(1, quantidade))
   const alturas = new Map<PixelAgentSquad, number>()
   ordemSquads.forEach((squad) => {
-    const quantidade = squad === SALA_MISTA ? Math.max(3, grupos.get(squad)?.length || 0) : grupos.get(squad)?.length || 0
+    const quantidade = grupos.get(squad)?.length || 0
     const colunasMesa = colunasDaIlha(squad, quantidade)
     const linhasMesa = Math.ceil(quantidade / colunasMesa)
     alturas.set(squad, 76 + linhasMesa * espacamentoMesaY + (squad === SALA_MISTA ? 72 : 0))
@@ -606,7 +606,7 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   melhor.posicoes.forEach(({ squad, coluna, y }) => {
     const lista = grupos.get(squad) || []
     const coworking = squad === SALA_MISTA
-    const capacidade = coworking ? Math.max(3, lista.length) : lista.length
+    const capacidade = lista.length
     const colunasMesa = colunasDaIlha(squad, capacidade)
     const alturaIlha = alturas.get(squad) || 0
     const x = margemX + coluna * (larguraIlhaFinal + vaoX)
@@ -818,7 +818,11 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       )
     }
 
-    return filtrarSquadsSobDemanda(filtradas, squadsSobDemandaAbertos)
+    // A visão geral expõe o catálogo real, inclusive quem está em descanso.
+    // Os filtros operacionais mantêm a abertura de salas sob demanda.
+    return filtroStatus === 'todos' && !soAtivos
+      ? filtradas
+      : filtrarSquadsSobDemanda(filtradas, squadsSobDemandaAbertos)
   }, [filtroStatus, soAtivos, squadsSobDemandaAbertos, termoBusca, todasExecucoes])
   // O nome principal da mesa é desenhado com 7,5 px no canvas. Em tela física
   // de celular, sua escala nunca pode deixá-lo abaixo de 9 px. A sobra vira
@@ -921,7 +925,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       if (agora - ultimoDetalhe > 400) { ultimoDetalhe = agora; setRelogioDetalhe((valor) => valor + 1) }
       layout.ilhas.forEach((ilha) => {
         const ehSobDemanda = SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)
-        const alvo = ehSobDemanda && squadsSobDemandaSaindo.has(ilha.squad) ? 0 : 1
+        const alvo = ehSobDemanda && (filtroStatus !== 'todos' || soAtivos) && squadsSobDemandaSaindo.has(ilha.squad) ? 0 : 1
         const inicial = progressoIlhasRef.current.get(ilha.squad) ?? (ehSobDemanda ? 0 : 1)
         const passo = reduzirMovimento ? 1 : delta / DURACAO_TRANSICAO_AMBIENTE_MS
         const proximo = alvo > inicial ? Math.min(alvo, inicial + passo) : Math.max(alvo, inicial - passo)
@@ -959,7 +963,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     }
     quadro = requestAnimationFrame(desenhar)
     return () => { ativo = false; cancelAnimationFrame(quadro) }
-  }, [agenteSelecionadoId, ambiente, dimensoesPalco.dpr, layout, pausado, reduzirMovimento, squadsSobDemandaSaindo, zoom])
+  }, [agenteSelecionadoId, ambiente, dimensoesPalco.dpr, filtroStatus, layout, pausado, reduzirMovimento, soAtivos, squadsSobDemandaSaindo, zoom])
 
   const selecionar = (chave: string) => aoSelecionarAgente?.(chave)
   const visualDoAgente = (agente: AgenteVivo) => todasExecucoes.find((visual) => visual.execucao === agente)

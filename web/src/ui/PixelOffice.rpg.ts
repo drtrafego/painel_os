@@ -50,11 +50,7 @@ const HUMAN_VARIANTS = {
   gastao: { front: humanGastaoFrontUrl, back: humanGastaoBackUrl },
 } as const
 
-// Paleta "Escritório Dourado", realinhada 12/10 pra bater com o video de
-// referencia (fundo quente madeira/creme, paredes azul-marinho com trim
-// dourado), nao mais a fantasia teal/petroleo anterior. teal/moss viraram
-// azul-marinho (mesmo hue usado no novo environment-atlas.png); wood/gold/
-// cream ja batiam com a referencia e ficaram como estavam.
+// Cores dos personagens e estados preservadas; materiais do cenário definidos abaixo.
 const PALETTE = {
   void: '#081013',
   ink: '#101820',
@@ -71,11 +67,11 @@ const PALETTE = {
 
 const NAV = [
   ['diretores', 'AGENTES'],
-  ['estudio', 'CONTEUDO'],
+  ['estudio', 'CONTEÚDO'],
   ['pipeline', 'COMERCIAL'],
   ['financeiro', 'FINANCEIRO'],
-  ['cofre', 'MEMORIA'],
-  ['ferramentas', 'OPERACAO'],
+  ['cofre', 'MEMÓRIA'],
+  ['ferramentas', 'OPERAÇÃO'],
 ] as const
 
 const NAVIGATION_Y = 94
@@ -154,31 +150,43 @@ function roundedPanel(ctx: CanvasRenderingContext2D, x: number, y: number, width
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke() }
 }
 
-function drawSmoothFurniture(ctx: CanvasRenderingContext2D, kind: 'desk' | 'chair' | 'divider' | 'plant', x: number, y: number, width: number, height: number) {
+function drawSmoothFurniture(ctx: CanvasRenderingContext2D, kind: 'desk' | 'chair' | 'plant', x: number, y: number, width: number, height: number) {
   ctx.save()
   ctx.imageSmoothingEnabled = true
-  ctx.shadowColor = '#06101c55'; ctx.shadowBlur = 5; ctx.shadowOffsetY = 3
+  ctx.shadowColor = '#40362630'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 2
   if (kind === 'desk') {
-    const wood = ctx.createLinearGradient(x, y, x, y + height)
-    wood.addColorStop(0, '#d99a58'); wood.addColorStop(1, '#9b5f31')
-    roundedPanel(ctx, x, y + height * .24, width, height * .48, 4, wood, '#70411f', 1)
+    // Tampo âmbar, saia e gaveteiro dão volume sem alterar a escala do posto.
+    roundedPanel(ctx, x + 3, y + height * .43, width - 6, height * .44, 2, '#754725', '#4c3425', .7)
+    roundedPanel(ctx, x + width * .76, y + height * .43, width * .19, height * .52, 2, '#89542c')
+    const wood = ctx.createLinearGradient(x, y + height * .24, x, y + height * .6)
+    wood.addColorStop(0, '#b77d39'); wood.addColorStop(1, '#a66b31')
+    roundedPanel(ctx, x, y + height * .24, width, height * .38, 3, wood, '#d09a51', 1)
     ctx.shadowColor = 'transparent'
-    roundedPanel(ctx, x + width * .36, y, width * .28, height * .31, 3, '#15243b', '#d8b76b', .8)
-    roundedPanel(ctx, x + width * .42, y + height * .06, width * .16, height * .15, 2, '#6dc8dc')
-    ctx.fillStyle = '#70411f'; ctx.fillRect(x + width * .08, y + height * .68, width * .08, height * .28); ctx.fillRect(x + width * .84, y + height * .68, width * .08, height * .28)
+    ctx.fillStyle = '#f0e4c5'; ctx.fillRect(x + width * .1, y + height * .32, width * .18, height * .16)
+    ctx.fillStyle = '#222a32'; ctx.fillRect(x + width * .82, y + height * .27, width * .07, height * .14)
+    ctx.fillRect(x + width * .47, y + height * .23, width * .06, height * .12)
+    ctx.fillRect(x + width * .39, y + height * .34, width * .23, 2)
+    roundedPanel(ctx, x + width * .34, y, width * .32, height * .3, 2, '#222a32', '#526171', .7)
+    roundedPanel(ctx, x + width * .38, y + height * .04, width * .24, height * .2, 1, '#35414d')
+    ctx.fillStyle = '#222a32'; ctx.fillRect(x + width * .38, y + height * .48, width * .27, 2)
+    ctx.fillStyle = '#d09a51'; ctx.fillRect(x + width * .81, y + height * .73, width * .09, 1)
   } else if (kind === 'chair') {
-    roundedPanel(ctx, x + width * .18, y, width * .64, height * .62, 7, '#25334b', '#d8b76b', .8)
-    ctx.shadowColor = 'transparent'; roundedPanel(ctx, x + width * .08, y + height * .5, width * .84, height * .22, 5, '#1b283e')
-    ctx.strokeStyle = '#536078'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + width / 2, y + height * .68); ctx.lineTo(x + width / 2, y + height * .9); ctx.moveTo(x + width * .2, y + height); ctx.lineTo(x + width / 2, y + height * .88); ctx.lineTo(x + width * .8, y + height); ctx.stroke()
-  } else if (kind === 'divider') {
-    const glass = ctx.createLinearGradient(x, y, x, y + height)
-    glass.addColorStop(0, '#edf5f2ee'); glass.addColorStop(1, '#b8d4d1dd')
-    roundedPanel(ctx, x, y, width, height, 7, glass, '#d8b76b', 1.5)
-    ctx.shadowColor = 'transparent'; ctx.fillStyle = '#ffffff66'; ctx.fillRect(x + 8, y + 5, width - 16, 2)
+    roundedPanel(ctx, x + width * .18, y, width * .64, height * .56, 4, '#526171', '#687789', .8)
+    ctx.shadowColor = 'transparent'
+    roundedPanel(ctx, x + width * .08, y + height * .5, width * .84, height * .22, 3, '#35414d')
+    ctx.strokeStyle = '#35414d'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x + width / 2, y + height * .68); ctx.lineTo(x + width / 2, y + height * .9); ctx.moveTo(x + width * .2, y + height); ctx.lineTo(x + width / 2, y + height * .88); ctx.lineTo(x + width * .8, y + height); ctx.stroke()
   } else {
-    ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#3f7951'; ctx.lineWidth = 4; ctx.lineCap = 'round'
-    for (const offset of [-.24, 0, .24]) { ctx.beginPath(); ctx.moveTo(x + width / 2, y + height * .62); ctx.quadraticCurveTo(x + width * (0.5 + offset), y + height * .2, x + width * (0.5 + offset * 1.6), y + height * .08); ctx.stroke() }
-    roundedPanel(ctx, x + width * .2, y + height * .58, width * .6, height * .38, 5, '#c5844c', '#7d4a27', 1)
+    const cx = x + width / 2
+    polygon(ctx, [{ x: x + width * .2, y: y + height * .61 }, { x: x + width * .8, y: y + height * .61 }, { x: x + width * .7, y: y + height }, { x: x + width * .3, y: y + height }], '#4c4934', '#5b5237')
+    ctx.shadowColor = 'transparent'
+    // Feixes de folhas sobrepostas, sem palmeiras altas nem vasos gigantes.
+    for (let leaf = 0; leaf < 9; leaf += 1) {
+      const angle = leaf * 2.4
+      const lx = cx + Math.cos(angle) * width * .28
+      const ly = y + height * (.3 + Math.sin(angle) * .18)
+      ctx.fillStyle = ['#426524', '#76a732', '#b1ca52'][leaf % 3]
+      ctx.beginPath(); ctx.ellipse(lx, ly, width * .13, height * .23, -Math.cos(angle) * .8, 0, Math.PI * 2); ctx.fill()
+    }
   }
   ctx.restore()
 }
@@ -305,39 +313,28 @@ function roomSignBounds(
 }
 
 function drawRoomSign(ctx: CanvasRenderingContext2D, sign: RoomSign, navigation: ReadonlyArray<Bounds>) {
-  const { name, color, anchor, area, furniture } = sign
+  const { name, anchor, area, furniture } = sign
   const title = name.toLocaleUpperCase('pt-BR')
   const available = Math.max(92, Math.min(196, ctx.canvas.width - 16))
-  ctx.font = '700 8px "JetBrains Mono", monospace'
+  ctx.font = '800 10px Arial, sans-serif'
   let label = title
   while (label.length > 4 && ctx.measureText(label).width > available - 24) label = `${label.slice(0, -2)}…`
   const width = Math.max(92, Math.min(available, round(ctx.measureText(label).width) + 24))
   const height = ROOM_SIGN_HEIGHT
   const { x, y } = roomSignBounds(width, height, anchor, area, furniture, navigation, ctx.canvas)
-  const wireTop = Math.max(2, y - 7)
-  const centerX = x + width / 2
-
   ctx.save()
-  ctx.strokeStyle = '#9b8556'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(round(centerX - width * 0.28), wireTop)
-  ctx.lineTo(round(centerX - width * 0.2), y)
-  ctx.moveTo(round(centerX + width * 0.28), wireTop)
-  ctx.lineTo(round(centerX + width * 0.2), y)
-  ctx.stroke()
-  ctx.shadowColor = '#07101d66'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 3
-  roundedPanel(ctx, x, y, width, height, 6, '#17243aee', '#d8b76b', 1.2)
+  ctx.shadowColor = '#07101d33'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 2
+  roundedPanel(ctx, x, y, width, height, 4, '#202b35', '#99a6a7', .8)
   ctx.shadowColor = 'transparent'
-  roundedPanel(ctx, x + 5, y + 5, 4, height - 10, 2, blendColor(color, '#d8b76b', .68))
-  ctx.fillStyle = PALETTE.cream
+  roundedPanel(ctx, x + 5, y + 5, 3, height - 10, 1, '#8ebac4')
+  ctx.fillStyle = '#f2f1e9'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(label, x + width / 2 + 3, y + height / 2 + 1)
   ctx.restore()
 }
 
-function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: ReturnType<typeof projection>, index: number, wallTopLimit: number): RoomSign {
+function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: ReturnType<typeof projection>, wallTopLimit: number): RoomSign {
   const color = validColor(island.cor, PALETTE.gold)
   const corners = [
     project(island.x, island.y),
@@ -347,8 +344,8 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: Retur
   ]
   const elevated = project(island.x, island.y, 26)
   const wallHeight = clamp(Math.abs(corners[0].y - elevated.y) * 1.55, 28, 40)
-  const floor = index % 2 ? '#eee4d2' : '#e7dac3'
-  const shadow = corners.map((corner) => ({ x: corner.x + 4, y: corner.y + wallHeight + 5 }))
+  const floor = '#b9b6ae'
+  const shadow = corners.map((corner) => ({ x: corner.x + 2, y: corner.y + 3 }))
   // topY = max(baseY - wallHeight, maior fundo da navegação + 8 px).
   const raised = (point: Point) => ({ x: point.x, y: Math.max(point.y - wallHeight, wallTopLimit) })
   const topLeft = raised(corners[0])
@@ -360,11 +357,11 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: Retur
   ctx.beginPath()
   ctx.rect(0, wallTopLimit, ctx.canvas.width, Math.max(0, ctx.canvas.height - wallTopLimit))
   ctx.clip()
-  polygon(ctx, shadow, '#07101d2e')
-  polygon(ctx, corners, floor, '#c3a96c', 1)
-  polygon(ctx, [corners[0], corners[1], topRight, topLeft], index % 2 ? '#cbd8dc' : '#d7e0df', '#c3a96c', 1)
-  polygon(ctx, [corners[0], corners[3], farLeft, topLeft], '#aebfc3', '#c3a96c', 1)
-  polygon(ctx, [corners[1], corners[2], farRight, topRight], '#a7b8bd', '#c3a96c', 1)
+  polygon(ctx, shadow, '#40362615')
+  polygon(ctx, corners, floor)
+  polygon(ctx, [corners[0], corners[1], topRight, topLeft], '#8ebac418', '#758b8e', 1)
+  polygon(ctx, [corners[0], corners[3], farLeft, topLeft], '#8ebac422', '#758b8e', 1)
+  polygon(ctx, [corners[1], corners[2], farRight, topRight], '#8ebac414', '#758b8e', 1)
 
   ctx.save()
   ctx.strokeStyle = '#ffffff88'
@@ -373,7 +370,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: Retur
   ctx.moveTo(topLeft.x, topLeft.y + 2)
   ctx.lineTo(topRight.x, topRight.y + 2)
   ctx.stroke()
-  ctx.strokeStyle = '#d8b76b'
+  ctx.strokeStyle = '#758b8e'
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(farLeft.x, farLeft.y)
@@ -381,8 +378,8 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: Retur
   ctx.stroke()
   ctx.strokeStyle = '#8da2a855'
   for (const ratio of [1 / 3, 2 / 3]) {
-    const left = { x: topLeft.x + (corners[0].x - topLeft.x) * ratio, y: topLeft.y + (corners[0].y - topLeft.y) * ratio }
-    const right = { x: topRight.x + (corners[1].x - topRight.x) * ratio, y: topRight.y + (corners[1].y - topRight.y) * ratio }
+    const left = { x: topLeft.x + (topRight.x - topLeft.x) * ratio, y: topLeft.y + (topRight.y - topLeft.y) * ratio }
+    const right = { x: corners[0].x + (corners[1].x - corners[0].x) * ratio, y: corners[0].y + (corners[1].y - corners[0].y) * ratio }
     ctx.beginPath()
     ctx.moveTo(left.x, left.y)
     ctx.lineTo(right.x, right.y)
@@ -423,13 +420,25 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
 
   const floor = [project(10, 8), project(width - 10, 8), project(width - 10, height - 10), project(10, height - 10)]
   const floorGradient = ctx.createLinearGradient(0, floor[0].y, 0, Math.max(...floor.map((point) => point.y)))
-  floorGradient.addColorStop(0, '#f7edda'); floorGradient.addColorStop(.55, '#e8d6b9'); floorGradient.addColorStop(1, '#d5bc94')
-  polygon(ctx, floor, floorGradient, '#d8b76b', 1.5)
+  floorGradient.addColorStop(0, '#dacda9'); floorGradient.addColorStop(.55, '#d6c79f'); floorGradient.addColorStop(1, '#d2c29b')
+  polygon(ctx, [floor[3], floor[2], { x: floor[2].x, y: floor[2].y + 6 }, { x: floor[3].x, y: floor[3].y + 6 }], '#77766e', '#e2d4b3', 1)
+  polygon(ctx, floor, floorGradient, '#e2d4b3', 1)
 
   const wall = [project(14, 6, 94), project(width - 14, 6, 94), project(width - 14, 6, 2), project(14, 6, 2)]
   const wallGradient = ctx.createLinearGradient(0, wall[0].y, 0, wall[2].y)
-  wallGradient.addColorStop(0, '#101a33'); wallGradient.addColorStop(1, '#24304f')
+  wallGradient.addColorStop(0, '#d0ae68'); wallGradient.addColorStop(1, '#c8a45d')
   polygon(ctx, wall, wallGradient, '#d8b76b', 1.5)
+  // Ripas verticais no plano posterior, sempre do rodapé ao arremate.
+  for (let x = 18; x < width - 14; x += 6) {
+    const top = project(x, 6, 93), bottom = project(x, 6, 3)
+    ctx.strokeStyle = '#947239'; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.lineTo(bottom.x, bottom.y); ctx.stroke()
+    ctx.strokeStyle = '#dfc17d'; ctx.lineWidth = .7
+    ctx.beginPath(); ctx.moveTo(top.x + 1.5, top.y); ctx.lineTo(bottom.x + 1.5, bottom.y); ctx.stroke()
+  }
+  const side = [project(10, 8, 94), project(10, height - 10, 94), project(10, height - 10), project(10, 8)]
+  polygon(ctx, side, '#24343c', '#758b8e', 1)
+  polygon(ctx, [project(11, 30, 38), project(11, height - 30, 38), project(11, height - 30, 8), project(11, 30, 8)], '#8ebac433', '#8ebac4', .6)
   const trimLeft = project(14, 6, 9), trimRight = project(width - 14, 6, 9)
   ctx.strokeStyle = '#d8b76b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(trimLeft.x, trimLeft.y); ctx.lineTo(trimRight.x, trimRight.y); ctx.stroke()
   const sign = project(width / 2, 7, 60)
@@ -441,12 +450,12 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   ctx.fillText('CT // AGENT OFFICE', sign.x, sign.y)
 
   const navigation = navigationBounds(project, width)
-  navigation.forEach(({ label, x, y, width: itemWidth }, index) => {
-    roundedPanel(ctx, x + 2, y, itemWidth - 4, NAVIGATION_HEIGHT, 5, index % 2 ? '#1b2940' : '#22314a', '#d8b76b99', .75)
-    ctx.fillStyle = PALETTE.cream
+  navigation.forEach(({ label, x, y, width: itemWidth }) => {
+    roundedPanel(ctx, x + 2, y, itemWidth - 4, NAVIGATION_HEIGHT, 4, '#27313c', '#99a6a7', .75)
+    ctx.fillStyle = '#f2f1e9'
     // 7px grudava as letras (glifo bold nesse tamanho esbarra no vizinho e
     // "AGENTES" virava ilegível). 8px é o menor tamanho que ainda sai limpo
-    // nesta fonte, mesmo valor já usado nas placas de sala (drawRoomSign).
+    // nesta fonte de navegação. As placas de sala usam Arial em peso 800.
     ctx.font = '700 8px "JetBrains Mono", monospace'
     ctx.fillText(label, x + itemWidth / 2, y + 11)
   })
@@ -454,18 +463,22 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   const navigationBottom = Math.max(...navigation.map((item) => item.y + item.height))
   const wallTopLimit = navigationBottom + ROOM_NAVIGATION_GAP
   const roomSigns: RoomSign[] = []
-  layout.ilhas.forEach((island, index) => {
-    roomSigns.push(drawRoom(ctx, island, project, index, wallTopLimit))
+  layout.ilhas.forEach((island) => {
+    roomSigns.push(drawRoom(ctx, island, project, wallTopLimit))
 
-    const divider = project(island.x + island.largura / 2, island.y + 16, 4)
-    drawSmoothFurniture(ctx, 'divider', divider.x - 37, divider.y - 20, 74, 34)
-    island.postos.forEach((desk) => {
+    island.mesas.forEach((desk) => {
       const point = project(desk.x, desk.y + 18)
       drawSmoothFurniture(ctx, 'chair', point.x - 13, point.y + 2, 26, 34)
       drawSmoothFurniture(ctx, 'desk', point.x - 31, point.y - 28, 62, 45)
     })
-    const plant = project(island.x + island.largura - 22, island.y + 38)
-    drawSmoothFurniture(ctx, 'plant', plant.x - 15, plant.y - 30, 30, 39)
+    for (const [x, y] of [
+      [island.x + 18, island.y + 24],
+      [island.x + island.largura - 18, island.y + 24],
+      [island.x + island.largura - 18, island.y + island.altura - 12],
+    ]) {
+      const plant = project(x, y)
+      drawSmoothFurniture(ctx, 'plant', plant.x - 9, plant.y - 22, 18, 26)
+    }
   })
   roomSigns.forEach((sign) => drawRoomSign(ctx, sign, navigation))
 
@@ -473,16 +486,19 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
     const loungeWidth = Math.min(width - 60, 140 + layout.ocupantesDescanso * 44)
     const x = (width - loungeWidth) / 2
     const corners = [project(x, layout.descansoY), project(x + loungeWidth, layout.descansoY), project(x + loungeWidth, height - 14), project(x, height - 14)]
-    polygon(ctx, corners, '#181d2d', PALETTE.gold, 2)
+    polygon(ctx, corners, '#77766e', '#b9b6ae', .8)
     const label = project(x + 8, layout.descansoY + 8)
-    ctx.fillStyle = PALETTE.cream
+    roundedPanel(ctx, label.x - 4, label.y - 8, 76, 16, 3, '#202b35', '#99a6a7', .6)
+    ctx.fillStyle = '#f2f1e9'
     ctx.font = '700 8px "JetBrains Mono", monospace'
     ctx.textAlign = 'left'
     ctx.fillText(`LOUNGE ${layout.ocupantesDescanso}`, label.x, label.y)
   }
 
-  drawSmoothFurniture(ctx, 'plant', 12, height - 56, 38, 49)
-  drawSmoothFurniture(ctx, 'plant', width - 50, height - 56, 38, 49)
+  for (const x of [30, width - 30]) {
+    const plant = project(x, height - 30)
+    drawSmoothFurniture(ctx, 'plant', plant.x - 10, plant.y - 24, 20, 28)
+  }
 }
 
 function staticScene(quadro: QuadroRpg) {

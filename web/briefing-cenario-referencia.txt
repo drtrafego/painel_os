@@ -1,0 +1,260 @@
+BRIEFING VISUAL — CENÁRIO DA REFERÊNCIA DO PAINEL GASTÃO
+Observação do ambiente; sem proposta de alteração dos elementos já aprovados.
+
+BASE DA OBSERVAÇÃO E LIMITES DE PRECISÃO
+
+Material examinado: ref1.jpg, ref2.jpg e ref3.jpg; vídeo de 45,45 segundos, 576 × 1280 pixels; folha de contato com amostras a cada dois segundos ao longo do vídeo; ampliações de momentos específicos, incluindo a abertura e o enquadramento próximo do final da exibição do escritório. O vídeo termina mostrando outra interface; essa tela não integra o cenário descrito aqui.
+
+O material é uma gravação vertical de uma tela de notebook. Portanto, há duas perspectivas superpostas: a projeção do escritório desenhado e a perspectiva física da tela filmada. Há também desfoque, reflexos, compressão, recortes e obstruções. As estimativas hexadecimais abaixo descrevem a aparência percebida, não cores recuperadas do arquivo original da aplicação. Não é possível afirmar códigos exatos, materiais físicos ou dimensões em metros.
+
+Nesta descrição, “fundo” é a parede amadeirada; “esquerda” é o conjunto de salas de vidro; “frente” é a borda aberta próxima à recepção. As contagens se referem ao conjunto da cena ao combinar enquadramentos. Oclusões impedem garantir alguns totais. Quando uma quantidade vem de uma placa, isso está explicitado.
+
+LEITURA ESPACIAL PARA RECONSTRUIR A COMPOSIÇÃO
+
+O escritório aparece como uma maquete aberta, vista de cima e pela frente, inserida num fundo escuro. Tem uma base clara, aparentemente retangular no espaço da cena, transformada em um quadrilátero pela projeção. Duas paredes altas delimitam os lados afastados; frente e lado direito ficam visualmente abertos. Um fechamento baixo transparente acompanha parte do perímetro frontal e lateral.
+
+A organização é esta: à esquerda, salas sucessivas delimitadas por vidro, com administração mais próxima da frente e reuniões mais ao fundo; no centro e à direita, um campo regular de mesas individuais; na faixa posterior, três mesas maiores diante da madeira e três sofás escuros à sua frente; na borda anterior, um balcão claro de recepção deslocado para a esquerda do centro. Plantas pontuam divisórias, cantos, fundo e circulação frontal. A extremidade direita frontal contém uma área cinza mais escura com dois elementos baixos escuros, cuja função não é identificável com segurança.
+
+1. PISO
+
+1.1. Circulação e base geral
+
+Cor predominante: bege areia claro, quente, entre marfim amarelado e madeira muito clara. Aproximação principal: #D6C79F; variação visual plausível entre #CABB98 e #E2D4B3. Esse bege aparece na faixa frontal da recepção, nos corredores entre setores, nas salas da esquerda e no contorno do salão de estações.
+
+A superfície parece majoritariamente lisa. Nos enquadramentos próximos há variações discretas e algumas linhas compridas, mas não há evidência suficiente para definir um piso de tábuas, porcelanato com juntas ou concreto. Não há um xadrez marcado, nem uma trama gráfica de alto contraste. Reconstruir como bege uniforme com variação tonal muito sutil é mais fiel do que inventar paginação de placas ou veios fortes.
+
+Acabamento visual fosco ou acetinado discreto. Não aparecem reflexos nítidos de móveis. O piso serve como campo claro de contraste para os volumes marrons e cinza-escuros.
+
+1.2. Campo central das estações
+
+Há uma grande superfície cinza-clara quente sob o conjunto principal de mesas. Cor aproximada: cinza greige #B9B6AE, com regiões aparentemente próximas de #C3BFB5. O contraste com o bege externo é moderado: percebe-se a mudança de área sem uma borda preta ou um degrau alto.
+
+A superfície é lisa, homogênea, sem fibras ou placas legíveis. Pode representar carpete, revestimento distinto ou apenas uma delimitação gráfica de setor; o vídeo não permite escolher entre essas hipóteses. Sua borda acompanha a geometria do salão, com diagonais resultantes da projeção. Não deve ser interpretada automaticamente como sombra: o campo é amplo e coincide com a área de trabalho.
+
+1.3. Área frontal direita e espessura da base
+
+Na frente à direita há um polígono cinza médio/escuro, aproximadamente #77766E, separado do bege por uma linha diagonal muito clara na imagem. Não é possível assegurar se representa outro revestimento, acesso ou área externa imediata. Dois retângulos escuros e baixos aparecem ali na vista geral. Evitar atribuir a eles a função de escada, tapete ou equipamento sem confirmação.
+
+A frente da plataforma tem um filete claro e uma pequena face lateral escura, dando espessura à maquete. Essa base se destaca do fundo quase preto da aplicação.
+
+Replicação: fácil em CSS ou canvas. Três polígonos de preenchimento, faces de borda e sombras leves resolvem quase tudo. Uma textura procedural de baixíssima intensidade é opcional. Não exige imagem gerada.
+
+2. PAREDES E DIVISÕES
+
+2.1. Quantidade e estrutura geral
+
+São perceptíveis dois planos principais de fechamento alto, formando um L: uma parede posterior amadeirada e uma parede lateral esquerda predominantemente escura, parcialmente associada a áreas azuladas de vidro. Além delas, há vários planos internos transparentes que separam as salas. Não há teto visível e não se vê uma parede frontal opaca fechando o escritório.
+
+2.2. Parede do fundo
+
+Material representado: madeira clara dourada, com ripado VERTICAL. Os sulcos sobem do rodapé à parte superior; não são faixas horizontais. É uma repetição bastante fina e regular: muitas linhas estreitas na extensão de cada sala, em vez de poucas tábuas largas.
+
+Cor de base aproximada: mel/ocre claro #C8A45D. Faces iluminadas: #DFC17D. Sulcos e laterais sombreadas: #947239 ou #A48245. O aspecto é mais dourado e quente do que castanho avermelhado.
+
+O padrão continua por trás das mesas maiores do fundo e do setor posterior de reuniões. Há interrupções por placas escuras, superfícies claras verticais e encontros com a estrutura do vidro. Duas superfícies altas creme aparecem claramente em recortes do fundo: retângulos lisos que contrastam com as ripas. Podem representar portas ou painéis; não há detalhe suficiente de puxadores ou dobradiças para afirmar que são portas funcionais. Aproximação: #EBDFBA, com contorno bege mais escuro.
+
+Há uma faixa estreita clara junto ao encontro com o piso e um arremate superior fino, reforçando que a parede é um volume delimitado. Não se trata de uma textura de madeira sem bordas aplicada ao fundo inteiro da tela.
+
+2.3. Parede lateral esquerda
+
+Plano oblíquo que recua da frente esquerda até o canto posterior. Predominam azul-petróleo muito escuro, grafite e carvão, aproximadamente #24343C e #293237. Há painéis com marca dourada e pontos estreitos de iluminação quente.
+
+Partes inferiores ou adjacentes aparecem azuladas/ciano, em torno de #8EBAC4, sobretudo perto da administração. A leitura é de superfície envidraçada ou painel translúcido; não há detalhes suficientes para afirmar uma janela externa contínua. O escuro e o azul não formam um segundo ripado.
+
+2.4. Encontros e divisórias
+
+O encontro das duas paredes altas é uma quina nítida. Perfis verticais claros/acinzentados marcam cantos e limites. Nas salas da esquerda, os panos transparentes possuem montantes finos, barras superiores e arestas inferiores. As linhas acompanham o recuo das salas e a projeção do piso.
+
+A separação entre salas não depende de alvenaria grossa: mesas, cadeiras e plantas continuam visíveis através dos fechamentos. Vários encontros de vidro formam cantos em L. O desenho evita grandes pilares opacos no centro do salão.
+
+Replicação: fácil a média. Ripado com repetição de linhas/gradiente em um plano transformado; paredes como polígonos com faces e bordas; vidro com transparência e traços. Canvas dá controle preciso das interseções. Imagem gerada é dispensável; só seria útil caso se exigisse uma textura pictórica de madeira além do que o vídeo permite ver.
+
+3. VIDROS, JANELAS E ABERTURAS
+
+O vidro é um elemento estrutural importante nas salas da esquerda. A maior parte dele é clara/transparente, com leve tom frio azul-esverdeado. As arestas podem ser desenhadas em cinza azulado, perto de #758B8E, com trechos claros de reflexo. A moldura é fina em relação à altura dos painéis; não são caixilhos pretos espessos de fachada industrial.
+
+Através dos panos veem-se o piso bege, cadeiras, tampos de reunião, plantas e painéis de marca. Não aparece uma paisagem urbana, céu, jardim externo ou horizonte. Portanto, não incluir uma cidade pela janela para preencher essas áreas.
+
+Há portas ou passagens sugeridas pela interrupção dos painéis e pelo acesso às salas, mas o registro não permite contar folhas de porta nem especificar mecanismo de correr ou giro.
+
+Na borda frontal, uma linha horizontal/oblíqua escura, com montantes espaçados e área quase transparente abaixo, funciona visualmente como guarda-corpo ou fechamento baixo de vidro. Ele permite ver o piso até a extremidade da base. À direita, esse fechamento continua acompanhando a borda do quadrilátero. Não é uma parede opaca alta.
+
+Replicação: média, pela necessidade de ordenar corretamente transparências e objetos vistos através delas. Usar preenchimento frio de baixa opacidade e poucas linhas de reflexo. Não precisa de imagem gerada. Reflexos fotográficos complexos não estão evidentes na referência e seriam excesso.
+
+4. MESAS, ESTAÇÕES E ASSENTOS
+
+4.1. Contagem consolidada
+
+O salão central é identificado como “ATENDIMENTO IA · 20 P.A.s” — separador e caixa do final variam em legibilidade. A distribuição visível é compatível com cerca de vinte estações individuais, aproximadamente quatro colunas por cinco fileiras. A contagem de vinte é apoiada pela placa e pela repetição do mobiliário, não por vinte tampos simultaneamente desobstruídos em um único frame.
+
+Além do salão, aparecem aproximadamente quatro mesas individuais no setor administrativo à esquerda; três mesas maiores junto à parede posterior; duas mesas grandes de reunião; e um balcão de recepção na frente. Ordem de grandeza total: 27 mesas de trabalho individuais, duas de reunião e um balcão, ou cerca de trinta superfícies principais de atendimento/trabalho. A parcela administrativa tem confiança menor devido ao tamanho e às sobreposições. Esse total não inclui sofás ou os elementos baixos indefinidos da direita.
+
+4.2. Distribuição do salão
+
+As mesas são módulos soltos repetidos, com orientação uniforme. Não formam uma única bancada corrida. Fileiras e colunas seguem os eixos do piso; a visão oblíqua faz as colunas avançarem em diagonal na imagem.
+
+Há corredores visíveis entre as estações. O espaçamento parece da mesma ordem que uma fração significativa da largura de uma mesa, sem que os móveis se encostem. O campo mantém uma regularidade forte, embora recortes e sobreposições possam sugerir deslocamentos entre fileiras. Não inventar um padrão de mesas alternadamente giradas.
+
+4.3. Aparência das mesas individuais
+
+Tampos retangulares de madeira castanho-mel/âmbar, com face superior mais clara, borda frontal marcada e espessura visível. Referência de cor: tampo #A66B31 ou #B77D39; borda iluminada #D09A51; laterais #754725; sombras profundas #4C3425.
+
+O tampo é mais largo do que profundo. Uma estimativa útil de desenho é largura entre 1,7 e 2,2 vezes a profundidade real do tampo, antes da projeção. A frente tem aspecto de painel/saia ou gaveteiro; a lateral direita frequentemente aparece como um bloco de madeira mais cheio. Não são mesas finíssimas apoiadas em pés cromados longos. Pequenos detalhes claros na frente podem representar puxadores, mas não há nitidez para desenhar um sistema específico de gavetas.
+
+Sobre quase todas as mesas há um monitor escuro, retangular, voltado para a posição de uso. A tela e a moldura aparecem quase pretas ou azul-grafite (#222A32), com base curta. Existe um pequeno objeto escuro vertical de um lado, compatível com porta-lápis ou caneca, e uma folha/retângulo creme do outro, aproximadamente #F0E4C5. Em algumas mesas há uma faixa escura junto ao monitor que pode ser teclado. Não é possível confirmar mouse, telefone ou modelo de computador individualmente.
+
+O conjunto “monitor escuro + papel claro + pequeno acessório” é mais importante para a semelhança do que inserir muitos objetos diferentes.
+
+Diante de cada estação há uma cadeira pequena azul-acinzentada, com encosto retangular, assento escuro e pernas finas. Tons aproximados: #526171, #687789 e #35414D. Nos enquadramentos de detalhe, assento e encosto têm espessura e sombreamento próprios. São cadeiras visualmente compactas; não há grandes encostos telados ou apoios de cabeça claramente desenhados.
+
+4.4. Mesas do fundo
+
+Três mesas maiores, em madeira da mesma família, alinhadas diante do ripado. Repetem monitor escuro e papel claro. Atrás delas há cadeiras de escritório escuras, mais altas/volumosas. À frente, três sofás retangulares grafite formam uma segunda linha paralela.
+
+Os sofás são baixos, com braços e encosto marcados, face frontal quase preta e plano superior cinza mais claro. Aproximações: corpo #293238; assento/aresta superior #616A6B. Parecem acomodar duas ou três posições cada, mas não há resolução suficiente para contar almofadas com certeza.
+
+4.5. Mesas de reunião
+
+Duas mesas longas, uma mais próxima e outra ao fundo, ocupam as salas envidraçadas à esquerda. Tampos lisos laranja-ocre/madeira quente, aproximadamente #C68A30 a #D39939, com espessura aparente e estrutura inferior escura.
+
+A proporção do tampo é alongada, aproximadamente três a quatro vezes sua profundidade. Cadeiras azul-acinzentadas repetem-se ao longo dos lados. Na mesa mais próxima, cerca de seis encostos ficam legíveis em um dos lados; os demais se confundem com vidro e tampo. A montagem sugere capacidade da ordem de dez a doze lugares por mesa, mas isso é estimativa de reconstrução, não contagem certificada.
+
+Sobre os tampos existem poucos pequenos pontos/objetos escuros, possivelmente acessórios de reunião. Não há evidência de arranjos grandes, pilhas de livros ou muitos notebooks abertos.
+
+4.6. Recepção
+
+Um balcão curto e mais alto que a mesa comum, frontalmente bege/creme, fica próximo da borda aberta, à esquerda do centro. Tem corpo opaco com volume em caixa, face frontal clara, contorno bege e tampo claro. Aproximações: frente #D7C398, tampo #EDE1BF, lateral #B49A6A.
+
+Dois retângulos escuros de equipamento/monitor ficam sobre ele. A leitura é de posto de recepção compacto, não uma bancada contínua que atravesse a largura do escritório.
+
+Replicação de móveis: média a trabalhosa, pela quantidade de detalhes e pela repetição correta em perspectiva, não por exigir tecnologia 3D. Um único módulo de mesa, cadeira, monitor e acessórios pode ser desenhado com polígonos, contornos e sombras, depois repetido. Reunião, sofás e balcão exigem módulos próprios. Canvas puro é suficiente. CSS também funciona com planos transformados, mas a ordenação de muitas faces pode ficar menos prática. Imagem gerada é opcional para um acabamento ilustrado mais rico; não é requisito da estrutura observada.
+
+5. PLANTAS E OUTROS OBJETOS DE CENA
+
+5.1. Plantas
+
+Há numerosas plantas pequenas a médias em vasos. A leitura combinada sugere cerca de doze a quinze distribuídas pelo cenário; a quantidade exata não pode ser certificada porque placas, mobiliário e recortes encobrem parte delas.
+
+Distribuição de referência: aproximadamente seis a oito junto às salas e divisórias da esquerda, incluindo seus cantos e acessos; cerca de três junto à faixa das mesas do fundo; duas claramente separadas no corredor/borda frontal direita; e possivelmente mais uma ou duas em limites periféricos visíveis apenas no plano geral. Esses grupos são estimativas e podem compartilhar uma planta de canto; não somar como inventário exato.
+
+A forma recorrente é um vaso escuro pequeno, aproximadamente quadrado ou ligeiramente afunilado, com folhagem verde em touceira/copa compacta. Folhas ovais a pontudas, vários verdes, miolo mais escuro e pontas verde-lima. Paleta aproximada: #426524, #76A732 e #B1CA52; vaso #4C4934 ou #5B5237.
+
+Algumas plantas junto ao vidro parecem mais altas e estreitas; as da frente parecem arbustos compactos. Não há detalhe botânico suficiente para afirmar espécie. Evitar converter todas em palmeiras grandes: na referência a maior parte da folhagem tem escala modesta, entre a altura do tampo e pouco acima dele, ou menor conforme a posição.
+
+5.2. Elementos de marca
+
+Há painéis escuros com monograma “AM” dourado na parede lateral e nas salas de reunião, aproximadamente três ocorrências legíveis ao combinar vistas. O monograma tem letras grandes com aparência serifada/inclinada; abaixo, duas linhas muito menores, cuja transcrição não é segura. A placa é carvão/azul muito escuro, com desenho dourado, sem fotografia ou ilustração grande.
+
+Um pequeno retângulo escuro no piso frontal, próximo ao acesso, também parece trazer a marca dourada e funcionar como capacho. A leitura de capacho é provável, não comprovada.
+
+5.3. Outros móveis e objetos
+
+Além dos três sofás do fundo, há um assento/banco claro próximo à divisória da administração e ao acesso frontal esquerdo: baixo, estreito, com segmentos creme visíveis. A imagem não permite resolver toda a estrutura.
+
+Há elementos verticais estreitos claros/amarelados nas paredes, compatíveis com arandelas. Não se observam luminárias pendentes grandes no centro do salão.
+
+Não é possível identificar com segurança lixeiras, estantes de livros, arquivos altos ou quadros figurativos. Esses objetos não devem ser acrescentados como se estivessem comprovados pela referência.
+
+Replicação: plantas são de dificuldade média, por exigirem folhas sobrepostas e variação orgânica. Podem ser pequenos desenhos reutilizáveis em canvas com três ou quatro tons e uma sombra no chão. Vasos, placas, banco e capacho são fáceis. Uma imagem gerada de planta poderia acelerar o acabamento, mas não é necessária. Logotipos e textos devem ser compostos de forma controlada, sem depender de imagem gerada para legibilidade.
+
+6. FAIXAS DE IDENTIFICAÇÃO E PAINÉIS DE TEXTO
+
+6.1. Linguagem comum
+
+As placas de setor são retângulos horizontais escuros, de cantos levemente arredondados, com contorno fino cinza-claro e uma sombra discreta. Fundo aproximadamente #202B35 ou #27313C; borda #99A6A7; letras brancas/off-white #F2F1E9. Algumas têm uma pequena barra vertical clara ou azulada perto da extremidade esquerda.
+
+Tipografia sem serifa, pesada/negrito, majoritariamente em maiúsculas. É compacta, com boa espessura de traço e pouca decoração. Não é possível identificar a família. Uma sans semelhante a Arial/Roboto em peso 700–800 seria uma aproximação, não identificação da fonte original.
+
+As placas não parecem sustentadas por postes grossos. Algumas flutuam à frente de áreas; outras ficam visualmente no alto das salas ou junto ao topo da parede. Sua posição informa o setor com mais destaque que uma sinalização arquitetônica realista.
+
+6.2. Recepção
+
+Texto visível: “RECEPÇÃO / SDR WHATSAPP”. Em alguns frames o separador parece uma barra quase vertical; preservar o conteúdo e usar o separador definido no projeto, sem interpretar o borrão como evidência tipográfica exata.
+
+Faixa longa e baixa, à frente do campo central de mesas, logo atrás/ao lado da área de recepção e acima da faixa bege frontal na imagem. Ocupa a largura aproximada de duas a três mesas pequenas. Altura suficiente para uma única linha em caixa alta, com respiro lateral moderado. A inclinação aparente muda com a câmera externa; não é uma placa vertical alta nem uma faixa dourada.
+
+6.3. Atendimento
+
+Placa posterior à malha central, à frente das três mesas maiores e da linha de sofás. Lê-se “ATENDIMENTO IA · 20 P.A.s”, com o separador e a pontuação final parcialmente borrados. Fundo azul muito escuro, texto branco espesso, borda clara e pequeno acento vertical azul/lilás à esquerda. É uma das maiores identificações internas do escritório.
+
+6.4. Salas e setores laterais
+
+“SALA DE REUNIÃO”: faixa escura acima da sala envidraçada de reunião, à esquerda.
+“ADMINISTRATIVO / FINANCEIRO”: faixa longa na frente/sobre a divisão de vidro do setor esquerdo mais próximo.
+“MEETINGS / AUDIÊNCIAS”: placa no alto do setor de reunião posterior, próxima ao topo da parede de madeira.
+“CLOSERS ESPECIALISTAS”: placa alta sobre a região das mesas do fundo, visível no plano geral e nos enquadramentos que sobem em direção à parede.
+
+Essas placas mantêm a família visual de fundo carvão/azul, contorno fino e texto claro. Podem variar em comprimento de acordo com o título. Não inserir faixas com cores completamente diferentes para cada sala.
+
+6.5. Painel de parede
+
+Um grande quadro horizontal azul-marinho quase preto aparece sobre a madeira atrás das mesas posteriores. Título amarelo/dourado “FUNIL DOS CLOSERS”. Abaixo há uma lista curta alinhada à esquerda, com marcadores e texto branco pequeno. Entre as linhas legíveis estão “TRABALHISTA”, “PREVIDENCIÁRIO”, “FAMÍLIA”, “CONSUMIDOR”, “CONTRATOS / FISCAL” e “CRIMINAL”; acentos e separadores não são todos confirmáveis pela resolução.
+
+O título é menor que os nomes das grandes faixas, mas se destaca pela cor quente. O quadro tem margem interna, contorno fino claro/dourado e ocupa um trecho largo da parede. Não há gráficos multicoloridos grandes identificáveis. Deve ser tratado como painel informativo de parede, distinto das placas flutuantes de setor.
+
+6.6. Etiquetas complementares
+
+Nas salas de reunião aparecem pequenos estados “Disponível” em verde e “Em reunião” em ocre/marrom, posicionados perto/sobre a marca. São curtos, arredondados, com texto claro. O vídeo sugere que o estado pode mudar; não é necessário mostrar ambos simultaneamente na mesma sala.
+
+Há etiquetas pequenas de função perto das estações administrativas, como “IA Financeiro”, “IA Prazos”, “IA Contratos” e “IA Audiências”. Compartilham o fundo escuro e o texto claro. Sua leitura é subordinada às placas grandes.
+
+Etiquetas pessoais, balões de diálogo e indicadores transitórios cobrem partes do ambiente. Eles não são mobiliário nem acabamento arquitetônico, portanto não são usados aqui para definir novos elementos do cenário.
+
+Replicação: fácil com CSS ou canvas; texto real e caixas com borda, raio pequeno e sombra. Atenção à ordem das camadas, pois várias placas cobrem móveis. Imagem gerada não é recomendada para esses textos: a referência exige alinhamento, nitidez e controle de conteúdo.
+
+7. CÂMERA E PROJEÇÃO
+
+O ambiente tem aparência de maquete 2,5D, vista em três quartos, de cima e pela frente. Vemos simultaneamente a superfície dos tampos, as faces frontais/laterais das mesas, o piso e duas paredes altas. Não é visão frontal ao nível dos olhos nem planta vista verticalmente de cima.
+
+A projeção é próxima da axonométrica/isométrica de interfaces de escritório, mas não há evidência suficiente para afirmar uma isometria matemática de 30 graus. O aspecto filmado é assimétrico: um eixo do piso sobe de forma mais acentuada para o fundo esquerdo; o outro é mais próximo da horizontal. Parte dessa assimetria vem do notebook filmado de lado.
+
+As mesas distantes continuam relativamente grandes em relação às próximas. A redução por profundidade é pequena quando comparada a uma perspectiva fotográfica de lente grande-angular. Isso favorece uma reconstrução ortográfica/axonométrica ou com perspectiva muito suave.
+
+Como ponto de partida de desenho, uma elevação aproximada de 30–40 graus acima do plano do piso produz exposição de tampos compatível. Esse número é uma sugestão de reconstrução, não uma medição recuperada do vídeo. A maior parte das arestas verticais dos móveis permanece aproximadamente vertical na cena original; inclinações extras na gravação não devem ser copiadas automaticamente.
+
+As variações de enquadramento ao longo do vídeo vêm principalmente da câmera física aproximando-se, apontando para setores diferentes e inclinando a imagem. O material não comprova que o cenário precise de rotação ou câmera animada interna.
+
+Replicação: média. Uma transformação comum de coordenadas do piso e volumes com altura resolve a base em canvas. CSS pode usar planos transformados com cuidado para manter os móveis coerentes. Não há necessidade de motor de jogo ou imagem gerada. O maior risco é aplicar uma inclinação diferente a cada objeto e perder o alinhamento da grade.
+
+8. PROPORÇÃO, DENSIDADE E ESCALA
+
+A cena é densa em número de postos e informações, mas tem corredores visualmente abertos. A malha central é a maior massa de mobiliário; as salas da esquerda ocupam uma faixa lateral de aproximadamente um quarto a um terço da largura útil na vista geral. A recepção é pequena e não domina o salão.
+
+A área de atendimento se lê como dezenas de módulos pequenos dentro de uma única sala grande. As mesas não se encostam, as cadeiras têm espaço visual à frente e existe uma margem bege contínua na frente/direita. Portanto, reconstruir como um escritório lotado de bancadas coladas seria incorreto; reconstruir como um átrio vazio com cinco mesas muito afastadas também perderia a referência.
+
+Comparado a um escritório comum, o arranjo é mais diagramático: móveis de proporções compactas, repetição muito regular, paredes sem teto e setores simultaneamente expostos. A escala das placas é exagerada para leitura de interface. Não há base para converter essa cena diretamente em uma planta arquitetônica com medidas regulamentares.
+
+Como proporções internas úteis, uma mesa individual serve de unidade: corredores entre módulos têm largura da ordem de metade a uma largura de mesa, dependendo do eixo; mesas de reunião têm várias larguras de mesa individual; as paredes sobem muito acima dos encostos, mas não tornam a área central um poço fechado. Esses intervalos são aproximações visuais, não cotas.
+
+Replicação: fácil quanto ao layout, desde que exista um sistema único de coordenadas e módulos reutilizáveis. Nenhuma imagem gerada é necessária. A fidelidade depende principalmente de preservar a quantidade, o espaçamento e o peso relativo de cada zona.
+
+9. ILUMINAÇÃO, SOMBRA, CONTRASTE E ACABAMENTO GERAL
+
+A luz do escritório é clara e quente, com o piso bege e a madeira dourada dominando as superfícies grandes. Não há noite escura dentro da sala. A moldura/fundo da aplicação é quase preta ou azul muito profundo, aproximadamente #0C1521; esse contraste faz a maquete clara se destacar.
+
+Os objetos têm volumes ilustrados: tampos mais claros, faces laterais mais escuras, bordas realçadas e sombras pequenas na base. Não se trata apenas de ícones planos. Também não há realismo fotográfico de metal escovado, reflexos complexos ou madeira com poros visíveis.
+
+Sombras são principalmente de contato: sob mesas, cadeiras, sofás e vasos. São curtas, difusas a moderadamente definidas e menos escuras que os monitores. Não há evidência firme de um único sol forte projetando sombras longas por toda a sala. A direção exata da fonte principal não pode ser inferida com confiança a partir da filmagem.
+
+As arandelas/faixas claras junto às paredes acrescentam pequenos acentos amarelos quentes. O vidro traz o contraponto frio azulado. A vegetação introduz verde-lima e verde-oliva, concentrados em pontos pequenos. O balanço principal é: bege claro + cinza quente + madeira âmbar + grafite, com vidro frio e folhagem como acentos.
+
+Os contornos dos móveis são relativamente escuros e ajudam a separar objetos pequenos do chão. Os volumes têm acabamento de ilustração de jogo de gestão/maquete de interface, sem que isso implique tecnologia de jogo. O cenário usa detalhes repetidos em vez de grandes texturas fotográficas.
+
+Não incorporar como iluminação do ambiente os reflexos no notebook, a aparência lavada da gravação, a mão diante da tela ou os elementos externos da interface de vídeo. Esses fatores pertencem ao registro da referência.
+
+Replicação: média. Faces com duas ou três tonalidades, gradientes discretos, sombras de contato e ordem de sobreposição reproduzem a maior parte do clima. Canvas puro é suficiente. A parte mais trabalhosa é refinar cada pequeno móvel e planta para que o conjunto não fique excessivamente geométrico; imagem gerada é uma opção de acabamento, não uma exigência observada.
+
+CRITÉRIOS DE FIDELIDADE PARA A RECONSTRUÇÃO DO AMBIENTE
+
+— Base bege com campo central cinza-claro e borda de plataforma visível.
+— Duas paredes altas em L; ripado vertical mel ao fundo; lateral esquerda escura/azulada.
+— Salas transparentes à esquerda com perfis finos e duas mesas compridas de reunião.
+— Aproximadamente vinte mesas pequenas no campo central, repetidas com orientação comum.
+— Três mesas maiores e três sofás escuros na faixa posterior.
+— Balcão creme compacto na frente, deslocado para a esquerda do centro.
+— Plantas pequenas em vasos escuros distribuídas junto ao vidro, fundo e perímetro.
+— Placas de setor azul-grafite, texto branco forte, borda fina; painel informativo escuro sobre a madeira.
+— Vista elevada em três quartos, sem teto, com perspectiva fraca e volumes legíveis.
+— Iluminação quente e uniforme, sombras de contato e contraste com o fundo externo escuro.
+
+Tudo isso é viável com CSS/canvas puro. O ponto de maior investimento é a qualidade dos módulos ilustrados e sua sobreposição coerente. A observação não revelou nenhum efeito ambiental que obrigue a usar uma imagem gerada.

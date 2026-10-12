@@ -215,7 +215,7 @@ const gradesDensas = layoutsDensos.map((layout) => {
 conferir('10 a 15 agentes usam fileiras de cinco mesas', gradesDensas.every((grade) => grade.colunas === 5), JSON.stringify(gradesDensas))
 conferir('10, 12 e 15 agentes ocupam respectivamente 2, 3 e 3 linhas', gradesDensas.map((grade) => grade.linhas).join(',') === '2,3,3', JSON.stringify(gradesDensas))
 conferir('grade densa limita o vão horizontal entre mesas a 100 px', gradesDensas.every((grade) => grade.intervaloX <= 100), JSON.stringify(gradesDensas))
-conferir('grade densa preserva 96 px entre linhas para mesa e personagem', gradesDensas.every((grade) => grade.intervaloY === 96), JSON.stringify(gradesDensas))
+conferir('grade densa usa 88 px entre linhas sem colar os postos', gradesDensas.every((grade) => grade.intervaloY === 88), JSON.stringify(gradesDensas))
 const layoutDensoMobile = calcularLayoutSala(cenarioDenso, { larguraDisponivel: 360, alturaDisponivel: 420, zoomMinimo: 1.2 })
 const primeiraFileiraMobile = layoutDensoMobile.ilhas[0].postos.slice(0, 5)
 const mapaDensoMobile = compactacaoRpg(layoutDensoMobile).mapa
@@ -250,6 +250,17 @@ conferir('todos usam posto compartilhado, nenhum vira mesa fixa', ocupantes.ever
 for (let restantes = globais.length - 1; restantes >= 0; restantes -= 1) {
   const visuais = montarExecucoesVisuais(globais.slice(0, restantes), PIXEL_AGENTS)
   conferir(`saída sequencial deixa ${restantes} no coworking`, visuais.filter((item) => item.squad === 'sala mista').length === restantes)
+}
+
+// O catálogo em visão geral pode expor salas em descanso, sem inventar atividade.
+const geralParado = calcularLayoutSala(catalogoVisual)
+conferir('visão geral tem vários squads mesmo sem atividade', geralParado.ilhas.length > 1)
+conferir('visão geral preserva exatamente as identidades do catálogo',
+  geralParado.mesas.map((mesa) => mesa.execucao.chave).sort().join('|') === catalogoVisual.map((item) => item.chave).sort().join('|'))
+conferir('expor o catálogo não transforma descanso em execução', geralParado.mesas.every((mesa) => !mesa.execucao.ativa))
+for (const quantidade of [1, 2, 3, 6]) {
+  const sala = calcularLayoutSala(ocupantes.slice(0, quantidade)).ilhas[0]
+  conferir(`sala mista com ${quantidade} ocupantes não cria postos fantasmas`, sala.postos.length === quantidade && sala.mesas.length === quantidade)
 }
 
 const sessaoCodex = globais[4]
