@@ -531,7 +531,8 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   ]
   const larguraIlha = 360
   const margemX = 16
-  const vaoX = 10
+  const vaoX = 4
+  const vaoY = 6
   const margemTopo = 128
   const espacamentoMesaY = 72
   const espacamentoMesaXMaximo = 80
@@ -554,7 +555,7 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
         ? Math.floor((colunas - 1) / 2)
         : cursores.indexOf(menor)
       posicoes.push({ squad, coluna, y: cursores[coluna] })
-      cursores[coluna] += (alturas.get(squad) || 0) + 16
+      cursores[coluna] += (alturas.get(squad) || 0) + vaoY
     })
     // A faixa de descanso já tem respiro próprio; somar outro vão externo
     // deixava uma borda morta no fundo quando a largura limitava a escala.

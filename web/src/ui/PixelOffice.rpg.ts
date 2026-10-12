@@ -344,8 +344,6 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: Retur
   ]
   const elevated = project(island.x, island.y, 26)
   const wallHeight = clamp(Math.abs(corners[0].y - elevated.y) * 1.55, 28, 40)
-  const floor = '#b9b6ae'
-  const shadow = corners.map((corner) => ({ x: corner.x + 2, y: corner.y + 3 }))
   // topY = max(baseY - wallHeight, maior fundo da navegação + 8 px).
   const raised = (point: Point) => ({ x: point.x, y: Math.max(point.y - wallHeight, wallTopLimit) })
   const topLeft = raised(corners[0])
@@ -357,26 +355,25 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: Retur
   ctx.beginPath()
   ctx.rect(0, wallTopLimit, ctx.canvas.width, Math.max(0, ctx.canvas.height - wallTopLimit))
   ctx.clip()
-  polygon(ctx, shadow, '#40362615')
-  polygon(ctx, corners, floor)
-  polygon(ctx, [corners[0], corners[1], topRight, topLeft], '#8ebac418', '#758b8e', 1)
-  polygon(ctx, [corners[0], corners[3], farLeft, topLeft], '#8ebac422', '#758b8e', 1)
-  polygon(ctx, [corners[1], corners[2], farRight, topRight], '#8ebac414', '#758b8e', 1)
+  // O piso é compartilhado entre zonas; só os perfis translúcidos as delimitam.
+  polygon(ctx, [corners[0], corners[1], topRight, topLeft], '#8ebac40c', '#758b8e66', .75)
+  polygon(ctx, [corners[0], corners[3], farLeft, topLeft], '#8ebac410', '#758b8e66', .75)
+  polygon(ctx, [corners[1], corners[2], farRight, topRight], '#8ebac40a', '#758b8e66', .75)
 
   ctx.save()
-  ctx.strokeStyle = '#ffffff88'
-  ctx.lineWidth = 2
+  ctx.strokeStyle = '#ffffff44'
+  ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(topLeft.x, topLeft.y + 2)
   ctx.lineTo(topRight.x, topRight.y + 2)
   ctx.stroke()
-  ctx.strokeStyle = '#758b8e'
-  ctx.lineWidth = 1
+  ctx.strokeStyle = '#758b8e66'
+  ctx.lineWidth = .75
   ctx.beginPath()
   ctx.moveTo(farLeft.x, farLeft.y)
   ctx.lineTo(farRight.x, farRight.y)
   ctx.stroke()
-  ctx.strokeStyle = '#8da2a855'
+  ctx.strokeStyle = '#8da2a833'
   for (const ratio of [1 / 3, 2 / 3]) {
     const left = { x: topLeft.x + (topRight.x - topLeft.x) * ratio, y: topLeft.y + (topRight.y - topLeft.y) * ratio }
     const right = { x: corners[0].x + (corners[1].x - corners[0].x) * ratio, y: corners[0].y + (corners[1].y - corners[0].y) * ratio }
@@ -463,6 +460,14 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   const navigationBottom = Math.max(...navigation.map((item) => item.y + item.height))
   const wallTopLimit = navigationBottom + ROOM_NAVIGATION_GAP
   const roomSigns: RoomSign[] = []
+  if (layout.ilhas.length) {
+    const left = Math.min(...layout.ilhas.map((island) => island.x))
+    const top = Math.min(...layout.ilhas.map((island) => island.y))
+    const right = Math.max(...layout.ilhas.map((island) => island.x + island.largura))
+    const bottom = Math.max(...layout.ilhas.map((island) => island.y + island.altura))
+    // Um campo greige contínuo inclui os corredores, sem cartões ou sombras por sala.
+    polygon(ctx, [project(left, top), project(right, top), project(right, bottom), project(left, bottom)], '#b9b6ae')
+  }
   layout.ilhas.forEach((island) => {
     roomSigns.push(drawRoom(ctx, island, project, wallTopLimit))
 
@@ -519,6 +524,9 @@ const movement = new Map<string, { x: number; y: number; direction: Direction }>
 const walkingState = new Map<string, boolean>()
 let lastWalkEventAt = 0
 
+// Mesa de 62 px domina a estação; preserva o recorte sentado e a âncora dos pés.
+const CHARACTER_SCALE = .8
+
 type PasseioAmbiente = { x: number; y: number; direction: Direction }
 
 function drawCharacterSprite(
@@ -545,7 +553,7 @@ function drawCharacterSprite(
   // junto com as pernas de uma figura em pé (especialmente nos humanos).
   const sourceHeight = image.naturalHeight * (seatedAtDesk ? person.tipoVisual === 'humano' ? .64 : .82 : 1)
   const ratio = image.naturalWidth / sourceHeight
-  const targetHeight = height + 5
+  const targetHeight = height + 5 * CHARACTER_SCALE
   const targetWidth = targetHeight * ratio
   ctx.save()
   ctx.imageSmoothingEnabled = true
@@ -628,8 +636,8 @@ function drawCharacter(
   const point = { x: pontoBase.x + (passeio?.x ?? 0), y: pontoBase.y + (passeio?.y ?? 0) }
   const directionReal = directionFor(person.animacaoChave, pose)
   const direction = naMesa ? 'down' : pose.andando ? directionReal : passeio?.direction ?? directionReal
-  const width = sentado ? 58 : 62
-  const height = sentado ? 56 : 64
+  const width = (sentado ? 58 : 62) * CHARACTER_SCALE
+  const height = (sentado ? 56 : 64) * CHARACTER_SCALE
   const idleOffsetY = quadro.reduzirMovimento || naMesa ? 0 : round(Math.sin(quadro.tempo * 1.7 + person.ordem * 0.8) * 1.25)
   const spritePoint = { x: point.x, y: point.y + idleOffsetY }
   const x = round(spritePoint.x - width / 2)
@@ -649,7 +657,7 @@ function drawCharacter(
   if (!drawCharacterSprite(ctx, person, x, y, width, height, direction, naMesa)) {
     const fallback = ctx.createLinearGradient(point.x, point.y - 38, point.x, point.y)
     fallback.addColorStop(0, blendColor(person.cor || PALETTE.moss, '#ffffff', .25)); fallback.addColorStop(1, person.cor || PALETTE.moss)
-    roundedPanel(ctx, point.x - 12, point.y - 36, 24, 34, 11, fallback, '#16233a', 1)
+    roundedPanel(ctx, point.x - 12 * CHARACTER_SCALE, point.y - 36 * CHARACTER_SCALE, 24 * CHARACTER_SCALE, 34 * CHARACTER_SCALE, 11 * CHARACTER_SCALE, fallback, '#16233a', 1)
   }
   if (naMesa) {
     // O tampo esconde a parte inferior do sprite inteiro: cabeça e tronco
