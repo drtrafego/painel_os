@@ -3,6 +3,7 @@ import environmentAtlasUrl from './pixel-office-rpg/environment-atlas.png'
 import {
   compactacaoRpg,
   projetarRpg,
+  statusSeguroDaExecucao,
   type HitRpg,
   type IlhaRpg,
   type PoseRpg,
@@ -13,6 +14,7 @@ type Point = { x: number; y: number }
 type Direction = 'down' | 'left' | 'right' | 'up'
 type SpriteSource = { x: number; y: number; w: number; h: number }
 type Bounds = { x: number; y: number; width: number; height: number }
+type CharacterBounds = Bounds & { point: Point; selected: boolean; statusColor: string; robot: boolean; status: string | null }
 
 const PALETTE = {
   void: '#081013',
@@ -600,6 +602,57 @@ function variedCharacterSprite(
   return canvas
 }
 
+function drawRobot(
+  ctx: CanvasRenderingContext2D,
+  person: QuadroRpg['personagens'][number]['mesa']['execucao'],
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  frame: number,
+  direction: Direction,
+  active: boolean,
+) {
+  const scale = Math.max(2, round(width / 22))
+  const center = round(x + width / 2)
+  const top = round(y + height - scale * 16)
+  const bob = frame === 1 ? 0 : 1
+  const shell = blendColor(validColor(person.cor, PALETTE.cream), PALETTE.cream, .48)
+  const shade = blendColor(shell, PALETTE.ink, .28)
+  const accent = validColor(person.destaque, PALETTE.gold)
+  const outline = PALETTE.ink
+  const eye = active ? PALETTE.live : person.execucao.estado === 'silencioso' ? PALETTE.idle : PALETTE.rest
+  const sideShift = direction === 'left' ? -scale : direction === 'right' ? scale : 0
+
+  ctx.fillStyle = outline
+  ctx.fillRect(center - scale, top - scale * 2 + bob, scale * 2, scale * 2)
+  ctx.fillStyle = accent
+  ctx.fillRect(center, top - scale * 3 + bob, scale, scale)
+  ctx.fillStyle = outline
+  ctx.fillRect(center - scale * 7, top + bob, scale * 14, scale * 8)
+  ctx.fillStyle = shell
+  ctx.fillRect(center - scale * 6, top + scale + bob, scale * 12, scale * 6)
+  ctx.fillStyle = shade
+  ctx.fillRect(center - scale * 5, top + scale * 6 + bob, scale * 10, scale)
+  ctx.fillStyle = PALETTE.void
+  ctx.fillRect(center - scale * 5 + sideShift, top + scale * 2 + bob, scale * 10, scale * 3)
+  ctx.fillStyle = eye
+  ctx.fillRect(center - scale * 3 + sideShift, top + scale * 3 + bob, scale, scale)
+  ctx.fillRect(center + scale * 2 + sideShift, top + scale * 3 + bob, scale, scale)
+  ctx.fillStyle = outline
+  ctx.fillRect(center - scale * 4, top + scale * 8 + bob, scale * 8, scale * 7)
+  ctx.fillStyle = shell
+  ctx.fillRect(center - scale * 3, top + scale * 8 + bob, scale * 6, scale * 5)
+  ctx.fillStyle = accent
+  ctx.fillRect(center - scale, top + scale * 9 + bob, scale * 2, scale * 2)
+  ctx.fillStyle = outline
+  const armLift = frame === 0 ? scale : 0
+  ctx.fillRect(center - scale * 6, top + scale * 9 - armLift + bob, scale * 3, scale * 2)
+  ctx.fillRect(center + scale * 3, top + scale * 9 + armLift + bob, scale * 3, scale * 2)
+  ctx.fillRect(center - scale * 4, top + scale * 14 + bob, scale * 3, scale * 2)
+  ctx.fillRect(center + scale, top + scale * 14 + bob, scale * 3, scale * 2)
+}
+
 function recordWalkEvent(key: string, walking: boolean) {
   const wasWalking = walkingState.get(key) ?? false
   if (walking && !wasWalking) lastWalkEventAt = Date.now()
@@ -695,7 +748,9 @@ function drawCharacter(
     ctx.lineWidth = selected ? 3 : 2
     ctx.strokeRect(spritePoint.x - 18, spritePoint.y - 7, 36, 12)
   }
-  if (image) {
+  if (person.tipoVisual === 'robo') {
+    drawRobot(ctx, person, x, y, width, height, frame, direction, person.ativa)
+  } else if (image) {
     const source = { x: frame * cellWidth, y: row * cellHeight, w: cellWidth, h: cellHeight }
     const variedSprite = variedCharacterSprite(image, source, width, height, appearanceFor(person))
     if (variedSprite) ctx.drawImage(variedSprite, x, y)
@@ -711,7 +766,7 @@ function drawCharacter(
   ctx.fillRect(spritePoint.x + 11, spritePoint.y - 37, 5, 5)
   ctx.restore()
 
-  return { point: spritePoint, x: spritePoint.x - 17, y: spritePoint.y - 53, width: 34, height: 56, selected, statusColor }
+  return { point: spritePoint, x: spritePoint.x - 17, y: spritePoint.y - 53, width: 34, height: 56, selected, statusColor, robot: person.tipoVisual === 'robo', status: statusSeguroDaExecucao(person) } satisfies CharacterBounds
 }
 
 function drawName(ctx: CanvasRenderingContext2D, name: string, point: Point, color: string, selected: boolean) {
@@ -733,6 +788,44 @@ function drawName(ctx: CanvasRenderingContext2D, name: string, point: Point, col
   ctx.fillText(label, x + 13, y + 9)
 }
 
+function drawStatusBubble(ctx: CanvasRenderingContext2D, text: string, point: Point, occupied: Bounds[], index: number, sceneWidth: number) {
+  ctx.font = '700 8px "JetBrains Mono", monospace'
+  const words = text.split(' ')
+  const lines: string[] = []
+  words.forEach((word) => {
+    const candidate = lines.length ? `${lines[lines.length - 1]} ${word}` : word
+    if (lines.length && ctx.measureText(candidate).width > 112) lines.push(word)
+    else if (lines.length) lines[lines.length - 1] = candidate
+    else lines.push(word)
+  })
+  const visibleLines = lines.slice(0, 2)
+  const width = Math.max(92, Math.min(132, Math.max(...visibleLines.map((line) => ctx.measureText(line).width)) + 18))
+  const height = visibleLines.length > 1 ? 31 : 23
+  const offsets = [0, -46, 46, -72, 72]
+  let bounds: Bounds = { x: round(point.x - width / 2), y: round(point.y - 82), width, height }
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const x = clamp(round(point.x - width / 2 + offsets[(index + attempt) % offsets.length]), 7, sceneWidth - width - 7)
+    const y = Math.max(124, round(point.y - 82 - Math.floor(attempt / offsets.length) * 20))
+    const candidate = { x, y, width, height }
+    if (!occupied.some((other) => boundsOverlap(candidate, other))) { bounds = candidate; break }
+  }
+  occupied.push(bounds)
+  ctx.fillStyle = '#101820cc'
+  ctx.fillRect(bounds.x + 2, bounds.y + 3, bounds.width, bounds.height)
+  ctx.fillStyle = '#f8efd4'
+  ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
+  ctx.strokeStyle = '#7a6a57'
+  ctx.lineWidth = 1
+  ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
+  const tailX = clamp(round(point.x), bounds.x + 10, bounds.x + bounds.width - 10)
+  ctx.fillStyle = '#f8efd4'
+  polygon(ctx, [{ x: tailX - 4, y: bounds.y + bounds.height }, { x: tailX + 4, y: bounds.y + bounds.height }, { x: tailX, y: bounds.y + bounds.height + 6 }], '#f8efd4', '#7a6a57')
+  ctx.fillStyle = PALETTE.ink
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  visibleLines.forEach((line, lineIndex) => ctx.fillText(line, bounds.x + bounds.width / 2, bounds.y + 9 + lineIndex * 10))
+}
+
 export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: QuadroRpg): HitRpg[] {
   const startedAt = typeof performance === 'undefined' ? 0 : performance.now()
   const environment = loadImage(environmentAtlasUrl, 'environment')
@@ -740,6 +833,7 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
   const project = projection(quadro.layout)
   const hits: HitRpg[] = []
   const labels: Array<{ name: string; point: Point; color: string; selected: boolean }> = []
+  const bubbles: Array<{ text: string; point: Point; selected: boolean }> = []
 
   ctx.save()
   try {
@@ -758,9 +852,15 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
       const bounds = drawCharacter(ctx, characters, quadro, character, project)
       if (!bounds) return
       hits.push({ chave: character.mesa.execucao.chave, x: bounds.x, y: bounds.y, largura: bounds.width, altura: bounds.height })
-      labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: bounds.selected })
+      if (bounds.robot) {
+        if (bounds.status) bubbles.push({ text: bounds.status, point: bounds.point, selected: bounds.selected })
+        else if (bounds.selected) labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: true })
+      } else labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: bounds.selected })
     })
     labels.forEach((label) => drawName(ctx, label.name, label.point, label.color, label.selected))
+    const bubbleLimit = quadro.layout.largura < 700 ? 3 : 5
+    const occupied: Bounds[] = []
+    bubbles.sort((a, b) => Number(b.selected) - Number(a.selected)).slice(0, bubbleLimit).forEach((bubble, index) => drawStatusBubble(ctx, bubble.text, bubble.point, occupied, index, quadro.layout.largura))
 
     if (!quadro.layout.ilhas.length) {
       ctx.fillStyle = PALETTE.cream
@@ -781,6 +881,9 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
   ctx.canvas.dataset.officeRenderMs = renderMs.toFixed(2)
   ctx.canvas.dataset.officeFrameBudget = renderMs < 16 ? 'ok' : 'over'
   ctx.canvas.dataset.officeSpriteAgents = String(quadro.personagens.length)
+  ctx.canvas.dataset.officeRobotAgents = String(quadro.personagens.filter((character) => character.mesa.execucao.tipoVisual === 'robo').length)
+  ctx.canvas.dataset.officeHumanAgents = String(quadro.personagens.filter((character) => character.mesa.execucao.tipoVisual === 'humano').length)
+  ctx.canvas.dataset.officeStatusBubbles = String(quadro.personagens.filter((character) => statusSeguroDaExecucao(character.mesa.execucao)).length)
   ctx.canvas.dataset.officeWalkers = String(quadro.personagens.filter((character) => character.pose.andando).length)
   ctx.canvas.dataset.officeLastWalkEvent = lastWalkEventAt ? String(lastWalkEventAt) : 'none'
   return hits
