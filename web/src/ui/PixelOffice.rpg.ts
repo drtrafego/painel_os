@@ -142,6 +142,22 @@ function polygon(ctx: CanvasRenderingContext2D, points: Point[], fill: string | 
 }
 
 
+function softPolygon(ctx: CanvasRenderingContext2D, points: Point[], fill: string | CanvasGradient, radius: number) {
+  ctx.beginPath()
+  const toward = (a: Point, b: Point) => {
+    const ratio = Math.min(.4, radius / Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)))
+    return { x: a.x + (b.x - a.x) * ratio, y: a.y + (b.y - a.y) * ratio }
+  }
+  points.forEach((point, index) => {
+    const before = toward(point, points[(index + points.length - 1) % points.length])
+    const after = toward(point, points[(index + 1) % points.length])
+    if (index === 0) ctx.moveTo(before.x, before.y)
+    else ctx.lineTo(before.x, before.y)
+    ctx.quadraticCurveTo(point.x, point.y, after.x, after.y)
+  })
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill()
+}
+
 function roundedPanel(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number, fill: string | CanvasGradient, stroke?: string, lineWidth = 1) {
   ctx.beginPath()
   ctx.roundRect(round(x), round(y), Math.max(1, round(width)), Math.max(1, round(height)), radius)
@@ -150,17 +166,34 @@ function roundedPanel(ctx: CanvasRenderingContext2D, x: number, y: number, width
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke() }
 }
 
+function contactShadow(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number) {
+  ctx.save(); ctx.shadowColor = '#40362640'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1
+  ctx.fillStyle = '#4036262b'; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+}
+
 function drawSmoothFurniture(ctx: CanvasRenderingContext2D, kind: 'desk' | 'chair' | 'plant', x: number, y: number, width: number, height: number) {
   ctx.save()
   ctx.imageSmoothingEnabled = true
   ctx.shadowColor = '#40362630'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 2
   if (kind === 'desk') {
-    // Tampo âmbar, saia e gaveteiro dão volume sem alterar a escala do posto.
-    roundedPanel(ctx, x + 3, y + height * .43, width - 6, height * .44, 2, '#754725', '#4c3425', .7)
-    roundedPanel(ctx, x + width * .76, y + height * .43, width * .19, height * .52, 2, '#89542c')
-    const wood = ctx.createLinearGradient(x, y + height * .24, x, y + height * .6)
-    wood.addColorStop(0, '#b77d39'); wood.addColorStop(1, '#a66b31')
-    roundedPanel(ctx, x, y + height * .24, width, height * .38, 3, wood, '#d09a51', 1)
+    // Silhueta e âncora do posto preservadas. Três tons e um bisel macio
+    // dão espessura ao tampo sem mudar a área ocupada pelo móvel.
+    ctx.shadowColor = 'transparent'
+    const contact = ctx.createRadialGradient(x + width / 2, y + height * .89, 1, x + width / 2, y + height * .89, width * .55)
+    contact.addColorStop(0, '#49352350'); contact.addColorStop(1, '#49352300')
+    ctx.fillStyle = contact
+    ctx.beginPath(); ctx.ellipse(x + width / 2, y + height * .89, width * .55, height * .14, 0, 0, Math.PI * 2); ctx.fill()
+    const apron = ctx.createLinearGradient(x, y + height * .43, x, y + height * .9)
+    apron.addColorStop(0, '#ad7541'); apron.addColorStop(1, '#754b2c')
+    roundedPanel(ctx, x + 3, y + height * .43, width - 6, height * .44, 4, apron)
+    roundedPanel(ctx, x + width * .76, y + height * .43, width * .19, height * .52, 3, '#895a36')
+    ctx.shadowColor = '#4c342530'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 2
+    roundedPanel(ctx, x, y + height * .29, width, height * .38, 5, '#9c642f')
+    const wood = ctx.createLinearGradient(x, y + height * .24, x + width * .15, y + height * .62)
+    wood.addColorStop(0, '#e6bd79'); wood.addColorStop(.42, '#c99250'); wood.addColorStop(1, '#ad733b')
+    roundedPanel(ctx, x, y + height * .24, width, height * .36, 5, wood, '#e7be7b', .7)
+    ctx.shadowColor = 'transparent'
+    roundedPanel(ctx, x + 4, y + height * .27, width - 8, 2, 1, '#ffe2a75c')
     ctx.shadowColor = 'transparent'
     ctx.fillStyle = '#f0e4c5'; ctx.fillRect(x + width * .1, y + height * .32, width * .18, height * .16)
     // Espessura e dobra da folha, legíveis mesmo no módulo compacto.
@@ -176,12 +209,14 @@ function drawSmoothFurniture(ctx: CanvasRenderingContext2D, kind: 'desk' | 'chai
     ctx.fillStyle = '#222a32'; ctx.fillRect(x + width * .38, y + height * .32, width * .27, 2)
     ctx.fillStyle = '#d09a51'; ctx.fillRect(x + width * .81, y + height * .73, width * .09, 1)
   } else if (kind === 'chair') {
+    contactShadow(ctx, x + width / 2, y + height, width * .6, 4)
     roundedPanel(ctx, x + width * .18, y, width * .64, height * .56, 4, '#526171', '#687789', .8)
     ctx.shadowColor = 'transparent'
     roundedPanel(ctx, x + width * .08, y + height * .5, width * .84, height * .22, 3, '#35414d')
     ctx.strokeStyle = '#35414d'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x + width / 2, y + height * .68); ctx.lineTo(x + width / 2, y + height * .9); ctx.moveTo(x + width * .2, y + height); ctx.lineTo(x + width / 2, y + height * .88); ctx.lineTo(x + width * .8, y + height); ctx.stroke()
   } else {
     const cx = x + width / 2
+    contactShadow(ctx, cx, y + height, width * .52, 3)
     polygon(ctx, [{ x: x + width * .2, y: y + height * .61 }, { x: x + width * .8, y: y + height * .61 }, { x: x + width * .7, y: y + height }, { x: x + width * .3, y: y + height }], '#4c4934', '#5b5237')
     ctx.shadowColor = 'transparent'
     // Feixes de folhas sobrepostas, sem palmeiras altas nem vasos gigantes.
@@ -215,54 +250,77 @@ function projection(layout: QuadroRpg['layout']) {
 }
 
 function drawSceneDecor(ctx: CanvasRenderingContext2D, layout: QuadroRpg['layout'], project: ReturnType<typeof projection>) {
-  // Mobília de cena: não gera postos, ocupantes, etiquetas pessoais ou hits.
-  // O corredor entre a última fileira e o lounge já pertence ao piso aprovado.
+  // Somente decoração: nenhuma mesa, pose, seleção ou área de hit é criada.
+  const obstacles: Bounds[] = []
   const box = (x: number, y: number, width: number, depth: number, bottom: number, height: number, top: string, front: string, side: string) => {
     const a = project(x, y, bottom + height), b = project(x + width, y, bottom + height)
     const c = project(x + width, y + depth, bottom + height), d = project(x, y + depth, bottom + height)
-    polygon(ctx, [d, c, project(x + width, y + depth, bottom), project(x, y + depth, bottom)], front)
-    polygon(ctx, [b, c, project(x + width, y + depth, bottom), project(x + width, y, bottom)], side)
-    polygon(ctx, [a, b, c, d], top)
+    const material = ctx.createLinearGradient(a.x, a.y, d.x, d.y + height)
+    material.addColorStop(0, top); material.addColorStop(1, front)
+    softPolygon(ctx, [d, c, project(x + width, y + depth, bottom), project(x, y + depth, bottom)], front, 3)
+    softPolygon(ctx, [b, c, project(x + width, y + depth, bottom), project(x + width, y, bottom)], side, 3)
+    softPolygon(ctx, [a, b, c, d], material, 3)
   }
   const shadow = (x: number, y: number, width: number, depth: number) => {
-    polygon(ctx, [project(x - 2, y), project(x + width + 4, y), project(x + width + 4, y + depth + 4), project(x - 2, y + depth + 4)], '#40362626')
+    ctx.save(); ctx.shadowColor = '#3b302e40'; ctx.shadowBlur = 7; ctx.shadowOffsetY = 3
+    softPolygon(ctx, [project(x - 2, y), project(x + width + 3, y), project(x + width + 3, y + depth + 3), project(x - 2, y + depth + 3)], '#40362628', 5)
+    ctx.restore()
   }
   ctx.save()
-  const receptionWidth = Math.min(88, layout.largura * .2)
-  let receptionX = layout.largura * .24 - receptionWidth / 2
-  const loungeLeft = (layout.largura - Math.min(layout.largura - 60, 140 + layout.ocupantesDescanso * 44)) / 2
-  // Reserva a placa existente em plantas estreitas; um sofá basta nesse caso.
-  if (layout.descansoAberto && receptionX < loungeLeft + 120 && receptionX + receptionWidth > loungeLeft) receptionX = loungeLeft + 120
-  const receptionY = layout.descansoY + (layout.descansoAberto ? 16 : -8)
-  const counterHeight = layout.descansoAberto ? 30 : 17
-  shadow(receptionX, receptionY, receptionWidth, 21)
-  box(receptionX + 3, receptionY + 2, receptionWidth - 6, 18, 0, 4, '#b49a6a', '#947e59', '#947e59')
-  box(receptionX, receptionY, receptionWidth, 21, 4, counterHeight, '#ede1bf', '#d7c398', '#b49a6a')
-  box(receptionX - 2, receptionY - 1, receptionWidth + 4, 23, counterHeight + 4, 3, '#ede1bf', '#e2d4b3', '#c6b087')
-  // Painel rebaixado claro, sem monitor ou cadeira que sugiram agente extra.
-  polygon(ctx, [project(receptionX + 7, receptionY + 21, counterHeight - 3), project(receptionX + receptionWidth - 7, receptionY + 21, counterHeight - 3), project(receptionX + receptionWidth - 7, receptionY + 21, 9), project(receptionX + 7, receptionY + 21, 9)], '#e2d4b3')
-
-  if (layout.descansoAberto) {
-    const sofaWidth = Math.min(104, layout.largura * .21)
-    // Dois sofás atrás da fileira existente, com passagem entre os volumes.
-    // O limite frontal fica antes dos pés dos robôs; poses seguem intactas.
-    for (const center of [layout.largura * .55, layout.largura * .81]) {
-      const x = center - sofaWidth / 2, y = layout.descansoY + 10
-      if (x < receptionX + receptionWidth + 16 && x + sofaWidth > receptionX - 16) continue
-      shadow(x, y, sofaWidth, 25)
-      box(x + 4, y + 3, sofaWidth - 8, 21, 0, 4, '#293238', '#222a32', '#222a32')
-      box(x, y, sofaWidth, 25, 4, 9, '#616a6b', '#293238', '#35414d')
-      box(x, y, sofaWidth, 7, 13, 15, '#616a6b', '#465154', '#293238')
-      const cushionWidth = (sofaWidth - 19) / 2
-      for (let cushion = 0; cushion < 2; cushion += 1) {
-        box(x + 8 + cushion * (cushionWidth + 3), y + 9, cushionWidth, 14, 13, 3, '#616a6b', '#465154', '#35414d')
+  const firstY = layout.mesas.length ? Math.min(...layout.mesas.map((desk) => desk.y)) : 318
+  // A reserva posterior acima da grade recebe uma saleta, longe das poses
+  // de descanso já existentes na frente. O conjunto cabe também sem parados.
+  const loungeWidth = Math.min(244, layout.largura - 100)
+  const loungeX = layout.largura - loungeWidth - 42
+  const loungeY = Math.max(136, firstY - 182)
+  const loungeDepth = Math.min(84, firstY - 88 - loungeY)
+  if (loungeDepth >= 70) {
+    const corners = [project(loungeX - 10, loungeY - 6, 30), project(loungeX + loungeWidth + 10, loungeY - 6, 30), project(loungeX - 10, loungeY + loungeDepth + 7), project(loungeX + loungeWidth + 10, loungeY + loungeDepth + 7)]
+    const left = Math.min(...corners.map((p) => p.x)), top = Math.min(...corners.map((p) => p.y))
+    obstacles.push({ x: left, y: top, width: Math.max(...corners.map((p) => p.x)) - left, height: Math.max(...corners.map((p) => p.y)) - top })
+    softPolygon(ctx, [project(loungeX - 10, loungeY - 6), project(loungeX + loungeWidth + 10, loungeY - 6), project(loungeX + loungeWidth + 10, loungeY + loungeDepth + 7), project(loungeX - 10, loungeY + loungeDepth + 7)], '#a8ada5', 9)
+    const sofaWidth = loungeWidth - 50
+    const sofa = (y: number, facingFront: boolean) => {
+      const x = loungeX + 25, depth = 24
+      shadow(x, y, sofaWidth, depth)
+      box(x + 3, y + 2, sofaWidth - 6, depth - 2, 0, 5, '#35414d', '#253039', '#202b35')
+      box(x, y, sofaWidth, depth, 5, 10, '#7f8c8b', '#47585d', '#35454c')
+      for (let i = 0; i < 3; i += 1) {
+        box(x + 9 + i * (sofaWidth - 18) / 3, y + 6, (sofaWidth - 24) / 3, 15, 15, 4, '#99a4a0', '#68797b', '#526569')
       }
-      for (const armX of [x, x + sofaWidth - 6]) {
-        box(armX, y + 6, 6, 19, 13, 7, '#697273', '#35414d', '#293238')
-      }
+      box(x, facingFront ? y : y + depth - 6, sofaWidth, 6, 14, 14, '#899893', '#53676b', '#3d5159')
+      for (const armX of [x, x + sofaWidth - 7]) box(armX, y + 2, 7, depth - 2, 15, 6, '#a0aaa1', '#657a7c', '#465f66')
+    }
+    sofa(loungeY, true)
+    // Mesa baixa entre os assentos: grupo face a face, sem fileira solta.
+    const tableX = loungeX + loungeWidth / 2 - 26
+    shadow(tableX, loungeY + 34, 52, 16)
+    box(tableX + 5, loungeY + 36, 42, 12, 0, 7, '#95713e', '#806344', '#705335')
+    box(tableX, loungeY + 33, 52, 18, 7, 4, '#efe0b8', '#c5ab7d', '#ad9062')
+    sofa(loungeY + loungeDepth - 24, false)
+    for (const x of [loungeX + 4, loungeX + loungeWidth - 4]) {
+      const p = project(x, loungeY + 29)
+      drawSmoothFurniture(ctx, 'plant', p.x - 9, p.y - 23, 18, 27)
     }
   }
+
+  const receptionWidth = Math.min(126, layout.largura * .27)
+  const receptionX = Math.max(40, layout.largura * .22 - receptionWidth / 2)
+  const receptionY = layout.altura - 37
+  shadow(receptionX, receptionY, receptionWidth, 23)
+  box(receptionX + 3, receptionY + 2, receptionWidth - 6, 20, 0, 4, '#9e8256', '#705f48', '#786044')
+  box(receptionX, receptionY, receptionWidth, 23, 4, 25, '#eee0bd', '#d3b885', '#aa8959')
+  box(receptionX - 3, receptionY - 2, receptionWidth + 6, 27, 29, 4, '#fff0d0', '#e4c99b', '#bb996b')
+  const plaque = project(receptionX + receptionWidth / 2, receptionY + 24, 17)
+  roundedPanel(ctx, plaque.x - 41, plaque.y - 7, 82, 15, 4, '#27313c', '#c7ac77', .8)
+  ctx.font = '800 10px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#fff5dc'; ctx.fillText('RECEPÇÃO', plaque.x, plaque.y + 1)
+  // Bandeja e vaso são acessórios, não uma estação de agente adicional.
+  box(receptionX + 12, receptionY + 5, 23, 10, 33, 2, '#526171', '#35414d', '#293238')
+  const plant = project(receptionX + receptionWidth - 17, receptionY + 10, 33)
+  drawSmoothFurniture(ctx, 'plant', plant.x - 6, plant.y - 13, 12, 16)
   ctx.restore()
+  return obstacles
 }
 
 function alphaForIsland(quadro: QuadroRpg, island?: IlhaRpg) {
@@ -430,39 +488,68 @@ function drawRoom(island: IlhaRpg, project: ReturnType<typeof projection>, wallT
   }
 }
 
+// A grade permanece intacta: salas só envolvem trechos contíguos de uma
+// fileira. Nunca usamos o retângulo de um squad que atravessa outras mesas.
+function glassRooms(islands: ReadonlyArray<IlhaRpg>) {
+  const largest = [...islands].sort((a, b) => b.postos.length - a.postos.length)[0]
+  return islands.filter((island) => island !== largest && island.postos.length > 0 &&
+    island.postos.every((desk) => desk.y === island.postos[0].y))
+    .sort((a, b) => a.x - b.x || a.y - b.y).slice(0, 3)
+}
+
 function drawGlassRoom(ctx: CanvasRenderingContext2D, islands: ReadonlyArray<IlhaRpg>, project: ReturnType<typeof projection>) {
-  // Extents de squads podem se cruzar ao virar a fileira da grade contínua.
-  // Escolha um grupo pequeno em uma só fileira, nunca o salão principal.
-  const largest = Math.max(0, ...islands.map((island) => island.postos.length))
-  const room = [...islands].filter((island) =>
-    island.postos.length > 0 && island.postos.length < largest &&
-    island.postos.every((desk) => desk.y === island.postos[0].y),
-  ).sort((a, b) => a.postos.length - b.postos.length || a.x - b.x)[0]
-  if (!room) return
-  const left = Math.min(...room.postos.map((desk) => desk.x)) - 38
-  const right = Math.max(...room.postos.map((desk) => desk.x)) + 38
-  const back = room.postos[0].y - 26
-  const front = room.postos[0].y + 42
-  // Sem preenchimento: piso e mobiliário continuam visíveis entre os perfis.
   ctx.save()
-  ctx.globalAlpha = .38
-  ctx.strokeStyle = '#758b8e'
-  ctx.lineWidth = .8
-  const line = (points: Point[]) => {
-    ctx.beginPath()
+  ctx.lineJoin = 'round'
+  const line = (points: Point[], color: string, width: number) => {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath()
     points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y))
     ctx.stroke()
   }
-  for (const elevation of [0, 56]) {
-    line([project(left, front, elevation), project(left, back, elevation), project(right, back, elevation), project(right, front, elevation)])
-    // Vão frontal sugere a passagem, sem atravessar a mesa com uma barra.
-    line([project(left, front, elevation), project(left + 16, front, elevation)])
-    line([project(right - 16, front, elevation), project(right, front, elevation)])
-  }
-  for (const [x, y] of [[left, back], [right, back], [left, front], [right, front]]) {
-    line([project(x, y), project(x, y, 56)])
+  for (const room of glassRooms(islands)) {
+    const left = Math.min(...room.postos.map((desk) => desk.x)) - 38
+    const right = Math.max(...room.postos.map((desk) => desk.x)) + 38
+    const back = room.postos[0].y - 27, front = room.postos[0].y + 40
+    // Faces laterais transparentes; frente aberta evita cobrir monitores.
+    for (const x of [left, right]) {
+      const points = [project(x, back), project(x, front), project(x, front, 52), project(x, back, 52)]
+      polygon(ctx, points, '#8ebac418')
+      line([project(x, back, 49), project(x, front, 49)], '#efffffad', 1.2)
+      line([project(x, back), project(x, front)], '#607f8366', 2.5)
+    }
+    for (const elevation of [0, 52]) {
+      line([project(left, front, elevation), project(left, back, elevation), project(right, back, elevation), project(right, front, elevation)], '#64858ca6', 1.6)
+      // Travessas curtas deixam uma porta larga voltada à circulação.
+      line([project(left, front, elevation), project(left + 12, front, elevation)], '#64858ca6', 1.6)
+      line([project(right - 12, front, elevation), project(right, front, elevation)], '#64858ca6', 1.6)
+    }
+    for (const [x, y] of [[left, back], [right, back], [left, front], [right, front]]) {
+      line([project(x, y), project(x, y, 52)], '#607f83b3', 2)
+      const p = project(x, y), q = project(x, y, 52)
+      line([{ x: p.x + 1, y: p.y - 1 }, { x: q.x + 1, y: q.y + 2 }], '#f2ffffb3', .8)
+    }
   }
   ctx.restore()
+}
+
+function drawCirculation(ctx: CanvasRenderingContext2D, layout: QuadroRpg['layout'], project: ReturnType<typeof projection>) {
+  if (!layout.mesas.length) return
+  const firstY = Math.min(...layout.mesas.map((desk) => desk.y))
+  const lastY = Math.max(...layout.mesas.map((desk) => desk.y))
+  const strip = (x: number, y: number, width: number, depth: number) =>
+    polygon(ctx, [project(x, y), project(x + width, y), project(x + width, y + depth), project(x, y + depth)], '#eee2c3', '#faf0d660', 1)
+  // Galeria transversal de 46 unidades, conectada ao acesso frontal.
+  strip(28, firstY - 82, layout.largura - 56, 46)
+  // Entre postos fixos de 62 px só cabe uma conexão estreita, sem invadi-los.
+  const columns = [...new Set(layout.mesas.map((desk) => desk.x))].sort((a, b) => a - b)
+  if (columns.length > 1) {
+    const middle = Math.floor(columns.length / 2)
+    const x = (columns[middle - 1] + columns[middle]) / 2
+    const scaleX = Math.abs(project(x + 1, firstY).x - project(x - 1, firstY).x) / 2
+    const screenGap = project(columns[middle], firstY).x - project(columns[middle - 1], firstY).x - 64
+    const passageWidth = Math.min(14, Math.max(0, screenGap / Math.max(.1, scaleX)))
+    if (passageWidth >= 2) strip(x - passageWidth / 2, firstY - 36, passageWidth, lastY - firstY + 92)
+  }
+  strip(28, lastY + 44, layout.largura - 56, 18)
 }
 
 function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
@@ -477,24 +564,29 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
 
   const floor = [project(10, 8), project(width - 10, 8), project(width - 10, height - 10), project(10, height - 10)]
   const floorGradient = ctx.createLinearGradient(0, floor[0].y, 0, Math.max(...floor.map((point) => point.y)))
-  floorGradient.addColorStop(0, '#dacda9'); floorGradient.addColorStop(.55, '#d6c79f'); floorGradient.addColorStop(1, '#d2c29b')
+  floorGradient.addColorStop(0, '#eee2c5'); floorGradient.addColorStop(.55, '#ddcfac'); floorGradient.addColorStop(1, '#d1bf99')
   polygon(ctx, [floor[3], floor[2], { x: floor[2].x, y: floor[2].y + 6 }, { x: floor[3].x, y: floor[3].y + 6 }], '#77766e', '#e2d4b3', 1)
   polygon(ctx, floor, floorGradient, '#e2d4b3', 1)
 
   const wall = [project(14, 6, 94), project(width - 14, 6, 94), project(width - 14, 6, 2), project(14, 6, 2)]
   const wallGradient = ctx.createLinearGradient(0, wall[0].y, 0, wall[2].y)
-  wallGradient.addColorStop(0, '#d0ae68'); wallGradient.addColorStop(1, '#c8a45d')
+  wallGradient.addColorStop(0, '#e8cd91'); wallGradient.addColorStop(.48, '#d9b777'); wallGradient.addColorStop(1, '#bd9859')
   polygon(ctx, wall, wallGradient, '#d8b76b', 1.5)
   // Ripas verticais no plano posterior, sempre do rodapé ao arremate.
   for (let x = 18; x < width - 14; x += 6) {
     const top = project(x, 6, 93), bottom = project(x, 6, 3)
-    ctx.strokeStyle = '#947239'; ctx.lineWidth = 1
+    ctx.strokeStyle = '#94723959'; ctx.lineWidth = 1.2
     ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.lineTo(bottom.x, bottom.y); ctx.stroke()
-    ctx.strokeStyle = '#dfc17d'; ctx.lineWidth = .7
+    ctx.strokeStyle = '#fff0c366'; ctx.lineWidth = .8
     ctx.beginPath(); ctx.moveTo(top.x + 1.5, top.y); ctx.lineTo(bottom.x + 1.5, bottom.y); ctx.stroke()
   }
   const side = [project(10, 8, 94), project(10, height - 10, 94), project(10, height - 10), project(10, 8)]
-  polygon(ctx, side, '#24343c', '#758b8e', 1)
+  const sideMaterial = ctx.createLinearGradient(side[0].x, side[0].y, side[2].x, side[2].y)
+  sideMaterial.addColorStop(0, '#3b515b'); sideMaterial.addColorStop(1, '#25363e')
+  polygon(ctx, side, sideMaterial, '#8fa2a2', 1)
+  // Rodapé e sombra curta ancoram as paredes na plataforma.
+  polygon(ctx, [project(12, 8), project(width - 12, 8), project(width - 12, 18), project(12, 18)], '#6b543b24')
+  polygon(ctx, [project(12, 8), project(23, 8), project(23, height - 12), project(12, height - 12)], '#24343c24')
   polygon(ctx, [project(11, 30, 38), project(11, height - 30, 38), project(11, height - 30, 8), project(11, 30, 8)], '#8ebac433', '#8ebac4', .6)
   const trimLeft = project(14, 6, 9), trimRight = project(width - 14, 6, 9)
   ctx.strokeStyle = '#d8b76b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(trimLeft.x, trimLeft.y); ctx.lineTo(trimRight.x, trimRight.y); ctx.stroke()
@@ -527,9 +619,23 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
     const bottom = layout.descansoAberto
       ? height - 14
       : Math.max(...layout.ilhas.map((island) => island.y + island.altura))
-    // O mesmo piso inclui corredores e descanso, sem uma segunda zona de cor.
-    polygon(ctx, [project(left, top), project(right, top), project(right, bottom), project(left, bottom)], '#b9b6ae')
+    const carpet = ctx.createLinearGradient(0, project(left, top).y, 0, project(right, bottom).y)
+    carpet.addColorStop(0, '#c8c6ba'); carpet.addColorStop(.6, '#bbb9ad'); carpet.addColorStop(1, '#afafa5')
+    softPolygon(ctx, [project(left, top), project(right, top), project(right, bottom), project(left, bottom)], carpet, 7)
   }
+  drawCirculation(ctx, layout, project)
+  // Grão fosco determinístico, de baixíssima intensidade, só no cache estático.
+  // Pontos no espaço do piso evitam textura fora da plataforma e cintilação.
+  ctx.save()
+  for (let y = 132; y < height - 16; y += 11) {
+    for (let x = 26; x < width - 20; x += 13) {
+      const seed = stableHash(`${x}:${y}`)
+      const p = project(x + seed % 7, y + (seed >>> 4) % 5)
+      ctx.fillStyle = seed % 2 ? '#fff9e609' : '#70583e06'
+      ctx.fillRect(p.x, p.y, seed % 3 === 0 ? 2 : 1, 1)
+    }
+  }
+  ctx.restore()
   drawGlassRoom(ctx, layout.ilhas, project)
   layout.ilhas.forEach((island) => {
     roomSigns.push(drawRoom(island, project, wallTopLimit))
@@ -545,24 +651,13 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
     const plant = project(x, layout.descansoY - 20)
     drawSmoothFurniture(ctx, 'plant', plant.x - 9, plant.y - 22, 18, 26)
   }
-  const furniture = roomSigns.flatMap((sign) => sign.furniture)
+  const decorations = drawSceneDecor(ctx, layout, project)
+  const furniture = [...roomSigns.flatMap((sign) => sign.furniture), ...decorations]
   const signsPlaced: Bounds[] = []
   roomSigns.forEach((sign) => {
     signsPlaced.push(drawRoomSign(ctx, { ...sign, furniture: [...furniture, ...signsPlaced] }, navigation))
   })
 
-  drawSceneDecor(ctx, layout, project)
-
-  if (layout.descansoAberto) {
-    const loungeWidth = Math.min(width - 60, 140 + layout.ocupantesDescanso * 44)
-    const x = (width - loungeWidth) / 2
-    const label = project(x + 8, layout.descansoY + 8)
-    roundedPanel(ctx, label.x - 4, label.y - 8, 76, 16, 3, '#202b35', '#99a6a7', .6)
-    ctx.fillStyle = '#f2f1e9'
-    ctx.font = '700 8px "JetBrains Mono", monospace'
-    ctx.textAlign = 'left'
-    ctx.fillText(`LOUNGE ${layout.ocupantesDescanso}`, label.x, label.y)
-  }
 
   for (const x of [30, width - 30]) {
     const plant = project(x, height - 30)
