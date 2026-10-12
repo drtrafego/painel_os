@@ -2,11 +2,7 @@ export interface PessoaRpg {
   chave: string; animacaoChave: string; nome: string; squad: string; squadNome: string
   cor: string; corEscura: string; destaque: string; cabelo: string; pele: string
   acessorio: number; ativa: boolean; temporaria: boolean; ordem: number; objeto: string
-  tipoVisual: 'humano' | 'robo'
-  execucao: {
-    estado: string; ferramenta?: string | null; tarefa?: string | null; etapa?: string | null
-    descricao?: string | null; papel?: string | null; tipo?: string | null; arquivo?: string | null
-  }
+  execucao: { estado: string; ferramenta?: string | null }
 }
 export interface MesaRpg { x: number; y: number; descanso: { x: number; y: number }; execucao: PessoaRpg }
 export interface IlhaRpg {
@@ -26,34 +22,6 @@ export interface QuadroRpg {
   selecionadoId?: string | null; hoverId?: string | null; progressos?: ReadonlyMap<string, number>
 }
 export interface HitRpg { chave: string; x: number; y: number; largura: number; altura: number; modulo?: string }
-
-function limparTextoAtividade(value?: string | null) {
-  return value?.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim() || ''
-}
-
-export function statusSeguroDaExecucao(person: PessoaRpg) {
-  if (!person.ativa) return null
-  const source = limparTextoAtividade(person.execucao.tarefa || person.execucao.etapa || person.execucao.descricao)
-  const normalized = source.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  const tool = limparTextoAtividade(person.execucao.ferramenta).toLowerCase()
-  const role = limparTextoAtividade(`${person.execucao.papel || ''} ${person.execucao.tipo || ''} ${person.objeto}`).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-
-  if (/contrato|proposta|juridic|assinatura/.test(normalized)) return 'Gerando contrato'
-  if (/documento|arquivo|pdf|drive/.test(normalized)) return /revis|valid|conf/.test(normalized) ? 'Revisando documento' : 'Processando documento'
-  if (/whatsapp|lead|mensagem|atendimento|cliente|crm|contato/.test(normalized)) return 'Respondendo lead'
-  if (/campanh|anuncio|criativo|meta ads|trafego/.test(normalized + role)) return /revis|valid|qa|conf/.test(normalized + role) ? 'Revisando campanha' : 'Otimizando campanha'
-  if (/teste|testando|playwright|qa|valid|verific|confer/.test(normalized + tool + role)) return 'Validando entrega'
-  if (/design|layout|visual|interface|sprite|css/.test(normalized + role)) return 'Criando interface'
-  if (/codigo|code|implement|desenvol|patch|typescript|tsx|python|build/.test(normalized + tool + role)) return 'Implementando melhoria'
-  if (/pesquis|search|explor|levant|investig/.test(normalized + tool + role)) return 'Pesquisando referências'
-  if (/escrev|redig|copy|roteiro|conteudo|texto/.test(normalized + tool + role)) return 'Preparando conteúdo'
-  if (/metric|relatorio|analise|analis/.test(normalized + role)) return 'Analisando resultados'
-  if (/public|deploy|envio|entrega/.test(normalized + tool + role)) return 'Publicando entrega'
-  if (/read|ler|leitura/.test(tool)) return 'Lendo contexto'
-  if (/edit|write/.test(tool)) return 'Trabalhando na tarefa'
-  if (/bash|terminal|command|exec/.test(tool)) return 'Executando operação'
-  return 'Processando tarefa'
-}
 
 type Point = { x: number; y: number }
 type Coluna = { x0: number; x1: number; topo: number; fundo: number; fator: number }
