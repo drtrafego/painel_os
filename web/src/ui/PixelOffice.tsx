@@ -529,14 +529,14 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     ...PIXEL_AGENT_SQUADS.map((squad) => squad.id).filter((id) => id !== SALA_MISTA && grupos.has(id)),
     ...(grupos.has(SALA_MISTA) ? [SALA_MISTA] : []),
   ]
-  const larguraIlha = 400
+  const larguraIlha = 360
   const margemX = 16
   const vaoX = 10
   const margemTopo = 128
-  const espacamentoMesaY = 88
-  const espacamentoMesaXMaximo = 96
+  const espacamentoMesaY = 72
+  const espacamentoMesaXMaximo = 80
   const colunasDaIlha = (squad: PixelAgentSquad, quantidade: number) =>
-    squad === SALA_MISTA ? Math.min(3, quantidade) : Math.min(5, Math.max(1, quantidade))
+    squad === SALA_MISTA ? Math.min(3, quantidade) : Math.min(4, Math.max(1, quantidade))
   const alturas = new Map<PixelAgentSquad, number>()
   ordemSquads.forEach((squad) => {
     const quantidade = grupos.get(squad)?.length || 0

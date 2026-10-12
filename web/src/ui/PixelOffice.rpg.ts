@@ -167,8 +167,8 @@ function drawSmoothFurniture(ctx: CanvasRenderingContext2D, kind: 'desk' | 'chai
     ctx.fillRect(x + width * .47, y + height * .23, width * .06, height * .12)
     ctx.fillRect(x + width * .39, y + height * .34, width * .23, 2)
     roundedPanel(ctx, x + width * .34, y, width * .32, height * .3, 2, '#222a32', '#526171', .7)
-    roundedPanel(ctx, x + width * .38, y + height * .04, width * .24, height * .2, 1, '#35414d')
-    ctx.fillStyle = '#222a32'; ctx.fillRect(x + width * .38, y + height * .48, width * .27, 2)
+    // Atrás da mesa, o ocupante olha para a tela; a câmera vê a carcaça.
+    ctx.fillStyle = '#222a32'; ctx.fillRect(x + width * .38, y + height * .32, width * .27, 2)
     ctx.fillStyle = '#d09a51'; ctx.fillRect(x + width * .81, y + height * .73, width * .09, 1)
   } else if (kind === 'chair') {
     roundedPanel(ctx, x + width * .18, y, width * .64, height * .56, 4, '#526171', '#687789', .8)
@@ -468,7 +468,7 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
 
     island.mesas.forEach((desk) => {
       const point = project(desk.x, desk.y + 18)
-      drawSmoothFurniture(ctx, 'chair', point.x - 13, point.y + 2, 26, 34)
+      drawSmoothFurniture(ctx, 'chair', point.x - 13, point.y - 35, 26, 34)
       drawSmoothFurniture(ctx, 'desk', point.x - 31, point.y - 28, 62, 45)
     })
     for (const [x, y] of [
@@ -529,6 +529,7 @@ function drawCharacterSprite(
   width: number,
   height: number,
   direction: Direction,
+  seatedAtDesk = false,
 ) {
   const identity = `${person.chave} ${person.nome} ${person.objeto}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const director = (Object.keys(DIRECTOR_ROBOTS) as Array<keyof typeof DIRECTOR_ROBOTS>).find((name) => identity.includes(name))
@@ -540,13 +541,16 @@ function drawCharacterSprite(
       : ROBOT_VARIANTS[stableHash(person.chave) % ROBOT_VARIANTS.length]
   const image = loadRobotImage(direction === 'up' ? variant.back : variant.front)
   if (!image) return false
-  const ratio = image.naturalWidth / image.naturalHeight
+  // Aproveita o tronco do arquivo existente, sem reduzir cabeça e ombros
+  // junto com as pernas de uma figura em pé (especialmente nos humanos).
+  const sourceHeight = image.naturalHeight * (seatedAtDesk ? person.tipoVisual === 'humano' ? .64 : .82 : 1)
+  const ratio = image.naturalWidth / sourceHeight
   const targetHeight = height + 5
   const targetWidth = targetHeight * ratio
   ctx.save()
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(image, round(x + (width - targetWidth) / 2), round(y + height - targetHeight), round(targetWidth), round(targetHeight))
+  ctx.drawImage(image, 0, 0, image.naturalWidth, sourceHeight, round(x + (width - targetWidth) / 2), round(y + height - targetHeight), round(targetWidth), round(targetHeight))
   ctx.restore()
   return true
 }
@@ -617,14 +621,16 @@ function drawCharacter(
   const opacity = alphaForIsland(quadro, island)
   if (opacity < 0.03) return null
   const passeio = passeioAmbiente(person.chave, pose, quadro.tempo, quadro.reduzirMovimento)
-  const pontoBase = project(pose.x, pose.y + 18)
+  const sentado = pose.sentado > 0.5 && !pose.andando && !passeio
+  const naMesa = sentado && ['trabalhando', 'silencioso', 'sentando', 'levantando'].includes(pose.fase)
+  const mesaPoint = project(mesa.x, mesa.y + 18)
+  const pontoBase = naMesa ? { x: mesaPoint.x, y: mesaPoint.y - 4 } : project(pose.x, pose.y + 18)
   const point = { x: pontoBase.x + (passeio?.x ?? 0), y: pontoBase.y + (passeio?.y ?? 0) }
   const directionReal = directionFor(person.animacaoChave, pose)
-  const direction = pose.andando ? directionReal : passeio?.direction ?? directionReal
-  const sentado = pose.sentado > 0.5 && !passeio
+  const direction = naMesa ? 'down' : pose.andando ? directionReal : passeio?.direction ?? directionReal
   const width = sentado ? 58 : 62
   const height = sentado ? 56 : 64
-  const idleOffsetY = quadro.reduzirMovimento ? 0 : round(Math.sin(quadro.tempo * 1.7 + person.ordem * 0.8) * 1.25)
+  const idleOffsetY = quadro.reduzirMovimento || naMesa ? 0 : round(Math.sin(quadro.tempo * 1.7 + person.ordem * 0.8) * 1.25)
   const spritePoint = { x: point.x, y: point.y + idleOffsetY }
   const x = round(spritePoint.x - width / 2)
   const y = round(spritePoint.y - height + (sentado ? 5 : 0))
@@ -640,10 +646,24 @@ function drawCharacter(
     ctx.lineWidth = selected ? 3 : 2
     ctx.beginPath(); ctx.ellipse(spritePoint.x, spritePoint.y - 1, 20, 8, 0, 0, Math.PI * 2); ctx.stroke()
   }
-  if (!drawCharacterSprite(ctx, person, x, y, width, height, direction)) {
+  if (!drawCharacterSprite(ctx, person, x, y, width, height, direction, naMesa)) {
     const fallback = ctx.createLinearGradient(point.x, point.y - 38, point.x, point.y)
     fallback.addColorStop(0, blendColor(person.cor || PALETTE.moss, '#ffffff', .25)); fallback.addColorStop(1, person.cor || PALETTE.moss)
     roundedPanel(ctx, point.x - 12, point.y - 36, 24, 34, 11, fallback, '#16233a', 1)
+  }
+  if (naMesa) {
+    // O tampo esconde a parte inferior do sprite inteiro: cabeça e tronco
+    // permanecem atrás dele, com antebraços apoiados em direção ao teclado.
+    drawSmoothFurniture(ctx, 'desk', mesaPoint.x - 31, mesaPoint.y - 28, 62, 45)
+    const hands = person.tipoVisual === 'humano' ? validColor(person.pele, '#d9a47d') : '#d5e4ec'
+    for (const side of [-1, 1]) {
+      ctx.strokeStyle = validColor(person.cor, '#526171'); ctx.lineWidth = 5; ctx.lineCap = 'round'
+      ctx.beginPath(); ctx.moveTo(mesaPoint.x + side * 17, mesaPoint.y - 23)
+      ctx.lineTo(mesaPoint.x + side * 14, mesaPoint.y - 14)
+      ctx.lineTo(mesaPoint.x + side * 8, mesaPoint.y - 12); ctx.stroke()
+      ctx.fillStyle = hands
+      ctx.beginPath(); ctx.ellipse(mesaPoint.x + side * 8, mesaPoint.y - 12, 3, 2, 0, 0, Math.PI * 2); ctx.fill()
+    }
   }
   const statusColor = person.ativa ? PALETTE.live : person.execucao.estado === 'silencioso' ? PALETTE.idle : PALETTE.rest
   ctx.fillStyle = statusColor
@@ -672,41 +692,42 @@ function drawName(ctx: CanvasRenderingContext2D, name: string, point: Point, col
   ctx.fillText(label, x + 13, y + 9)
 }
 
-function drawStatusBubble(ctx: CanvasRenderingContext2D, text: string, point: Point, occupied: Bounds[], index: number, sceneWidth: number) {
-  ctx.font = '700 12px "JetBrains Mono", monospace'
-  const words = text.split(' ')
+function drawStatusBubble(ctx: CanvasRenderingContext2D, text: string, point: Point, occupied: Bounds[], sceneWidth: number) {
+  // Compensa o zoom do canvas: o texto nunca cai abaixo de 12 px CSS.
+  const cssScale = ctx.getTransform().a / (typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1)
+  const unit = Math.max(1, 1 / Math.max(.001, cssScale))
+  ctx.font = `700 ${12 * unit}px "JetBrains Mono", monospace`
   const lines: string[] = []
-  words.forEach((word) => {
+  text.split(' ').forEach((word) => {
     const candidate = lines.length ? `${lines[lines.length - 1]} ${word}` : word
-    if (lines.length && ctx.measureText(candidate).width > 150) lines.push(word)
+    if (lines.length && ctx.measureText(candidate).width > 150 * unit) lines.push(word)
     else if (lines.length) lines[lines.length - 1] = candidate
     else lines.push(word)
   })
-  const visibleLines = lines.slice(0, 2)
-  const width = Math.max(118, Math.min(174, Math.max(...visibleLines.map((line) => ctx.measureText(line).width)) + 22))
-  const height = visibleLines.length > 1 ? 42 : 30
-  const offsets = [0, -58, 58, -88, 88]
-  let bounds: Bounds = { x: round(point.x - width / 2), y: round(point.y - 102), width, height }
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const x = clamp(round(point.x - width / 2 + offsets[(index + attempt) % offsets.length]), 7, sceneWidth - width - 7)
-    const y = Math.max(124, round(point.y - 102 - Math.floor(attempt / offsets.length) * 28))
-    const candidate = { x, y, width, height }
-    if (!occupied.some((other) => boundsOverlap(candidate, other))) { bounds = candidate; break }
+  const width = Math.max(...lines.map((line) => ctx.measureText(line).width)) + 20 * unit
+  const height = (lines.length * 15 + 12) * unit
+  const head = { x: point.x, y: point.y - 55 }
+  const minX = 4, maxX = Math.max(minX, sceneWidth - width - 4)
+  let bounds: Bounds = { x: clamp(head.x - width / 2, minX, maxX), y: Math.max(4, head.y - height - 10 * unit), width, height }
+  // Tenta os dois lados da cabeça antes de subir uma linha. Nenhum ativo é
+  // descartado por tipo de sprite ou por um limite arbitrário de quantidade.
+  search: for (let row = 0; row <= occupied.length + 1; row += 1) {
+    for (const offset of [0, width / 2 + 8 * unit, -width / 2 - 8 * unit]) {
+      const candidate = { x: clamp(head.x - width / 2 + offset, minX, maxX), y: Math.max(4, head.y - height - 10 * unit - row * (height + 6 * unit)), width, height }
+      if (!occupied.some((other) => boundsOverlap(candidate, other))) { bounds = candidate; break search }
+    }
   }
   occupied.push(bounds)
-  ctx.fillStyle = '#050909d9'
-  ctx.fillRect(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height)
-  ctx.fillStyle = '#fff8df'
-  ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
-  ctx.strokeStyle = '#5b4b32'
-  ctx.lineWidth = 2
-  ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
-  const tailX = clamp(round(point.x), bounds.x + 12, bounds.x + bounds.width - 12)
-  polygon(ctx, [{ x: tailX - 5, y: bounds.y + bounds.height }, { x: tailX + 5, y: bounds.y + bounds.height }, { x: tailX, y: bounds.y + bounds.height + 7 }], '#fff8df', '#5b4b32')
+  const tailX = clamp(head.x, bounds.x + 10 * unit, bounds.x + width - 10 * unit)
+  polygon(ctx, [{ x: tailX - 5 * unit, y: bounds.y + height - 1 }, { x: tailX + 5 * unit, y: bounds.y + height - 1 }, { x: head.x, y: head.y }], '#fff8df', '#8c8068')
+  ctx.save()
+  ctx.shadowColor = '#05090940'; ctx.shadowBlur = 4 * unit; ctx.shadowOffsetY = 2 * unit
+  roundedPanel(ctx, bounds.x, bounds.y, width, height, 7 * unit, '#fff8df', '#8c8068', unit)
+  ctx.restore()
   ctx.fillStyle = '#081013'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  visibleLines.forEach((line, lineIndex) => ctx.fillText(line, bounds.x + bounds.width / 2, bounds.y + 11 + lineIndex * 15))
+  lines.forEach((line, index) => ctx.fillText(line, bounds.x + width / 2, bounds.y + (13.5 + index * 15) * unit))
 }
 
 export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: QuadroRpg): HitRpg[] {
@@ -734,15 +755,12 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
       const bounds = drawCharacter(ctx, quadro, character, project)
       if (!bounds) return
       hits.push({ chave: character.mesa.execucao.chave, x: bounds.x, y: bounds.y, largura: bounds.width, altura: bounds.height })
-      if (bounds.robot) {
-        if (bounds.status) bubbles.push({ text: bounds.status, point: bounds.point, selected: bounds.selected })
-        else if (bounds.selected) labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: true })
-      } else labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: bounds.selected })
+      if (bounds.status) bubbles.push({ text: bounds.status, point: bounds.point, selected: bounds.selected })
+      else if (!bounds.robot || bounds.selected) labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: bounds.selected })
     })
     labels.forEach((label) => drawName(ctx, label.name, label.point, label.color, label.selected))
-    const bubbleLimit = quadro.layout.largura < 700 ? 3 : 5
     const occupied: Bounds[] = []
-    bubbles.sort((a, b) => Number(b.selected) - Number(a.selected)).slice(0, bubbleLimit).forEach((bubble, index) => drawStatusBubble(ctx, bubble.text, bubble.point, occupied, index, quadro.layout.largura))
+    bubbles.sort((a, b) => Number(b.selected) - Number(a.selected)).forEach((bubble) => drawStatusBubble(ctx, bubble.text, bubble.point, occupied, quadro.layout.largura))
 
     if (!quadro.layout.ilhas.length) {
       ctx.fillStyle = PALETTE.cream
@@ -765,7 +783,7 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
   ctx.canvas.dataset.officeSpriteAgents = String(quadro.personagens.length)
   ctx.canvas.dataset.officeRobotAgents = String(quadro.personagens.filter((character) => character.mesa.execucao.tipoVisual === 'robo').length)
   ctx.canvas.dataset.officeHumanAgents = String(quadro.personagens.filter((character) => character.mesa.execucao.tipoVisual === 'humano').length)
-  ctx.canvas.dataset.officeStatusBubbles = String(quadro.personagens.filter((character) => statusSeguroDaExecucao(character.mesa.execucao)).length)
+  ctx.canvas.dataset.officeStatusBubbles = String(bubbles.length)
   ctx.canvas.dataset.officeWalkers = String(quadro.personagens.filter((character) => character.pose.andando).length)
   ctx.canvas.dataset.officeLastWalkEvent = lastWalkEventAt ? String(lastWalkEventAt) : 'none'
   return hits
