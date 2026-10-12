@@ -66,6 +66,7 @@ export interface ExecucaoVisual {
   ativa: boolean
   temporaria: boolean
   ordem: number
+  tipoVisual: 'humano' | 'robo'
 }
 
 export interface MesaVisual {
@@ -404,6 +405,8 @@ function criarVisual(execucao: AgenteVivo, ficha: PixelAgent | undefined, squad:
   const corRoupa = ehChefe ? ficha?.cor || squadCor : squadCor
   const semente = hashTexto(`${ficha?.id || execucao.id}:${ordem}`)
   const nome = nomeForcado || nomeLegivelDaExecucao(execucao, ficha)
+  const identidadeHumana = normalizarPapel(ficha?.id || execucao.identidade || execucao.nome || execucao.id)
+  const tipoVisual = ['luana', 'renato', 'bia', 'gastao'].includes(identidadeHumana) ? 'humano' : 'robo'
   return {
     chave: temporaria || execucao.estado !== 'parado' ? chaveAgente(execucao.dono, execucao.id) : ficha?.id || execucao.id,
     animacaoChave: ficha && !temporaria ? `catalogo:${ficha.id}` : `temporario:${chaveAgente(execucao.dono, execucao.id)}`,
@@ -423,6 +426,7 @@ function criarVisual(execucao: AgenteVivo, ficha: PixelAgent | undefined, squad:
     ativa: execucao.estado === 'trabalhando',
     temporaria,
     ordem,
+    tipoVisual,
   }
 }
 

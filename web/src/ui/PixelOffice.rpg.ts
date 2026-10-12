@@ -1,8 +1,23 @@
-import characterAtlasUrl from './pixel-office-rpg/character-walk-4dir.png'
-import environmentAtlasUrl from './pixel-office-rpg/environment-atlas.png'
+import humanBiaBackUrl from './pixel-office-rpg/human-bia-costas.png'
+import humanBiaFrontUrl from './pixel-office-rpg/human-bia-frente.png'
+import humanGastaoBackUrl from './pixel-office-rpg/human-gastao-costas.png'
+import humanGastaoFrontUrl from './pixel-office-rpg/human-gastao-frente.png'
+import humanLuanaBackUrl from './pixel-office-rpg/human-luana-costas.png'
+import humanLuanaFrontUrl from './pixel-office-rpg/human-luana-frente.png'
+import humanRenatoBackUrl from './pixel-office-rpg/human-renato-costas.png'
+import humanRenatoFrontUrl from './pixel-office-rpg/human-renato-frente.png'
+import robotBlueBackUrl from './pixel-office-rpg/robot-azul-costas.png'
+import robotBlueFrontUrl from './pixel-office-rpg/robot-azul-frente.png'
+import robotIvoryBackUrl from './pixel-office-rpg/robot-marfim-costas.png'
+import robotIvoryFrontUrl from './pixel-office-rpg/robot-marfim-frente.png'
+import robotGreenBackUrl from './pixel-office-rpg/robot-verde-costas.png'
+import robotGreenFrontUrl from './pixel-office-rpg/robot-verde-frente.png'
+import robotVioletBackUrl from './pixel-office-rpg/robot-violeta-costas.png'
+import robotVioletFrontUrl from './pixel-office-rpg/robot-violeta-frente.png'
 import {
   compactacaoRpg,
   projetarRpg,
+  statusSeguroDaExecucao,
   type HitRpg,
   type IlhaRpg,
   type PoseRpg,
@@ -11,14 +26,40 @@ import {
 
 type Point = { x: number; y: number }
 type Direction = 'down' | 'left' | 'right' | 'up'
-type SpriteSource = { x: number; y: number; w: number; h: number }
 type Bounds = { x: number; y: number; width: number; height: number }
+type CharacterBounds = Bounds & { point: Point; selected: boolean; statusColor: string; robot: boolean; status: string | null }
 
+const ROBOT_VARIANTS = [
+  { front: robotBlueFrontUrl, back: robotBlueBackUrl },
+  { front: robotVioletFrontUrl, back: robotVioletBackUrl },
+  { front: robotGreenFrontUrl, back: robotGreenBackUrl },
+  { front: robotIvoryFrontUrl, back: robotIvoryBackUrl },
+] as const
+
+const DIRECTOR_ROBOTS = {
+  luana: ROBOT_VARIANTS[2],
+  renato: ROBOT_VARIANTS[3],
+  bia: ROBOT_VARIANTS[1],
+  gastao: ROBOT_VARIANTS[0],
+} as const
+
+const HUMAN_VARIANTS = {
+  luana: { front: humanLuanaFrontUrl, back: humanLuanaBackUrl },
+  renato: { front: humanRenatoFrontUrl, back: humanRenatoBackUrl },
+  bia: { front: humanBiaFrontUrl, back: humanBiaBackUrl },
+  gastao: { front: humanGastaoFrontUrl, back: humanGastaoBackUrl },
+} as const
+
+// Paleta "Escritório Dourado", realinhada 12/10 pra bater com o video de
+// referencia (fundo quente madeira/creme, paredes azul-marinho com trim
+// dourado), nao mais a fantasia teal/petroleo anterior. teal/moss viraram
+// azul-marinho (mesmo hue usado no novo environment-atlas.png); wood/gold/
+// cream ja batiam com a referencia e ficaram como estavam.
 const PALETTE = {
   void: '#081013',
   ink: '#101820',
-  teal: '#173f3f',
-  moss: '#2d5a4f',
+  teal: '#19213f',
+  moss: '#2f395a',
   wood: '#9a6238',
   gold: '#e1b657',
   cream: '#f3e3b1',
@@ -27,15 +68,6 @@ const PALETTE = {
   idle: '#e1b657',
   rest: '#82958f',
 } as const
-
-const ENVIRONMENT_SPRITES = {
-  floor: { x: 80, y: 70, w: 370, h: 380 },
-  wall: { x: 560, y: 70, w: 420, h: 380 },
-  desk: { x: 1050, y: 110, w: 430, h: 340 },
-  chair: { x: 120, y: 530, w: 290, h: 410 },
-  divider: { x: 550, y: 550, w: 430, h: 350 },
-  plant: { x: 1120, y: 530, w: 360, h: 420 },
-} as const satisfies Record<string, SpriteSource>
 
 const NAV = [
   ['diretores', 'AGENTES'],
@@ -53,26 +85,18 @@ const ROOM_SIGN_HEIGHT = 21
 const ROOM_SIGN_FURNITURE_GAP = 3
 export const RAIO_PASSEIO_X = 15
 
-let environmentAtlas: HTMLImageElement | null = null
-let characterAtlas: HTMLImageElement | null = null
 let assetVersion = 0
-let environmentFailed = false
-let characterFailed = false
+const robotImages = new Map<string, HTMLImageElement>()
 
-function loadImage(url: string, kind: 'environment' | 'character') {
+function loadRobotImage(url: string) {
   if (typeof Image === 'undefined') return null
-  const current = kind === 'environment' ? environmentAtlas : characterAtlas
+  const current = robotImages.get(url)
   if (current) return current.complete && current.naturalWidth > 0 ? current : null
   const image = new Image()
   image.decoding = 'async'
   image.onload = () => { assetVersion += 1 }
-  image.onerror = () => {
-    if (kind === 'environment') environmentFailed = true
-    else characterFailed = true
-  }
   image.src = url
-  if (kind === 'environment') environmentAtlas = image
-  else characterAtlas = image
+  robotImages.set(url, image)
   return null
 }
 
@@ -103,7 +127,7 @@ function stableHash(value: string) {
   return hash >>> 0
 }
 
-function polygon(ctx: CanvasRenderingContext2D, points: Point[], fill: string | CanvasPattern, stroke?: string, lineWidth = 1) {
+function polygon(ctx: CanvasRenderingContext2D, points: Point[], fill: string | CanvasPattern | CanvasGradient, stroke?: string, lineWidth = 1) {
   ctx.beginPath()
   points.forEach((point, index) => {
     const x = round(point.x)
@@ -121,46 +145,42 @@ function polygon(ctx: CanvasRenderingContext2D, points: Point[], fill: string | 
   }
 }
 
-function drawSprite(
-  ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement | null,
-  source: SpriteSource,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-) {
-  const dx = round(x)
-  const dy = round(y)
-  const dw = Math.max(1, round(width))
-  const dh = Math.max(1, round(height))
-  if (image) {
-    ctx.drawImage(image, source.x, source.y, source.w, source.h, dx, dy, dw, dh)
-    return
-  }
-  ctx.fillStyle = PALETTE.teal
-  ctx.fillRect(dx, dy, dw, dh)
-  ctx.fillStyle = PALETTE.gold
-  ctx.fillRect(dx, dy, dw, 2)
+
+function roundedPanel(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number, fill: string | CanvasGradient, stroke?: string, lineWidth = 1) {
+  ctx.beginPath()
+  ctx.roundRect(round(x), round(y), Math.max(1, round(width)), Math.max(1, round(height)), radius)
+  ctx.fillStyle = fill
+  ctx.fill()
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke() }
 }
 
-const patternCache = new Map<string, CanvasPattern | null>()
-
-function atlasPattern(ctx: CanvasRenderingContext2D, image: HTMLImageElement | null, name: 'floor' | 'wall', size: number) {
-  if (!image || typeof document === 'undefined') return null
-  const key = `${assetVersion}:${name}:${size}`
-  if (patternCache.has(key)) return patternCache.get(key) ?? null
-  const tile = document.createElement('canvas')
-  tile.width = size
-  tile.height = size
-  const tileContext = tile.getContext('2d')
-  if (!tileContext) return null
-  tileContext.imageSmoothingEnabled = false
-  const source = ENVIRONMENT_SPRITES[name]
-  tileContext.drawImage(image, source.x, source.y, source.w, source.h, 0, 0, size, size)
-  const pattern = ctx.createPattern(tile, 'repeat')
-  patternCache.set(key, pattern)
-  return pattern
+function drawSmoothFurniture(ctx: CanvasRenderingContext2D, kind: 'desk' | 'chair' | 'divider' | 'plant', x: number, y: number, width: number, height: number) {
+  ctx.save()
+  ctx.imageSmoothingEnabled = true
+  ctx.shadowColor = '#06101c55'; ctx.shadowBlur = 5; ctx.shadowOffsetY = 3
+  if (kind === 'desk') {
+    const wood = ctx.createLinearGradient(x, y, x, y + height)
+    wood.addColorStop(0, '#d99a58'); wood.addColorStop(1, '#9b5f31')
+    roundedPanel(ctx, x, y + height * .24, width, height * .48, 4, wood, '#70411f', 1)
+    ctx.shadowColor = 'transparent'
+    roundedPanel(ctx, x + width * .36, y, width * .28, height * .31, 3, '#15243b', '#d8b76b', .8)
+    roundedPanel(ctx, x + width * .42, y + height * .06, width * .16, height * .15, 2, '#6dc8dc')
+    ctx.fillStyle = '#70411f'; ctx.fillRect(x + width * .08, y + height * .68, width * .08, height * .28); ctx.fillRect(x + width * .84, y + height * .68, width * .08, height * .28)
+  } else if (kind === 'chair') {
+    roundedPanel(ctx, x + width * .18, y, width * .64, height * .62, 7, '#25334b', '#d8b76b', .8)
+    ctx.shadowColor = 'transparent'; roundedPanel(ctx, x + width * .08, y + height * .5, width * .84, height * .22, 5, '#1b283e')
+    ctx.strokeStyle = '#536078'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + width / 2, y + height * .68); ctx.lineTo(x + width / 2, y + height * .9); ctx.moveTo(x + width * .2, y + height); ctx.lineTo(x + width / 2, y + height * .88); ctx.lineTo(x + width * .8, y + height); ctx.stroke()
+  } else if (kind === 'divider') {
+    const glass = ctx.createLinearGradient(x, y, x, y + height)
+    glass.addColorStop(0, '#edf5f2ee'); glass.addColorStop(1, '#b8d4d1dd')
+    roundedPanel(ctx, x, y, width, height, 7, glass, '#d8b76b', 1.5)
+    ctx.shadowColor = 'transparent'; ctx.fillStyle = '#ffffff66'; ctx.fillRect(x + 8, y + 5, width - 16, 2)
+  } else {
+    ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#3f7951'; ctx.lineWidth = 4; ctx.lineCap = 'round'
+    for (const offset of [-.24, 0, .24]) { ctx.beginPath(); ctx.moveTo(x + width / 2, y + height * .62); ctx.quadraticCurveTo(x + width * (0.5 + offset), y + height * .2, x + width * (0.5 + offset * 1.6), y + height * .08); ctx.stroke() }
+    roundedPanel(ctx, x + width * .2, y + height * .58, width * .6, height * .38, 5, '#c5844c', '#7d4a27', 1)
+  }
+  ctx.restore()
 }
 
 function projection(layout: QuadroRpg['layout']) {
@@ -298,7 +318,7 @@ function drawRoomSign(ctx: CanvasRenderingContext2D, sign: RoomSign, navigation:
   const centerX = x + width / 2
 
   ctx.save()
-  ctx.strokeStyle = '#6d6d57'
+  ctx.strokeStyle = '#9b8556'
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(round(centerX - width * 0.28), wireTop)
@@ -306,15 +326,10 @@ function drawRoomSign(ctx: CanvasRenderingContext2D, sign: RoomSign, navigation:
   ctx.moveTo(round(centerX + width * 0.28), wireTop)
   ctx.lineTo(round(centerX + width * 0.2), y)
   ctx.stroke()
-  ctx.fillStyle = '#060b0d'
-  ctx.fillRect(x + 2, y + 3, width, height)
-  ctx.fillStyle = PALETTE.ink
-  ctx.fillRect(x, y, width, height)
-  ctx.strokeStyle = PALETTE.gold
-  ctx.lineWidth = 2
-  ctx.strokeRect(x, y, width, height)
-  ctx.fillStyle = color
-  ctx.fillRect(x + 4, y + 3, 3, height - 6)
+  ctx.shadowColor = '#07101d66'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 3
+  roundedPanel(ctx, x, y, width, height, 6, '#17243aee', '#d8b76b', 1.2)
+  ctx.shadowColor = 'transparent'
+  roundedPanel(ctx, x + 5, y + 5, 4, height - 10, 2, blendColor(color, '#d8b76b', .68))
   ctx.fillStyle = PALETTE.cream
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -332,7 +347,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: Retur
   ]
   const elevated = project(island.x, island.y, 26)
   const wallHeight = clamp(Math.abs(corners[0].y - elevated.y) * 1.55, 28, 40)
-  const floor = index % 2 ? '#11292a' : '#0d2425'
+  const floor = index % 2 ? '#eee4d2' : '#e7dac3'
   const shadow = corners.map((corner) => ({ x: corner.x + 4, y: corner.y + wallHeight + 5 }))
   // topY = max(baseY - wallHeight, maior fundo da navegação + 8 px).
   const raised = (point: Point) => ({ x: point.x, y: Math.max(point.y - wallHeight, wallTopLimit) })
@@ -345,26 +360,26 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: Retur
   ctx.beginPath()
   ctx.rect(0, wallTopLimit, ctx.canvas.width, Math.max(0, ctx.canvas.height - wallTopLimit))
   ctx.clip()
-  polygon(ctx, shadow, '#02060799')
-  polygon(ctx, corners, blendColor(floor, color, 0.12), blendColor(color, '#0a1113', 0.62), 2)
-  polygon(ctx, [corners[0], corners[1], topRight, topLeft], blendColor(color, '#101820', 0.34), color, 2)
-  polygon(ctx, [corners[0], corners[3], farLeft, topLeft], blendColor(color, '#081013', 0.48), color, 2)
-  polygon(ctx, [corners[1], corners[2], farRight, topRight], blendColor(color, '#081013', 0.54), color, 2)
+  polygon(ctx, shadow, '#07101d2e')
+  polygon(ctx, corners, floor, '#c3a96c', 1)
+  polygon(ctx, [corners[0], corners[1], topRight, topLeft], index % 2 ? '#cbd8dc' : '#d7e0df', '#c3a96c', 1)
+  polygon(ctx, [corners[0], corners[3], farLeft, topLeft], '#aebfc3', '#c3a96c', 1)
+  polygon(ctx, [corners[1], corners[2], farRight, topRight], '#a7b8bd', '#c3a96c', 1)
 
   ctx.save()
-  ctx.strokeStyle = '#060a0caa'
-  ctx.lineWidth = 3
+  ctx.strokeStyle = '#ffffff88'
+  ctx.lineWidth = 2
   ctx.beginPath()
   ctx.moveTo(topLeft.x, topLeft.y + 2)
   ctx.lineTo(topRight.x, topRight.y + 2)
   ctx.stroke()
-  ctx.strokeStyle = blendColor(color, PALETTE.cream, 0.2)
+  ctx.strokeStyle = '#d8b76b'
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(farLeft.x, farLeft.y)
   ctx.lineTo(farRight.x, farRight.y)
   ctx.stroke()
-  ctx.strokeStyle = blendColor(color, '#081013', 0.68)
+  ctx.strokeStyle = '#8da2a855'
   for (const ratio of [1 / 3, 2 / 3]) {
     const left = { x: topLeft.x + (corners[0].x - topLeft.x) * ratio, y: topLeft.y + (corners[0].y - topLeft.y) * ratio }
     const right = { x: topRight.x + (corners[1].x - topRight.x) * ratio, y: topRight.y + (corners[1].y - topRight.y) * ratio }
@@ -396,26 +411,29 @@ function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: Retur
   }
 }
 
-function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg, image: HTMLImageElement | null) {
+function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   const { layout } = quadro
   const width = round(layout.largura)
   const height = round(layout.altura)
   const project = projection(layout)
-  ctx.imageSmoothingEnabled = false
-  ctx.fillStyle = PALETTE.void
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.fillStyle = '#09131e'
   ctx.fillRect(0, 0, width, height)
 
   const floor = [project(10, 8), project(width - 10, 8), project(width - 10, height - 10), project(10, height - 10)]
-  polygon(ctx, floor, atlasPattern(ctx, image, 'floor', 48) || PALETTE.ink, PALETTE.gold, 2)
+  const floorGradient = ctx.createLinearGradient(0, floor[0].y, 0, Math.max(...floor.map((point) => point.y)))
+  floorGradient.addColorStop(0, '#f7edda'); floorGradient.addColorStop(.55, '#e8d6b9'); floorGradient.addColorStop(1, '#d5bc94')
+  polygon(ctx, floor, floorGradient, '#d8b76b', 1.5)
 
   const wall = [project(14, 6, 94), project(width - 14, 6, 94), project(width - 14, 6, 2), project(14, 6, 2)]
-  polygon(ctx, wall, atlasPattern(ctx, image, 'wall', 56) || PALETTE.teal, PALETTE.moss, 2)
+  const wallGradient = ctx.createLinearGradient(0, wall[0].y, 0, wall[2].y)
+  wallGradient.addColorStop(0, '#101a33'); wallGradient.addColorStop(1, '#24304f')
+  polygon(ctx, wall, wallGradient, '#d8b76b', 1.5)
+  const trimLeft = project(14, 6, 9), trimRight = project(width - 14, 6, 9)
+  ctx.strokeStyle = '#d8b76b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(trimLeft.x, trimLeft.y); ctx.lineTo(trimRight.x, trimRight.y); ctx.stroke()
   const sign = project(width / 2, 7, 60)
-  ctx.fillStyle = PALETTE.ink
-  ctx.fillRect(sign.x - 84, sign.y - 15, 168, 29)
-  ctx.strokeStyle = PALETTE.gold
-  ctx.lineWidth = 2
-  ctx.strokeRect(sign.x - 84, sign.y - 15, 168, 29)
+  roundedPanel(ctx, sign.x - 84, sign.y - 15, 168, 29, 7, '#17243aee', '#d8b76b', 1.5)
   ctx.fillStyle = PALETTE.cream
   ctx.font = '700 10px "JetBrains Mono", monospace'
   ctx.textAlign = 'center'
@@ -424,10 +442,7 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg, image
 
   const navigation = navigationBounds(project, width)
   navigation.forEach(({ label, x, y, width: itemWidth }, index) => {
-    ctx.fillStyle = index % 2 ? '#102b2d' : '#132326'
-    ctx.fillRect(x, y, itemWidth, NAVIGATION_HEIGHT)
-    ctx.fillStyle = PALETTE.gold
-    ctx.fillRect(x, y + 20, itemWidth, 3)
+    roundedPanel(ctx, x + 2, y, itemWidth - 4, NAVIGATION_HEIGHT, 5, index % 2 ? '#1b2940' : '#22314a', '#d8b76b99', .75)
     ctx.fillStyle = PALETTE.cream
     // 7px grudava as letras (glifo bold nesse tamanho esbarra no vizinho e
     // "AGENTES" virava ilegível). 8px é o menor tamanho que ainda sai limpo
@@ -443,14 +458,14 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg, image
     roomSigns.push(drawRoom(ctx, island, project, index, wallTopLimit))
 
     const divider = project(island.x + island.largura / 2, island.y + 16, 4)
-    drawSprite(ctx, image, ENVIRONMENT_SPRITES.divider, divider.x - 37, divider.y - 20, 74, 34)
+    drawSmoothFurniture(ctx, 'divider', divider.x - 37, divider.y - 20, 74, 34)
     island.postos.forEach((desk) => {
       const point = project(desk.x, desk.y + 18)
-      drawSprite(ctx, image, ENVIRONMENT_SPRITES.chair, point.x - 13, point.y + 2, 26, 34)
-      drawSprite(ctx, image, ENVIRONMENT_SPRITES.desk, point.x - 31, point.y - 28, 62, 45)
+      drawSmoothFurniture(ctx, 'chair', point.x - 13, point.y + 2, 26, 34)
+      drawSmoothFurniture(ctx, 'desk', point.x - 31, point.y - 28, 62, 45)
     })
     const plant = project(island.x + island.largura - 22, island.y + 38)
-    drawSprite(ctx, image, ENVIRONMENT_SPRITES.plant, plant.x - 15, plant.y - 30, 30, 39)
+    drawSmoothFurniture(ctx, 'plant', plant.x - 15, plant.y - 30, 30, 39)
   })
   roomSigns.forEach((sign) => drawRoomSign(ctx, sign, navigation))
 
@@ -458,7 +473,7 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg, image
     const loungeWidth = Math.min(width - 60, 140 + layout.ocupantesDescanso * 44)
     const x = (width - loungeWidth) / 2
     const corners = [project(x, layout.descansoY), project(x + loungeWidth, layout.descansoY), project(x + loungeWidth, height - 14), project(x, height - 14)]
-    polygon(ctx, corners, '#172d29', PALETTE.gold, 2)
+    polygon(ctx, corners, '#181d2d', PALETTE.gold, 2)
     const label = project(x + 8, layout.descansoY + 8)
     ctx.fillStyle = PALETTE.cream
     ctx.font = '700 8px "JetBrains Mono", monospace'
@@ -466,11 +481,11 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg, image
     ctx.fillText(`LOUNGE ${layout.ocupantesDescanso}`, label.x, label.y)
   }
 
-  drawSprite(ctx, image, ENVIRONMENT_SPRITES.plant, 12, height - 56, 38, 49)
-  drawSprite(ctx, image, ENVIRONMENT_SPRITES.plant, width - 50, height - 56, 38, 49)
+  drawSmoothFurniture(ctx, 'plant', 12, height - 56, 38, 49)
+  drawSmoothFurniture(ctx, 'plant', width - 50, height - 56, 38, 49)
 }
 
-function staticScene(quadro: QuadroRpg, image: HTMLImageElement | null) {
+function staticScene(quadro: QuadroRpg) {
   if (typeof document === 'undefined') return null
   const key = sceneKey(quadro)
   if (sceneCache?.key === key) return sceneCache.canvas
@@ -479,7 +494,7 @@ function staticScene(quadro: QuadroRpg, image: HTMLImageElement | null) {
   canvas.height = Math.max(1, round(quadro.layout.altura))
   const context = canvas.getContext('2d')
   if (!context) return null
-  drawStaticScene(context, quadro, image)
+  drawStaticScene(context, quadro)
   sceneCache = { key, canvas }
   return canvas
 }
@@ -490,114 +505,34 @@ let lastWalkEventAt = 0
 
 type PasseioAmbiente = { x: number; y: number; direction: Direction }
 
-type CharacterAppearance = { key: string; shirt: string; hair: string; skin: string; accent: string }
-
-const CHARACTER_ACCENTS = ['#e1b657', '#74c7c7', '#cf6f70', '#9c82d0', '#8cbd72']
-const CHARACTER_HAIR = ['#302d29', '#5a3825', '#c08a48', '#1f2c36', '#6b3546', '#ded0ad']
-const characterSpriteCache = new Map<string, HTMLCanvasElement>()
-let characterSpriteCacheVersion = -1
-
-function appearanceFor(person: QuadroRpg['personagens'][number]['mesa']['execucao']): CharacterAppearance {
-  const seed = stableHash(person.chave)
-  const shirt = validColor(person.cor, ['#4e91a8', '#b87553', '#8f6bb3', '#639462'][seed % 4])
-  const hair = validColor(person.cabelo, CHARACTER_HAIR[Math.floor(seed / 7) % CHARACTER_HAIR.length])
-  const skin = validColor(person.pele, PALETTE.cream)
-  const accent = CHARACTER_ACCENTS[(person.acessorio + Math.floor(seed / 17)) % CHARACTER_ACCENTS.length]
-  return { key: `${shirt}:${hair}:${skin}:${accent}`, shirt, hair, skin, accent }
-}
-
-function maskPixel(data: Uint8ClampedArray, index: number, predicate: (red: number, green: number, blue: number) => boolean) {
-  return data[index + 3] > 0 && predicate(data[index], data[index + 1], data[index + 2])
-}
-
-function tintMaskedPixels(
+function drawCharacterSprite(
   ctx: CanvasRenderingContext2D,
-  imageData: ImageData,
-  predicate: (red: number, green: number, blue: number, x: number, y: number) => boolean,
-  color: string,
-) {
-  const mask = document.createElement('canvas')
-  mask.width = imageData.width
-  mask.height = imageData.height
-  const maskContext = mask.getContext('2d')
-  if (!maskContext) return
-  const pixels = maskContext.createImageData(imageData.width, imageData.height)
-  for (let y = 0; y < imageData.height; y += 1) {
-    for (let x = 0; x < imageData.width; x += 1) {
-      const index = (y * imageData.width + x) * 4
-      if (!maskPixel(imageData.data, index, (red, green, blue) => predicate(red, green, blue, x, y))) continue
-      pixels.data[index] = 255
-      pixels.data[index + 1] = 255
-      pixels.data[index + 2] = 255
-      pixels.data[index + 3] = imageData.data[index + 3]
-    }
-  }
-  maskContext.putImageData(pixels, 0, 0)
-
-  const tint = document.createElement('canvas')
-  tint.width = imageData.width
-  tint.height = imageData.height
-  const tintContext = tint.getContext('2d')
-  if (!tintContext) return
-  tintContext.fillStyle = color
-  tintContext.fillRect(0, 0, tint.width, tint.height)
-  tintContext.globalCompositeOperation = 'destination-in'
-  tintContext.drawImage(mask, 0, 0)
-
-  ctx.save()
-  ctx.globalCompositeOperation = 'hue'
-  ctx.drawImage(tint, 0, 0)
-  ctx.globalCompositeOperation = 'source-atop'
-  ctx.globalAlpha = 0.22
-  ctx.drawImage(tint, 0, 0)
-  ctx.restore()
-}
-
-function variedCharacterSprite(
-  image: HTMLImageElement,
-  source: SpriteSource,
+  person: QuadroRpg['personagens'][number]['mesa']['execucao'],
+  x: number,
+  y: number,
   width: number,
   height: number,
-  appearance: CharacterAppearance,
+  direction: Direction,
 ) {
-  if (typeof document === 'undefined') return null
-  if (characterSpriteCacheVersion !== assetVersion) {
-    characterSpriteCache.clear()
-    characterSpriteCacheVersion = assetVersion
-  }
-  const key = `${assetVersion}:${source.x}:${source.y}:${round(width)}:${round(height)}:${appearance.key}`
-  const cached = characterSpriteCache.get(key)
-  if (cached) return cached
-
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, round(width))
-  canvas.height = Math.max(1, round(height))
-  const sprite = canvas.getContext('2d', { willReadFrequently: true })
-  if (!sprite) return null
-  sprite.imageSmoothingEnabled = false
-  sprite.drawImage(image, source.x, source.y, source.w, source.h, 0, 0, canvas.width, canvas.height)
-  const pixels = sprite.getImageData(0, 0, canvas.width, canvas.height)
-  const shirtTop = round(canvas.height * 0.42)
-  const shirtBottom = round(canvas.height * 0.76)
-  const headBottom = round(canvas.height * 0.43)
-  const bodyLeft = round(canvas.width * 0.16)
-  const bodyRight = round(canvas.width * 0.84)
-
-  tintMaskedPixels(sprite, pixels, (red, green, blue, x, y) =>
-    y >= shirtTop && y <= shirtBottom && x >= bodyLeft && x <= bodyRight && red > 145 && green > 125 && blue > 85 && red - blue < 95,
-  appearance.shirt)
-  tintMaskedPixels(sprite, pixels, (red, green, blue, _x, y) =>
-    y <= headBottom && red < 135 && green < 120 && blue < 112,
-  appearance.hair)
-  tintMaskedPixels(sprite, pixels, (red, green, blue, x, y) =>
-    y >= round(canvas.height * 0.2) && y <= round(canvas.height * 0.62) && x >= bodyLeft && x <= bodyRight && red > 170 && green > 95 && blue < 150 && red - blue > 55,
-  appearance.skin)
-  tintMaskedPixels(sprite, pixels, (red, green, blue, _x, y) =>
-    y >= round(canvas.height * 0.36) && y <= round(canvas.height * 0.7) && red > 105 && green > 70 && blue < 100 && red - blue > 65,
-  appearance.accent)
-
-  characterSpriteCache.set(key, canvas)
-  return canvas
+  const identity = `${person.chave} ${person.nome} ${person.objeto}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const director = (Object.keys(DIRECTOR_ROBOTS) as Array<keyof typeof DIRECTOR_ROBOTS>).find((name) => identity.includes(name))
+  const human = (Object.keys(HUMAN_VARIANTS) as Array<keyof typeof HUMAN_VARIANTS>).find((name) => identity.includes(name))
+  const variant = person.tipoVisual === 'humano' && human
+    ? HUMAN_VARIANTS[human]
+    : director
+      ? DIRECTOR_ROBOTS[director]
+      : ROBOT_VARIANTS[stableHash(person.chave) % ROBOT_VARIANTS.length]
+  const image = loadRobotImage(direction === 'up' ? variant.back : variant.front)
+  if (!image) return false
+  const ratio = image.naturalWidth / image.naturalHeight
+  const targetHeight = height + 5
+  const targetWidth = targetHeight * ratio
+  ctx.save()
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(image, round(x + (width - targetWidth) / 2), round(y + height - targetHeight), round(targetWidth), round(targetHeight))
+  ctx.restore()
+  return true
 }
 
 function recordWalkEvent(key: string, walking: boolean) {
@@ -656,7 +591,6 @@ function passeioAmbiente(chave: string, pose: PoseRpg, tempo: number, reduzirMov
 
 function drawCharacter(
   ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement | null,
   quadro: QuadroRpg,
   character: QuadroRpg['personagens'][number],
   project: ReturnType<typeof projection>,
@@ -671,11 +605,6 @@ function drawCharacter(
   const point = { x: pontoBase.x + (passeio?.x ?? 0), y: pontoBase.y + (passeio?.y ?? 0) }
   const directionReal = directionFor(person.animacaoChave, pose)
   const direction = pose.andando ? directionReal : passeio?.direction ?? directionReal
-  const row = { down: 0, left: 1, right: 2, up: 3 }[direction]
-  const walking = !quadro.reduzirMovimento && (pose.andando || passeio !== null)
-  const frame = walking ? Math.floor(quadro.tempo * 8 + person.ordem) % 3 : 1
-  const cellWidth = 1254 / 3
-  const cellHeight = 1254 / 4
   const sentado = pose.sentado > 0.5 && !passeio
   const width = sentado ? 58 : 62
   const height = sentado ? 56 : 64
@@ -688,30 +617,24 @@ function drawCharacter(
 
   ctx.save()
   ctx.globalAlpha *= opacity
-  ctx.fillStyle = '#050909aa'
-  ctx.fillRect(point.x - 13, point.y - 3, 26, 6)
+  ctx.fillStyle = '#07101d44'
+  ctx.beginPath(); ctx.ellipse(point.x, point.y, 15, 4, 0, 0, Math.PI * 2); ctx.fill()
   if (selected || hovered) {
     ctx.strokeStyle = selected ? PALETTE.gold : PALETTE.live
     ctx.lineWidth = selected ? 3 : 2
-    ctx.strokeRect(spritePoint.x - 18, spritePoint.y - 7, 36, 12)
+    ctx.beginPath(); ctx.ellipse(spritePoint.x, spritePoint.y - 1, 20, 8, 0, 0, Math.PI * 2); ctx.stroke()
   }
-  if (image) {
-    const source = { x: frame * cellWidth, y: row * cellHeight, w: cellWidth, h: cellHeight }
-    const variedSprite = variedCharacterSprite(image, source, width, height, appearanceFor(person))
-    if (variedSprite) ctx.drawImage(variedSprite, x, y)
-    else ctx.drawImage(image, source.x, source.y, source.w, source.h, x, y, width, height)
-  } else {
-    ctx.fillStyle = person.cor || PALETTE.moss
-    ctx.fillRect(point.x - 8, point.y - 28, 16, 25)
-    ctx.fillStyle = person.pele || PALETTE.cream
-    ctx.fillRect(point.x - 6, point.y - 38, 12, 11)
+  if (!drawCharacterSprite(ctx, person, x, y, width, height, direction)) {
+    const fallback = ctx.createLinearGradient(point.x, point.y - 38, point.x, point.y)
+    fallback.addColorStop(0, blendColor(person.cor || PALETTE.moss, '#ffffff', .25)); fallback.addColorStop(1, person.cor || PALETTE.moss)
+    roundedPanel(ctx, point.x - 12, point.y - 36, 24, 34, 11, fallback, '#16233a', 1)
   }
   const statusColor = person.ativa ? PALETTE.live : person.execucao.estado === 'silencioso' ? PALETTE.idle : PALETTE.rest
   ctx.fillStyle = statusColor
-  ctx.fillRect(spritePoint.x + 11, spritePoint.y - 37, 5, 5)
+  ctx.beginPath(); ctx.arc(spritePoint.x + 13, spritePoint.y - 36, 3, 0, Math.PI * 2); ctx.fill()
   ctx.restore()
 
-  return { point: spritePoint, x: spritePoint.x - 17, y: spritePoint.y - 53, width: 34, height: 56, selected, statusColor }
+  return { point: spritePoint, x: spritePoint.x - 17, y: spritePoint.y - 58, width: 34, height: 61, selected, statusColor, robot: person.tipoVisual === 'robo', status: statusSeguroDaExecucao(person) } satisfies CharacterBounds
 }
 
 function drawName(ctx: CanvasRenderingContext2D, name: string, point: Point, color: string, selected: boolean) {
@@ -722,7 +645,7 @@ function drawName(ctx: CanvasRenderingContext2D, name: string, point: Point, col
   const y = round(point.y + 6)
   ctx.fillStyle = selected ? '#3b3218' : '#081013e8'
   ctx.fillRect(x, y, width, 17)
-  ctx.strokeStyle = selected ? PALETTE.gold : '#35514b'
+  ctx.strokeStyle = selected ? PALETTE.gold : '#363c51'
   ctx.lineWidth = 1
   ctx.strokeRect(x, y, width, 17)
   ctx.fillStyle = color
@@ -733,20 +656,57 @@ function drawName(ctx: CanvasRenderingContext2D, name: string, point: Point, col
   ctx.fillText(label, x + 13, y + 9)
 }
 
+function drawStatusBubble(ctx: CanvasRenderingContext2D, text: string, point: Point, occupied: Bounds[], index: number, sceneWidth: number) {
+  ctx.font = '700 12px "JetBrains Mono", monospace'
+  const words = text.split(' ')
+  const lines: string[] = []
+  words.forEach((word) => {
+    const candidate = lines.length ? `${lines[lines.length - 1]} ${word}` : word
+    if (lines.length && ctx.measureText(candidate).width > 150) lines.push(word)
+    else if (lines.length) lines[lines.length - 1] = candidate
+    else lines.push(word)
+  })
+  const visibleLines = lines.slice(0, 2)
+  const width = Math.max(118, Math.min(174, Math.max(...visibleLines.map((line) => ctx.measureText(line).width)) + 22))
+  const height = visibleLines.length > 1 ? 42 : 30
+  const offsets = [0, -58, 58, -88, 88]
+  let bounds: Bounds = { x: round(point.x - width / 2), y: round(point.y - 102), width, height }
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const x = clamp(round(point.x - width / 2 + offsets[(index + attempt) % offsets.length]), 7, sceneWidth - width - 7)
+    const y = Math.max(124, round(point.y - 102 - Math.floor(attempt / offsets.length) * 28))
+    const candidate = { x, y, width, height }
+    if (!occupied.some((other) => boundsOverlap(candidate, other))) { bounds = candidate; break }
+  }
+  occupied.push(bounds)
+  ctx.fillStyle = '#050909d9'
+  ctx.fillRect(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height)
+  ctx.fillStyle = '#fff8df'
+  ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height)
+  ctx.strokeStyle = '#5b4b32'
+  ctx.lineWidth = 2
+  ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
+  const tailX = clamp(round(point.x), bounds.x + 12, bounds.x + bounds.width - 12)
+  polygon(ctx, [{ x: tailX - 5, y: bounds.y + bounds.height }, { x: tailX + 5, y: bounds.y + bounds.height }, { x: tailX, y: bounds.y + bounds.height + 7 }], '#fff8df', '#5b4b32')
+  ctx.fillStyle = '#081013'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  visibleLines.forEach((line, lineIndex) => ctx.fillText(line, bounds.x + bounds.width / 2, bounds.y + 11 + lineIndex * 15))
+}
+
 export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: QuadroRpg): HitRpg[] {
   const startedAt = typeof performance === 'undefined' ? 0 : performance.now()
-  const environment = loadImage(environmentAtlasUrl, 'environment')
-  const characters = loadImage(characterAtlasUrl, 'character')
   const project = projection(quadro.layout)
   const hits: HitRpg[] = []
   const labels: Array<{ name: string; point: Point; color: string; selected: boolean }> = []
+  const bubbles: Array<{ text: string; point: Point; selected: boolean }> = []
 
   ctx.save()
   try {
-    ctx.imageSmoothingEnabled = false
-    const scene = staticScene(quadro, environment)
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    const scene = staticScene(quadro)
     if (scene) ctx.drawImage(scene, 0, 0)
-    else drawStaticScene(ctx, quadro, environment)
+    else drawStaticScene(ctx, quadro)
 
     navigationBounds(project, quadro.layout.largura).forEach(({ x, y, width, height }, index) => {
       const route = NAV[index][0]
@@ -755,12 +715,18 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
 
     quadro.personagens.forEach((character) => {
       recordWalkEvent(character.mesa.execucao.animacaoChave, character.pose.andando)
-      const bounds = drawCharacter(ctx, characters, quadro, character, project)
+      const bounds = drawCharacter(ctx, quadro, character, project)
       if (!bounds) return
       hits.push({ chave: character.mesa.execucao.chave, x: bounds.x, y: bounds.y, largura: bounds.width, altura: bounds.height })
-      labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: bounds.selected })
+      if (bounds.robot) {
+        if (bounds.status) bubbles.push({ text: bounds.status, point: bounds.point, selected: bounds.selected })
+        else if (bounds.selected) labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: true })
+      } else labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: bounds.selected })
     })
     labels.forEach((label) => drawName(ctx, label.name, label.point, label.color, label.selected))
+    const bubbleLimit = quadro.layout.largura < 700 ? 3 : 5
+    const occupied: Bounds[] = []
+    bubbles.sort((a, b) => Number(b.selected) - Number(a.selected)).slice(0, bubbleLimit).forEach((bubble, index) => drawStatusBubble(ctx, bubble.text, bubble.point, occupied, index, quadro.layout.largura))
 
     if (!quadro.layout.ilhas.length) {
       ctx.fillStyle = PALETTE.cream
@@ -773,14 +739,17 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
   }
 
   const renderMs = startedAt ? performance.now() - startedAt : 0
-  ctx.canvas.dataset.officeRenderer = 'rpg-pixel-v1'
-  ctx.canvas.dataset.officeVersion = '3.0.0'
+  ctx.canvas.dataset.officeRenderer = 'smooth-cartoon-v1'
+  ctx.canvas.dataset.officeVersion = '4.0.0'
   ctx.canvas.dataset.officeCamera = 'obliqua-3-4'
-  ctx.canvas.dataset.officeAssets = environment && characters ? 'ready' : environmentFailed || characterFailed ? 'error' : 'loading'
+  ctx.canvas.dataset.officeAssets = robotImages.size ? 'ready' : 'loading'
   ctx.canvas.dataset.officeStaticCache = sceneCache ? 'ready' : 'unavailable'
   ctx.canvas.dataset.officeRenderMs = renderMs.toFixed(2)
   ctx.canvas.dataset.officeFrameBudget = renderMs < 16 ? 'ok' : 'over'
   ctx.canvas.dataset.officeSpriteAgents = String(quadro.personagens.length)
+  ctx.canvas.dataset.officeRobotAgents = String(quadro.personagens.filter((character) => character.mesa.execucao.tipoVisual === 'robo').length)
+  ctx.canvas.dataset.officeHumanAgents = String(quadro.personagens.filter((character) => character.mesa.execucao.tipoVisual === 'humano').length)
+  ctx.canvas.dataset.officeStatusBubbles = String(quadro.personagens.filter((character) => statusSeguroDaExecucao(character.mesa.execucao)).length)
   ctx.canvas.dataset.officeWalkers = String(quadro.personagens.filter((character) => character.pose.andando).length)
   ctx.canvas.dataset.officeLastWalkEvent = lastWalkEventAt ? String(lastWalkEventAt) : 'none'
   return hits

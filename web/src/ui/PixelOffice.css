@@ -226,7 +226,7 @@
 .ct-office .ct-room { min-width:0; position:relative; background:#111519 }
 .ct-office .ct-room-scroll { height:clamp(420px,53vh,610px); width:100%; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#917638 #101417 }
 .ct-office .ct-room canvas { display:block; max-width:none; cursor:pointer; touch-action:pan-x pan-y }
-.ct-office .ct-room canvas { image-rendering:pixelated; background:#081013 }
+.ct-office .ct-room canvas { image-rendering:auto; background:#09131e }
 .ct-office .ct-room canvas:focus-visible { outline:2px solid var(--ct-yellow); outline-offset:-3px }
 .ct-office .ct-room-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; min-height:30px; padding:8px 16px; background:#0f1316; border-top:1px solid #38392d; font-size:9px; color:#b7b4a4 }
 .ct-office .ct-legend { display:flex; gap:10px; flex-wrap:wrap }.ct-office .ct-legend > span { display:flex; align-items:center; gap:4px }.ct-office .ct-legend i { display:inline-block; width:5px; height:5px; border-radius:50% }
