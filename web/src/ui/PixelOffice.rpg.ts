@@ -163,7 +163,12 @@ function drawSmoothFurniture(ctx: CanvasRenderingContext2D, kind: 'desk' | 'chai
     roundedPanel(ctx, x, y + height * .24, width, height * .38, 3, wood, '#d09a51', 1)
     ctx.shadowColor = 'transparent'
     ctx.fillStyle = '#f0e4c5'; ctx.fillRect(x + width * .1, y + height * .32, width * .18, height * .16)
+    // Espessura e dobra da folha, legíveis mesmo no módulo compacto.
+    ctx.fillStyle = '#c8b994'; ctx.fillRect(x + width * .1, y + height * .48, width * .18, 1)
+    ctx.fillStyle = '#fff5db'; ctx.fillRect(x + width * .23, y + height * .32, width * .05, 2)
     ctx.fillStyle = '#222a32'; ctx.fillRect(x + width * .82, y + height * .27, width * .07, height * .14)
+    ctx.fillStyle = '#526171'; ctx.fillRect(x + width * .82, y + height * .27, width * .07, 1)
+    ctx.fillStyle = '#222a32'
     ctx.fillRect(x + width * .47, y + height * .23, width * .06, height * .12)
     ctx.fillRect(x + width * .39, y + height * .34, width * .23, 2)
     roundedPanel(ctx, x + width * .34, y, width * .32, height * .3, 2, '#222a32', '#526171', .7)
@@ -374,6 +379,41 @@ function drawRoom(island: IlhaRpg, project: ReturnType<typeof projection>, wallT
   }
 }
 
+function drawGlassRoom(ctx: CanvasRenderingContext2D, islands: ReadonlyArray<IlhaRpg>, project: ReturnType<typeof projection>) {
+  // Extents de squads podem se cruzar ao virar a fileira da grade contínua.
+  // Escolha um grupo pequeno em uma só fileira, nunca o salão principal.
+  const largest = Math.max(0, ...islands.map((island) => island.postos.length))
+  const room = [...islands].filter((island) =>
+    island.postos.length > 0 && island.postos.length < largest &&
+    island.postos.every((desk) => desk.y === island.postos[0].y),
+  ).sort((a, b) => a.postos.length - b.postos.length || a.x - b.x)[0]
+  if (!room) return
+  const left = Math.min(...room.postos.map((desk) => desk.x)) - 38
+  const right = Math.max(...room.postos.map((desk) => desk.x)) + 38
+  const back = room.postos[0].y - 26
+  const front = room.postos[0].y + 42
+  // Sem preenchimento: piso e mobiliário continuam visíveis entre os perfis.
+  ctx.save()
+  ctx.globalAlpha = .38
+  ctx.strokeStyle = '#758b8e'
+  ctx.lineWidth = .8
+  const line = (points: Point[]) => {
+    ctx.beginPath()
+    points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y))
+    ctx.stroke()
+  }
+  for (const elevation of [0, 56]) {
+    line([project(left, front, elevation), project(left, back, elevation), project(right, back, elevation), project(right, front, elevation)])
+    // Vão frontal sugere a passagem, sem atravessar a mesa com uma barra.
+    line([project(left, front, elevation), project(left + 16, front, elevation)])
+    line([project(right - 16, front, elevation), project(right, front, elevation)])
+  }
+  for (const [x, y] of [[left, back], [right, back], [left, front], [right, front]]) {
+    line([project(x, y), project(x, y, 56)])
+  }
+  ctx.restore()
+}
+
 function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   const { layout } = quadro
   const width = round(layout.largura)
@@ -439,6 +479,7 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
     // O mesmo piso inclui corredores e descanso, sem uma segunda zona de cor.
     polygon(ctx, [project(left, top), project(right, top), project(right, bottom), project(left, bottom)], '#b9b6ae')
   }
+  drawGlassRoom(ctx, layout.ilhas, project)
   layout.ilhas.forEach((island) => {
     roomSigns.push(drawRoom(island, project, wallTopLimit))
 
@@ -529,6 +570,20 @@ function drawCharacterSprite(
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(image, 0, 0, image.naturalWidth, sourceHeight, round(x + (width - targetWidth) / 2), round(y + height - targetHeight), round(targetWidth), round(targetHeight))
+  if (person.tipoVisual === 'humano' && human) {
+    // Recoloração só na renderização. Preserva cabeça/cabelo; o recorte
+    // inferior inclui roupa e mãos, pois o PNG não possui máscara de tecido.
+    const drawX = round(x + (width - targetWidth) / 2)
+    const drawY = round(y + height - targetHeight)
+    const drawWidth = round(targetWidth)
+    const drawHeight = round(targetHeight)
+    const clothingTop = drawY + drawHeight * (image.naturalHeight * .23 / sourceHeight)
+    ctx.beginPath()
+    ctx.rect(drawX, clothingTop, drawWidth, drawY + drawHeight - clothingTop)
+    ctx.clip()
+    ctx.filter = 'grayscale(1) brightness(0.6)'
+    ctx.drawImage(image, 0, 0, image.naturalWidth, sourceHeight, drawX, drawY, drawWidth, drawHeight)
+  }
   ctx.restore()
   return true
 }
@@ -625,8 +680,9 @@ function drawCharacter(
     ctx.beginPath(); ctx.ellipse(spritePoint.x, spritePoint.y - 1, 20, 8, 0, 0, Math.PI * 2); ctx.stroke()
   }
   if (!drawCharacterSprite(ctx, person, x, y, width, height, direction, naMesa)) {
+    const clothing = person.tipoVisual === 'humano' ? '#35414d' : person.cor || PALETTE.moss
     const fallback = ctx.createLinearGradient(point.x, point.y - 38, point.x, point.y)
-    fallback.addColorStop(0, blendColor(person.cor || PALETTE.moss, '#ffffff', .25)); fallback.addColorStop(1, person.cor || PALETTE.moss)
+    fallback.addColorStop(0, blendColor(clothing, '#ffffff', .25)); fallback.addColorStop(1, clothing)
     roundedPanel(ctx, point.x - 12 * CHARACTER_SCALE, point.y - 36 * CHARACTER_SCALE, 24 * CHARACTER_SCALE, 34 * CHARACTER_SCALE, 11 * CHARACTER_SCALE, fallback, '#16233a', 1)
   }
   if (naMesa) {
@@ -635,7 +691,7 @@ function drawCharacter(
     drawSmoothFurniture(ctx, 'desk', mesaPoint.x - 31, mesaPoint.y - 28, 62, 45)
     const hands = person.tipoVisual === 'humano' ? validColor(person.pele, '#d9a47d') : '#d5e4ec'
     for (const side of [-1, 1]) {
-      ctx.strokeStyle = validColor(person.cor, '#526171'); ctx.lineWidth = 5; ctx.lineCap = 'round'
+      ctx.strokeStyle = person.tipoVisual === 'humano' ? '#35414d' : validColor(person.cor, '#526171'); ctx.lineWidth = 5; ctx.lineCap = 'round'
       ctx.beginPath(); ctx.moveTo(mesaPoint.x + side * 17, mesaPoint.y - 23)
       ctx.lineTo(mesaPoint.x + side * 14, mesaPoint.y - 14)
       ctx.lineTo(mesaPoint.x + side * 8, mesaPoint.y - 12); ctx.stroke()
