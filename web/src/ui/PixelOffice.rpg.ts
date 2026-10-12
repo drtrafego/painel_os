@@ -268,7 +268,8 @@ function roomSignBounds(
   furniture: ReadonlyArray<Bounds>,
   navigation: ReadonlyArray<Bounds>,
   canvas: { width: number; height: number },
-) {
+  ampliarBusca = true,
+): Bounds {
   const minimumX = clamp(area.x, 4, Math.max(4, canvas.width - width - 4))
   const maximumX = clamp(area.x + area.width - width, minimumX, Math.max(minimumX, canvas.width - width - 4))
   const minimumY = clamp(area.y, 4, Math.max(4, canvas.height - height - 4))
@@ -309,7 +310,17 @@ function roomSignBounds(
       }
     }
   }
-  return bestBounds ?? { x: preferredX, y: preferredY, width, height }
+  if (bestBounds) return bestBounds
+  if (ampliarBusca) {
+    // Na malha densa a placa pode não caber entre fileiras. Procure acima
+    // do setor, em todo o salão, antes de recorrer à posição preferida.
+    const top = Math.max(4, ...navigation.map((item) => item.y + item.height + 12))
+    return roomSignBounds(width, height, anchor, {
+      x: 4, y: top, width: canvas.width - 8,
+      height: Math.max(height, anchor.y + height - top),
+    }, furniture, navigation, canvas, false)
+  }
+  return { x: preferredX, y: preferredY, width, height }
 }
 
 function drawRoomSign(ctx: CanvasRenderingContext2D, sign: RoomSign, navigation: ReadonlyArray<Bounds>) {
@@ -323,6 +334,14 @@ function drawRoomSign(ctx: CanvasRenderingContext2D, sign: RoomSign, navigation:
   const height = ROOM_SIGN_HEIGHT
   const { x, y } = roomSignBounds(width, height, anchor, area, furniture, navigation, ctx.canvas)
   ctx.save()
+  if (Math.hypot(x + width / 2 - anchor.x, y + height / 2 - anchor.y) > 45) {
+    ctx.strokeStyle = '#758b8e99'
+    ctx.lineWidth = .75
+    ctx.beginPath()
+    ctx.moveTo(x + width / 2, y + height)
+    ctx.lineTo(anchor.x, anchor.y + height / 2)
+    ctx.stroke()
+  }
   ctx.shadowColor = '#07101d33'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 2
   roundedPanel(ctx, x, y, width, height, 4, '#202b35', '#99a6a7', .8)
   ctx.shadowColor = 'transparent'
@@ -332,71 +351,22 @@ function drawRoomSign(ctx: CanvasRenderingContext2D, sign: RoomSign, navigation:
   ctx.textBaseline = 'middle'
   ctx.fillText(label, x + width / 2 + 3, y + height / 2 + 1)
   ctx.restore()
+  return { x, y, width, height }
 }
 
-function drawRoom(ctx: CanvasRenderingContext2D, island: IlhaRpg, project: ReturnType<typeof projection>, wallTopLimit: number): RoomSign {
-  const color = validColor(island.cor, PALETTE.gold)
-  const corners = [
-    project(island.x, island.y),
-    project(island.x + island.largura, island.y),
-    project(island.x + island.largura, island.y + island.altura),
-    project(island.x, island.y + island.altura),
-  ]
-  const elevated = project(island.x, island.y, 26)
-  const wallHeight = clamp(Math.abs(corners[0].y - elevated.y) * 1.55, 28, 40)
-  // topY = max(baseY - wallHeight, maior fundo da navegação + 8 px).
-  const raised = (point: Point) => ({ x: point.x, y: Math.max(point.y - wallHeight, wallTopLimit) })
-  const topLeft = raised(corners[0])
-  const topRight = raised(corners[1])
-  const farLeft = raised(corners[3])
-  const farRight = raised(corners[2])
-
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(0, wallTopLimit, ctx.canvas.width, Math.max(0, ctx.canvas.height - wallTopLimit))
-  ctx.clip()
-  // O piso é compartilhado entre zonas; só os perfis translúcidos as delimitam.
-  polygon(ctx, [corners[0], corners[1], topRight, topLeft], '#8ebac40c', '#758b8e66', .75)
-  polygon(ctx, [corners[0], corners[3], farLeft, topLeft], '#8ebac410', '#758b8e66', .75)
-  polygon(ctx, [corners[1], corners[2], farRight, topRight], '#8ebac40a', '#758b8e66', .75)
-
-  ctx.save()
-  ctx.strokeStyle = '#ffffff44'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(topLeft.x, topLeft.y + 2)
-  ctx.lineTo(topRight.x, topRight.y + 2)
-  ctx.stroke()
-  ctx.strokeStyle = '#758b8e66'
-  ctx.lineWidth = .75
-  ctx.beginPath()
-  ctx.moveTo(farLeft.x, farLeft.y)
-  ctx.lineTo(farRight.x, farRight.y)
-  ctx.stroke()
-  ctx.strokeStyle = '#8da2a833'
-  for (const ratio of [1 / 3, 2 / 3]) {
-    const left = { x: topLeft.x + (topRight.x - topLeft.x) * ratio, y: topLeft.y + (topRight.y - topLeft.y) * ratio }
-    const right = { x: corners[0].x + (corners[1].x - corners[0].x) * ratio, y: corners[0].y + (corners[1].y - corners[0].y) * ratio }
-    ctx.beginPath()
-    ctx.moveTo(left.x, left.y)
-    ctx.lineTo(right.x, right.y)
-    ctx.stroke()
-  }
-  ctx.restore()
-  ctx.restore()
-
+function drawRoom(island: IlhaRpg, project: ReturnType<typeof projection>, wallTopLimit: number): RoomSign {
+  // Placa flutuante sobre o início do setor, sem paredes nem piso individual.
+  const first = island.postos[0]
+  const firstRow = island.postos.filter((desk) => desk.y === first.y)
+  const left = project(firstRow[0].x - 40, first.y - 55)
+  const right = project(firstRow[firstRow.length - 1].x + 40, first.y - 55)
   return {
     name: island.nome,
-    color,
-    anchor: {
-      x: (topLeft.x + topRight.x) / 2,
-      y: Math.max(topLeft.y, topRight.y) + ROOM_SIGN_HEIGHT / 2 + 2,
-    },
+    color: validColor(island.cor, PALETTE.gold),
+    anchor: { x: (left.x + right.x) / 2, y: Math.max(wallTopLimit + ROOM_SIGN_HEIGHT / 2, left.y) },
     area: {
-      x: Math.min(...corners.map((corner) => corner.x)),
-      y: wallTopLimit,
-      width: Math.max(...corners.map((corner) => corner.x)) - Math.min(...corners.map((corner) => corner.x)),
-      height: Math.max(...corners.map((corner) => corner.y)) - wallTopLimit,
+      x: left.x - 30, y: Math.max(wallTopLimit, left.y - ROOM_SIGN_HEIGHT),
+      width: right.x - left.x + 60, height: ROOM_SIGN_HEIGHT * 2,
     },
     furniture: island.postos.map((desk) => {
       const point = project(desk.x, desk.y + 18)
@@ -469,23 +439,24 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
     polygon(ctx, [project(left, top), project(right, top), project(right, bottom), project(left, bottom)], '#b9b6ae')
   }
   layout.ilhas.forEach((island) => {
-    roomSigns.push(drawRoom(ctx, island, project, wallTopLimit))
+    roomSigns.push(drawRoom(island, project, wallTopLimit))
 
     island.mesas.forEach((desk) => {
       const point = project(desk.x, desk.y + 18)
       drawSmoothFurniture(ctx, 'chair', point.x - 13, point.y - 35, 26, 34)
       drawSmoothFurniture(ctx, 'desk', point.x - 31, point.y - 28, 62, 45)
     })
-    for (const [x, y] of [
-      [island.x + 18, island.y + 24],
-      [island.x + island.largura - 18, island.y + 24],
-      [island.x + island.largura - 18, island.y + island.altura - 12],
-    ]) {
-      const plant = project(x, y)
-      drawSmoothFurniture(ctx, 'plant', plant.x - 9, plant.y - 22, 18, 26)
-    }
   })
-  roomSigns.forEach((sign) => drawRoomSign(ctx, sign, navigation))
+  // Plantas acompanham o perímetro do salão, não os limites dos squads.
+  for (const x of [18, layout.largura - 18]) {
+    const plant = project(x, layout.descansoY - 20)
+    drawSmoothFurniture(ctx, 'plant', plant.x - 9, plant.y - 22, 18, 26)
+  }
+  const furniture = roomSigns.flatMap((sign) => sign.furniture)
+  const signsPlaced: Bounds[] = []
+  roomSigns.forEach((sign) => {
+    signsPlaced.push(drawRoomSign(ctx, { ...sign, furniture: [...furniture, ...signsPlaced] }, navigation))
+  })
 
   if (layout.descansoAberto) {
     const loungeWidth = Math.min(width - 60, 140 + layout.ocupantesDescanso * 44)

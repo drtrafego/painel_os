@@ -203,19 +203,39 @@ const cenarioDenso = Array.from({ length: 15 }, (_, indice) => ({
 const layoutsDensos = [10, 12, 15].map((quantidade) =>
   calcularLayoutSala(cenarioDenso.slice(0, quantidade), { larguraDisponivel: 990, alturaDisponivel: 600 }),
 )
-const gradesDensas = layoutsDensos.map((layout) => {
-  const postos = layout.ilhas[0].postos
-  return {
-    colunas: new Set(postos.map((posto) => posto.x)).size,
-    linhas: new Set(postos.map((posto) => posto.y)).size,
-    intervaloX: postos[1].x - postos[0].x,
-    intervaloY: postos[5].y - postos[0].y,
+for (const [indice, layout] of layoutsDensos.entries()) {
+  const quantidade = [10, 12, 15][indice]
+  conferir(`${quantidade} agentes: uma malha sem postos vazios intermediários`,
+    layout.mesas.every((mesa, i) => mesa.x === layout.mesas[0].x + (i % layout.colunas) * 80
+      && mesa.y === layout.mesas[0].y + Math.floor(i / layout.colunas) * 72))
+}
+// Usa a função de produção com fronteiras de squads e subconjuntos que os
+// filtros entregam. Nenhum setor pode reiniciar a grade ou inventar mesas.
+for (const [nome, entrada] of [
+  ['todos', todosSetores],
+  ['ativos', todosSetores.filter((e) => e.ativa)],
+  ['descanso', todosSetores.filter((e) => e.execucao.estado === 'parado')],
+  ['ociosos', todosSetores.filter((e) => e.execucao.estado === 'silencioso')],
+  ['busca por nome', todosSetores.filter((e) => e.nome.toLowerCase().includes('luana'))],
+  ['vazio', []],
+  ['um agente', todosSetores.slice(0, 1)],
+] as const) {
+  for (const largura of [360, 990]) {
+    const layout = calcularLayoutSala([...entrada], { larguraDisponivel: largura, alturaDisponivel: 600 })
+    conferir(`${nome}/${largura}: preserva exatamente as identidades filtradas`,
+      layout.mesas.map((m) => m.execucao.chave).sort().join('|') === entrada.map((e) => e.chave).sort().join('|'))
+    conferir(`${nome}/${largura}: grade contínua inclusive entre squads`,
+      layout.mesas.every((mesa, i) => Math.abs(mesa.x - layout.mesas[0].x - (i % layout.colunas) * 80) < .001
+        && mesa.y === layout.mesas[0].y + Math.floor(i / layout.colunas) * 72))
+    const mapa = compactacaoRpg(layout).mapa
+    conferir(`${nome}/${largura}: projeção não deforma blocos de squads`,
+      layout.mesas.every((mesa) => mapa(mesa.x, mesa.y) === mesa.x))
+    conferir(`${nome}/${largura}: corredor fica entre colunas`,
+      layout.mesas.every((mesa) => Math.abs(mesa.x - layout.corredorX) >= 39.99))
+    conferir(`${nome}/${largura}: descanso fica fora da malha`,
+      layout.mesas.every((mesa) => mesa.y + 24 < layout.descansoY && Number.isFinite(mesa.descanso.x) && Number.isFinite(mesa.descanso.y)))
   }
-})
-conferir('10 a 15 agentes usam fileiras de cinco mesas', gradesDensas.every((grade) => grade.colunas === 5), JSON.stringify(gradesDensas))
-conferir('10, 12 e 15 agentes ocupam respectivamente 2, 3 e 3 linhas', gradesDensas.map((grade) => grade.linhas).join(',') === '2,3,3', JSON.stringify(gradesDensas))
-conferir('grade densa limita o vão horizontal entre mesas a 100 px', gradesDensas.every((grade) => grade.intervaloX <= 100), JSON.stringify(gradesDensas))
-conferir('grade densa usa 88 px entre linhas sem colar os postos', gradesDensas.every((grade) => grade.intervaloY === 88), JSON.stringify(gradesDensas))
+}
 const layoutDensoMobile = calcularLayoutSala(cenarioDenso, { larguraDisponivel: 360, alturaDisponivel: 420, zoomMinimo: 1.2 })
 const primeiraFileiraMobile = layoutDensoMobile.ilhas[0].postos.slice(0, 5)
 const mapaDensoMobile = compactacaoRpg(layoutDensoMobile).mapa

@@ -84,6 +84,9 @@ export function compactacaoRpg(layout: PlantaRpg): { mapa: (x: number, z: number
     else colunas.push({ x0: ilha.x, x1: ilha.x + ilha.largura, topo: ilha.y, fundo: ilha.y + ilha.altura, fator })
   })
   colunas.sort((a, b) => a.x0 - b.x0)
+  // A grade compacta já tem passo uniforme. Seus setores podem atravessar
+  // fileiras e ter extents sobrepostos; não interpolar limites por squad.
+  if (colunas.every((coluna) => coluna.fator === 1)) return { colunas, mapa: (x: number, _z: number) => x }
   const pontos: Array<[number, number]> = [[-1e6, -1e6]]
   colunas.forEach((coluna) => { const centro = (coluna.x0 + coluna.x1) / 2, meia = (coluna.x1 - coluna.x0) / 2; pontos.push([coluna.x0, centro - meia * coluna.fator], [coluna.x1, centro + meia * coluna.fator]) })
   pontos.push([1e6, 1e6])

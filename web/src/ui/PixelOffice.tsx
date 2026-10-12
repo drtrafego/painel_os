@@ -529,55 +529,36 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     ...PIXEL_AGENT_SQUADS.map((squad) => squad.id).filter((id) => id !== SALA_MISTA && grupos.has(id)),
     ...(grupos.has(SALA_MISTA) ? [SALA_MISTA] : []),
   ]
-  const larguraIlha = 360
-  const margemX = 16
-  const vaoX = 4
-  const vaoY = 6
-  const margemTopo = 128
+  // Todos os postos compartilham a mesma malha, inclusive nas trocas de squad.
+  // As ilhas abaixo são apenas metadados de setor, nunca contêineres espaciais.
+  const margemX = 32
+  // Reserva coletiva para placas flutuantes quando o vão entre fileiras
+  // não as comporta. Não cria cabeçalhos nem margens por bloco de mesas.
+  const margemTopo = 128 + ordemSquads.length * 15
+  const espacamentoMesaX = 80
   const espacamentoMesaY = 72
-  const espacamentoMesaXMaximo = 80
-  const colunasDaIlha = (squad: PixelAgentSquad, quantidade: number) =>
-    squad === SALA_MISTA ? Math.min(3, quantidade) : Math.min(4, Math.max(1, quantidade))
-  const alturas = new Map<PixelAgentSquad, number>()
-  ordemSquads.forEach((squad) => {
-    const quantidade = grupos.get(squad)?.length || 0
-    const colunasMesa = colunasDaIlha(squad, quantidade)
-    const linhasMesa = Math.ceil(quantidade / colunasMesa)
-    alturas.set(squad, 76 + linhasMesa * espacamentoMesaY + (squad === SALA_MISTA ? 72 : 0))
-  })
-
+  const ordenadas = ordemSquads.flatMap((squad) => grupos.get(squad) || [])
   const distribuir = (colunas: number) => {
-    const cursores = Array.from({ length: colunas }, () => margemTopo)
-    const posicoes: Array<{ squad: PixelAgentSquad; coluna: number; y: number }> = []
-    ordemSquads.forEach((squad) => {
-      const menor = Math.min(...cursores)
-      const coluna = squad === 'coordenação' && cursores.every((cursor) => cursor === margemTopo)
-        ? Math.floor((colunas - 1) / 2)
-        : cursores.indexOf(menor)
-      posicoes.push({ squad, coluna, y: cursores[coluna] })
-      cursores[coluna] += (alturas.get(squad) || 0) + vaoY
-    })
-    // A faixa de descanso já tem respiro próprio; somar outro vão externo
-    // deixava uma borda morta no fundo quando a largura limitava a escala.
-    const descansoY = Math.max(...cursores, 280)
+    const linhas = Math.ceil(ordenadas.length / colunas)
+    const descansoY = Math.max(margemTopo + 70 + linhas * espacamentoMesaY, 280)
     const paradas = execucoes.filter((execucao) => execucao.squad !== SALA_MISTA && execucao.execucao.estado === 'parado').length
-    const larguraNatural = margemX * 2 + colunas * larguraIlha + (colunas - 1) * vaoX
+    const larguraNatural = Math.max(360, margemX * 2 + colunas * espacamentoMesaX)
     const larguraDescanso = Math.min(larguraNatural - 60, 140 + paradas * 44)
     const porLinha = Math.max(1, Math.floor((larguraDescanso - 36) / 44))
     const linhasDescanso = paradas > 0 ? Math.ceil(paradas / porLinha) : 0
     const alturaDescanso = paradas > 0 ? 40 + linhasDescanso * 44 : 26
-    return { posicoes, descansoY, larguraNatural, altura: descansoY + alturaDescanso }
+    return { descansoY, larguraNatural, altura: descansoY + alturaDescanso }
   }
 
   const larguraDisponivel = Math.max(0, opcoes.larguraDisponivel || 0)
   const alturaDisponivel = Math.max(0, opcoes.alturaDisponivel || 0)
   let melhor = { colunas: 1, ...distribuir(1), escala: Number.NEGATIVE_INFINITY }
   let melhorComAltura: typeof melhor | null = null
-  for (let colunas = 1; colunas <= Math.min(6, ordemSquads.length); colunas += 1) {
+  for (let colunas = 1; colunas <= Math.max(1, Math.min(12, ordenadas.length)); colunas += 1) {
     const candidato = distribuir(colunas)
     const escala = larguraDisponivel && alturaDisponivel
       ? Math.min(larguraDisponivel / candidato.larguraNatural, alturaDisponivel / candidato.altura)
-      : colunas === Math.min(3, ordemSquads.length) ? 1 : 0
+      : colunas === Math.max(1, Math.min(6, ordenadas.length)) ? 1 : 0
     const avaliado = { colunas, ...candidato, escala }
     if (escala > melhor.escala + 0.001 || (Math.abs(escala - melhor.escala) <= 0.001 && colunas > melhor.colunas)) {
       melhor = avaliado
@@ -600,32 +581,26 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   // virava vazio vertical mensurável e um piso alto causava overflow horizontal.
   const zoomSugerido = limitar(zoomSugeridoNatural, opcoes.zoomMinimo ?? ZOOM_MIN, ZOOM_MAX)
   const largura = larguraDisponivel ? Math.max(melhor.larguraNatural, larguraDisponivel / zoomSugerido) : melhor.larguraNatural
-  const larguraIlhaFinal = (largura - margemX * 2 - (melhor.colunas - 1) * vaoX) / melhor.colunas
-  const ilhas: IlhaVisual[] = []
-  const mesas: MesaVisual[] = []
-
-  melhor.posicoes.forEach(({ squad, coluna, y }) => {
-    const lista = grupos.get(squad) || []
-    const coworking = squad === SALA_MISTA
-    const capacidade = lista.length
-    const colunasMesa = colunasDaIlha(squad, capacidade)
-    const alturaIlha = alturas.get(squad) || 0
-    const x = margemX + coluna * (larguraIlhaFinal + vaoX)
-    const mesasIlha: MesaVisual[] = []
-    const postos: Array<{ x: number; y: number }> = []
-    const intervalo = Math.min(espacamentoMesaXMaximo, larguraIlhaFinal / colunasMesa)
-    const inicioGradeX = x + (larguraIlhaFinal - intervalo * colunasMesa) / 2
-    for (let posicao = 0; posicao < capacidade; posicao += 1) {
-      const colunaMesa = posicao % colunasMesa
-      const linhaMesa = Math.floor(posicao / colunasMesa)
-      postos.push({ x: inicioGradeX + intervalo * (colunaMesa + 0.5), y: y + 70 + linhaMesa * espacamentoMesaY })
+  const inicioGradeX = (largura - melhor.colunas * espacamentoMesaX) / 2
+  const mesas: MesaVisual[] = ordenadas.map((execucao, indice) => ({
+    execucao,
+    x: inicioGradeX + (indice % melhor.colunas + 0.5) * espacamentoMesaX,
+    y: margemTopo + 70 + Math.floor(indice / melhor.colunas) * espacamentoMesaY,
+    descanso: { x: 0, y: 0 },
+  }))
+  const ilhas: IlhaVisual[] = ordemSquads.map((squad) => {
+    const mesasSquad = mesas.filter((mesa) => mesa.execucao.squad === squad)
+    const x = Math.min(...mesasSquad.map((mesa) => mesa.x)) - espacamentoMesaX / 2
+    const y = Math.min(...mesasSquad.map((mesa) => mesa.y)) - 70
+    return {
+      squad, nome: mesasSquad[0].execucao.squadNome || NOMES_SQUAD.get(squad) || squad.toUpperCase(),
+      cor: CORES_SQUAD.get(squad) || '#7bcaad',
+      tipo: squad === SALA_MISTA ? 'coworking' : 'squad', compacta: false,
+      x, y,
+      largura: Math.max(...mesasSquad.map((mesa) => mesa.x)) + espacamentoMesaX / 2 - x,
+      altura: Math.max(...mesasSquad.map((mesa) => mesa.y)) + espacamentoMesaY - y,
+      postos: mesasSquad.map(({ x, y }) => ({ x, y })), mesas: mesasSquad,
     }
-    lista.forEach((execucao, posicao) => {
-      const posto = postos[posicao]
-      const mesa: MesaVisual = { execucao, x: posto.x, y: posto.y, descanso: { x: 0, y: 0 } }
-      mesasIlha.push(mesa); mesas.push(mesa)
-    })
-    ilhas.push({ squad, nome: lista[0]?.squadNome || NOMES_SQUAD.get(squad) || squad.toUpperCase(), cor: CORES_SQUAD.get(squad) || '#7bcaad', tipo: coworking ? 'coworking' : 'squad', compacta: coworking && lista.length === 0, x, y, largura: larguraIlhaFinal, altura: alturaIlha, postos, mesas: mesasIlha })
   })
 
   const descansoY = melhor.descansoY
@@ -645,7 +620,7 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   })
   const ilhaMista = ilhas.find((ilha) => ilha.squad === SALA_MISTA)
   ilhaMista?.mesas.forEach((mesa, indice) => {
-    mesa.descanso = { x: ilhaMista.x + ilhaMista.largura - 18, y: ilhaMista.y + ilhaMista.altura - 24 - (indice % 2) * 12 }
+    mesa.descanso = { x: largura - 18, y: descansoY - 24 - (indice % 2) * 12 }
   })
   const linhasDescanso = mesasEmDescanso.length > 0 ? Math.ceil(mesasEmDescanso.length / porLinha) : 0
   const alturaDescanso = mesasEmDescanso.length > 0 ? 40 + linhasDescanso * 44 : 26
@@ -654,7 +629,7 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     altura: descansoY + alturaDescanso,
     colunas: melhor.colunas,
     zoomSugerido,
-    corredorX: largura / 2,
+    corredorX: inicioGradeX + Math.floor(melhor.colunas / 2) * espacamentoMesaX,
     descansoY,
     descansoAberto: mesasEmDescanso.length > 0,
     ocupantesDescanso: mesasEmDescanso.length,
