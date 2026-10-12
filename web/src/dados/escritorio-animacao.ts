@@ -66,8 +66,7 @@ export function lerPostura(ferramenta?: string | null): 'digitando' | 'lendo' | 
 }
 
 export function interpolarSuave(t: number): number {
-  // Cubic ease-out: 1 - (1 - t)^3
-  return 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3)
+  return Math.max(0, Math.min(1, t))
 }
 
 /**

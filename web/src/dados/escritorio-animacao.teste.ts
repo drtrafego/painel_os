@@ -120,7 +120,21 @@ conferir('simulação 60Hz chega na mesa', res60.fase === 'sentando' || res60.fa
 conferir('simulação 120Hz chega na mesa', res120.fase === 'sentando' || res120.fase === 'trabalhando', true)
 conferir('posições finais em 30Hz, 60Hz e 120Hz convergem', { x30: res30.x, x60: res60.x, x120: res120.x }, { x30: 100, x60: 100, x120: 100 })
 
-// 15. Regressão do relato do Gastão: trabalho contínuo não pode reiniciar um ciclo.
+// 15. Cadência uniforme: uma caminhada não pode dar um salto grande logo no primeiro quadro.
+let caminhadaUniforme = criarEstadoInicialBoneco('cadencia', 'parado', posMesa, posDescanso, 0)
+caminhadaUniforme = avancarEstadoAnimacao(caminhadaUniforme, 'trabalhando', posMesa, posDescanso, 0, false)
+let pontoAnterior = { x: caminhadaUniforme.x, y: caminhadaUniforme.y }
+const passosDaCaminhada: number[] = []
+for (let t = 1000 / 60; t <= 750; t += 1000 / 60) {
+  caminhadaUniforme = avancarEstadoAnimacao(caminhadaUniforme, 'trabalhando', posMesa, posDescanso, t, false)
+  passosDaCaminhada.push(Math.hypot(caminhadaUniforme.x - pontoAnterior.x, caminhadaUniforme.y - pontoAnterior.y))
+  pontoAnterior = { x: caminhadaUniforme.x, y: caminhadaUniforme.y }
+}
+const menorPasso = Math.min(...passosDaCaminhada)
+const maiorPasso = Math.max(...passosDaCaminhada)
+conferir('cadência da caminhada é uniforme a 60 Hz', Math.round(maiorPasso * 100) / 100, Math.round(menorPasso * 100) / 100)
+
+// 16. Regressão do relato do Gastão: trabalho contínuo não pode reiniciar um ciclo.
 let trabalhandoPorUmMinuto = criarEstadoInicialBoneco('dev-estavel', 'trabalhando', posMesa, posDescanso, 0, 'Edit')
 const fasesDoMinuto = new Set<string>()
 for (let t = 1000; t <= 60_000; t += 1000) {

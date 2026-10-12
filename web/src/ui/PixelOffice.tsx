@@ -26,6 +26,7 @@ import {
 import { useAgentesVivos } from '../dados/useAgentesVivos'
 import { ambienteForcadoDaUrl, resolverAmbiente, type AmbienteVisual } from '../dados/ambiente'
 import { agruparAgentesAtivosPorLancador, totalDeAgentesAgrupados, type GrupoLancador } from '../dados/lancadores'
+import { statusSeguroDaExecucao } from './PixelOffice.rpg-data'
 
 export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, obterAtivosNoCatalogo }
 
@@ -840,6 +841,11 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const totalGeral = todasExecucoes.length
   const totalFixos = todasExecucoes.filter((execucao) => !execucao.temporaria).length
   const totalExtras = todasExecucoes.filter((execucao) => execucao.temporaria).length
+  const atividadesSeguras = useMemo(() => todasExecucoes.flatMap((execucao) => {
+    const status = statusSeguroDaExecucao(execucao)
+    return status ? [`${execucao.nome}: ${status}`] : []
+  }), [todasExecucoes])
+  const textoAtividadesSeguras = atividadesSeguras.join(' · ')
   const selecionada = todasExecucoes.find((execucao) => execucao.chave === agenteSelecionadoId) || execucoesVisiveis[0]
   const faseSelecionada = selecionada ? fasesRef.current.get(selecionada.animacaoChave) : undefined
   const squadsVisiveis = useMemo(() => PIXEL_AGENT_SQUADS.filter((squad) => layout.ilhas.some((ilha) => ilha.squad === squad.id)), [layout.ilhas])
@@ -1116,7 +1122,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 type="button"
                 role="tab"
                 aria-selected={abaEscritorio === 'lista'}
-                className={`ct-tab-btn ${abaEscritorio === 'lista' ? 'ct-tab-active' : ''}`}
+                className={`ct-tab-btn ct-quick-action ${abaEscritorio === 'lista' ? 'ct-tab-active' : ''}`}
                 onClick={() => setAbaEscritorio('lista')}
               >
                 <span aria-hidden="true">☰</span> Lista de Agentes
@@ -1209,10 +1215,11 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               </button>
               <button
                 type="button"
-                className="ct-button"
+                className="ct-button ct-quick-action"
                 onClick={() => setPausado((valor) => !valor)}
                 aria-pressed={pausado}
               >
+                <span aria-hidden="true">{pausado ? '▶' : 'Ⅱ'}</span>
                 {pausado ? 'Retomar' : 'Pausar'}
               </button>
               <div className="ct-zoom">
@@ -1258,6 +1265,20 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 onKeyDown={tratarTeclado}
               />
             </div>
+
+            {abaEscritorio === 'escritorio' && (
+              atividadesSeguras.length > 0 && (
+                <div className="ct-activity-ticker" data-testid="office-activity-ticker" aria-label={`Atividades atuais: ${textoAtividadesSeguras}`}>
+                  <span className="ct-activity-ticker-label" aria-hidden="true">STATUS</span>
+                  <div className="ct-activity-ticker-window" aria-hidden="true">
+                    <div className="ct-activity-ticker-track">
+                      <span>{textoAtividadesSeguras}</span>
+                      <span>{textoAtividadesSeguras}</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
 
             {abaEscritorio === 'escritorio' && (
               <div className="ct-scene-hud" aria-label="Resumo da operação">
