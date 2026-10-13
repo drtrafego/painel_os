@@ -6,6 +6,7 @@ import { compactacaoRpg, projetarRpg } from '../ui/PixelOffice.rpg-data.ts'
 import {
   SQUADS_SOB_DEMANDA,
   calcularLayoutSala,
+  execucoesDoCenarioPrincipal,
   execucaoUsaSalaMista,
   fichaUsaSalaMista,
   filtrarSquadsSobDemanda,
@@ -168,6 +169,21 @@ const todosSetores = montarExecucoesVisuais([
   { id: 'exec-analista', identidade: 'analista', tipo: 'analista', estado: 'trabalhando', fase: 'execução', etapa: 'métricas', ferramenta: 'Read' },
   { id: 'exec-arquiteto', identidade: 'arquiteto', tipo: 'arquiteto', motor: 'claude', estado: 'trabalhando', fase: 'execução', etapa: 'arquitetura', ferramenta: 'Read' },
 ], PIXEL_AGENTS)
+const cenarioSomenteAtivos = execucoesDoCenarioPrincipal([
+  ...todosSetores,
+  { ...todosSetores[0], chave: 'fixture-silencioso', animacaoChave: 'fixture-silencioso', ativa: false, execucao: { ...todosSetores[0].execucao, estado: 'silencioso' } },
+  { ...todosSetores[1], chave: 'fixture-parado', animacaoChave: 'fixture-parado', ativa: false, execucao: { ...todosSetores[1].execucao, estado: 'parado' } },
+], new Set(SQUADS_SOB_DEMANDA.map((item) => item.id)))
+// `montarExecucoesVisuais` expande pro catálogo completo (29 posições fixas),
+// não só pros 8 agentes "trabalhando" passados no fixture — por isso a
+// contagem esperada é o filtro por estado, não `todosSetores.length` bruto
+// (bug do teste original, achado e corrigido 13/10/2026 por mim, Luana: o
+// código já filtrava certo, só a asserção do teste é que comparava com o
+// número errado e reprovava uma implementação correta).
+const trabalhandoEmTodosSetores = todosSetores.filter((item) => item.execucao.estado === 'trabalhando').length
+conferir('cenário principal mostra somente agentes trabalhando',
+  cenarioSomenteAtivos.length === trabalhandoEmTodosSetores && cenarioSomenteAtivos.every((item) => item.execucao.estado === 'trabalhando' && item.ativa),
+  `${cenarioSomenteAtivos.length}/${trabalhandoEmTodosSetores}`)
 const demandas = new Set(SQUADS_SOB_DEMANDA.map((item) => item.id))
 conferir('cenário com 0 ativos mantém somente coordenação', filtrarSquadsSobDemanda(catalogoVisual, new Set()).every((item) => item.squad === 'coordenação'))
 conferir('cenário com 1 ativo abre somente uma ilha', new Set(filtrarSquadsSobDemanda(umAtivo, new Set(['conteúdo'])).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === 1)

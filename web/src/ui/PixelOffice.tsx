@@ -516,6 +516,11 @@ export function filtrarSquadsSobDemanda(execucoes: ExecucaoVisual[], squadsAbert
   return execucoes.filter((execucao) => !sobDemanda.has(execucao.squad) || squadsAbertos.has(execucao.squad))
 }
 
+/** A cena principal representa trabalho em curso; lista e indicadores mantêm o inventário completo. */
+export function execucoesDoCenarioPrincipal(execucoes: ExecucaoVisual[], squadsAbertos: ReadonlySet<PixelAgentSquad>) {
+  return filtrarSquadsSobDemanda(execucoes.filter((execucao) => execucao.ativa), squadsAbertos)
+}
+
 type OpcoesLayoutSala = {
   larguraDisponivel?: number
   alturaDisponivel?: number
@@ -739,10 +744,11 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       ? filtradas
       : filtrarSquadsSobDemanda(filtradas, squadsSobDemandaAbertos)
   }, [filtroStatus, soAtivos, squadsSobDemandaAbertos, termoBusca, todasExecucoes])
-  const layout = useMemo(() => calcularLayoutSala(execucoesVisiveis, {
+  const execucoesDoCenario = useMemo(() => execucoesDoCenarioPrincipal(todasExecucoes, squadsSobDemandaAbertos), [squadsSobDemandaAbertos, todasExecucoes])
+  const layout = useMemo(() => calcularLayoutSala(execucoesDoCenario, {
     larguraDisponivel: dimensoesPalco.largura,
     alturaDisponivel: dimensoesPalco.altura,
-  }), [dimensoesPalco.altura, dimensoesPalco.largura, execucoesVisiveis])
+  }), [dimensoesPalco.altura, dimensoesPalco.largura, execucoesDoCenario])
   // A abertura sempre começa no enquadramento que cabe no palco. A rolagem
   // interna continua disponível somente quando a pessoa aproxima manualmente.
   const zoomMaximoSeguro = ZOOM_MAX

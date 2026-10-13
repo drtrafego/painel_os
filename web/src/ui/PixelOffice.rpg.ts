@@ -1013,7 +1013,9 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
       hits.push({ chave: `navegacao:${route}`, x, y, largura: width, altura: height, modulo: route })
     })
 
-    quadro.personagens.forEach((character) => {
+    // Defesa no renderer: o canvas principal nunca desenha uma execução sem trabalho em curso.
+    const personagensAtivos = quadro.personagens.filter((character) => character.mesa.execucao.ativa)
+    personagensAtivos.forEach((character) => {
       recordWalkEvent(character.mesa.execucao.animacaoChave, character.pose.andando)
       const bounds = drawCharacter(ctx, quadro, character, project)
       if (!bounds) return
@@ -1043,11 +1045,12 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
   ctx.canvas.dataset.officeStaticCache = sceneCache ? 'ready' : 'unavailable'
   ctx.canvas.dataset.officeRenderMs = renderMs.toFixed(2)
   ctx.canvas.dataset.officeFrameBudget = renderMs < 16 ? 'ok' : 'over'
-  ctx.canvas.dataset.officeSpriteAgents = String(quadro.personagens.length)
-  ctx.canvas.dataset.officeRobotAgents = String(quadro.personagens.filter((character) => character.mesa.execucao.tipoVisual === 'robo').length)
-  ctx.canvas.dataset.officeHumanAgents = String(quadro.personagens.filter((character) => character.mesa.execucao.tipoVisual === 'humano').length)
+  const personagensAtivos = quadro.personagens.filter((character) => character.mesa.execucao.ativa)
+  ctx.canvas.dataset.officeSpriteAgents = String(personagensAtivos.length)
+  ctx.canvas.dataset.officeRobotAgents = String(personagensAtivos.filter((character) => character.mesa.execucao.tipoVisual === 'robo').length)
+  ctx.canvas.dataset.officeHumanAgents = String(personagensAtivos.filter((character) => character.mesa.execucao.tipoVisual === 'humano').length)
   ctx.canvas.dataset.officeStatusBubbles = String(bubbles.length)
-  ctx.canvas.dataset.officeWalkers = String(quadro.personagens.filter((character) => character.pose.andando).length)
+  ctx.canvas.dataset.officeWalkers = String(personagensAtivos.filter((character) => character.pose.andando).length)
   ctx.canvas.dataset.officeLastWalkEvent = lastWalkEventAt ? String(lastWalkEventAt) : 'none'
   return hits
 }
