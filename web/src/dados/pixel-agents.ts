@@ -168,9 +168,18 @@ export function resolverAgenteNoCatalogo(
   agente: { id: string; dono?: string | null; identidade?: string | null; tipo?: string | null },
   catalogoVisual: PixelAgent[]
 ): PixelAgent | undefined {
+  // 'sessao-codex' é a identidade GENÉRICA que a sonda atribui à sessão raiz
+  // do Codex quando nenhuma persona específica (dani, guardiao, etc.) bateu
+  // — ou seja, é o equivalente Codex de 'sessao-claude'. Sem esta linha, um
+  // diretor que troca de motor (ex.: Renato no Codex, ver CLAUDE.md "Como
+  // você roda") nunca resolve para a própria mesa: a sessão real cai no
+  // coworking genérico como "Execução técnica (Codex)", sem nome, e a mesa
+  // fixa do diretor fica eternamente "silencioso". Medido em produção em
+  // 13/10/2026 (painel.casaldotrafego.com) com o Renato rodando no Codex.
   const ehSessaoDiretor =
     agente.tipo === 'sessao_claude' ||
     agente.identidade === 'sessao-claude' ||
+    agente.identidade === 'sessao-codex' ||
     agente.id === 'sessao-claude' ||
     agente.id.startsWith('sessao-')
 

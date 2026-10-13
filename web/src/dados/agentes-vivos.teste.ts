@@ -62,6 +62,20 @@ conferir('subagente dev da Luana fica alocado na coordenação', devResolved?.sq
 conferir('sessao_claude do Renato resolve diretamente para o Renato', renatoResolved?.id, 'renato')
 conferir('sessao_claude da Bia resolve diretamente para a Bia', biaResolved?.id, 'bia')
 
+// --- RODADA 17: DIRETOR NO MOTOR CODEX (caso real do Renato em 13/10/2026,
+// medido em produção via /api/agentes-vivos: tipo 'codex', identidade
+// 'sessao-codex', dono 'renato', sem 'pai'). Antes do conserto, isto caía no
+// coworking como "Execução técnica (Codex)" sem nome, e a mesa fixa do
+// Renato ficava eternamente "silencioso".
+const sessaoCodexRenato: AgenteVivo = {
+  id: '01a12b99-1230-7ee3-9210-c9a86e12c529', dono: 'renato', tipo: 'codex',
+  identidade: 'sessao-codex', estado: 'trabalhando', silencio_s: 2.4,
+  fase: 'atividade_codex', etapa: 'renato',
+}
+const catalogoComCodexRenato = mesclarRuntimesNoCatalogo(PIXEL_AGENTS, [sessaoCodexRenato])
+const codexRenatoResolved = resolverAgenteNoCatalogo(sessaoCodexRenato, catalogoComCodexRenato)
+conferir('sessão Codex do Renato resolve diretamente para o Renato (motor trocado)', codexRenatoResolved?.id, 'renato')
+
 // --- RODADA 16: TESTES DE FIXTURES DE SUBAGENTES POR DIRETORES (LUANA, RENATO, BIA)
 const subagentesLuana: AgenteVivo[] = [
   { id: 'sub-l1', dono: 'luana', tipo: 'subagente', estado: 'trabalhando', silencio_s: 0, fase: 'execucao', etapa: 'dev' },
