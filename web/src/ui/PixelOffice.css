@@ -515,7 +515,7 @@
 @media (max-width:480px) {
   .ct-office .ct-header { min-height:52px; }
   .ct-office .ct-header-status .ct-button { margin-left:0; }
-  .ct-office .ct-room-scroll { height:calc(100dvh - 210px); min-height:500px; }
+  .ct-office .ct-room-scroll { height:clamp(280px,42dvh,360px); min-height:0; }
   .ct-office .ct-toolbar { position:static; padding:5px 7px; gap:6px; }
   .ct-office .ct-toolbar .ct-pill { padding-inline:8px; }
   .ct-office .ct-activity-ticker { top:57px; width:calc(100% - 18px); }
@@ -539,4 +539,9 @@
 }
 .ct-office[data-office-visual="ct-rpg"] .ct-room-scroll {
   background: radial-gradient(ellipse at 50% 45%, #273133 0%, #0b1318 82%);
+}
+@media (max-width:480px) {
+  .ct-office[data-office-visual="ct-rpg"] .ct-room-scroll canvas {
+    margin-inline:0;
+  }
 }

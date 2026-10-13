@@ -28,7 +28,7 @@ import { ambienteForcadoDaUrl, resolverAmbiente, type AmbienteVisual } from '../
 import { agruparAgentesAtivosPorLancador, totalDeAgentesAgrupados, type GrupoLancador } from '../dados/lancadores'
 import { statusSeguroDaExecucao } from './PixelOffice.rpg-data'
 import type { ArquiteturaRpg } from './PixelOffice.rpg-data'
-import { planejarCTOffice } from './ct-office-plan'
+import { planejarCTOffice, posicoesNaSala, salaDoSquad } from './ct-office-plan'
 
 export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, obterAtivosNoCatalogo }
 
@@ -491,7 +491,7 @@ export function montarExecucoesVisuais(agentes: AgenteVivo[], catalogo: PixelAge
   catalogo.forEach((ficha) => {
     if (fichaUsaSalaMista(ficha)) return
     const execucoes = porFicha.get(ficha.id) || []
-    const squadVisual = ['luana', 'renato', 'bia'].includes(ficha.id) ? 'coordenação' : ficha.squad
+    const squadVisual = ficha.squad
     visuais.push(criarVisual(execucoes[0] || execucaoParada(ficha), ficha, squadVisual, visuais.length, false, ficha.nome))
     execucoes.slice(1).forEach((execucao, indice) => {
       visuais.push(criarVisual(execucao, ficha, squadVisual, visuais.length, true, `${ficha.nome} · extra ${indice + 2}`))
@@ -539,15 +539,25 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     ...(grupos.has(SALA_MISTA) ? [SALA_MISTA] : []),
   ]
   const ordenadas = ordemSquads.flatMap((squad) => grupos.get(squad) || [])
-  // Liderança ocupa o fundo. Chefias além da capacidade visual não desaparecem:
-  // continuam em uma estação normal do salão, com sua identificação preservada.
-  const direcao = ordenadas.filter(item => item.squad === 'coordenação').slice(0, 3)
-  const equipes = ordenadas.filter(item => !direcao.includes(item))
   const parados = ordenadas.filter(item => item.execucao.estado === 'parado')
+  const direcao = ordenadas.filter(item => item.squad === 'coordenação')
+  const equipes = ordenadas.filter(item => item.squad !== 'coordenação')
   const planta = planejarCTOffice(direcao.length, equipes.length, parados.length, opcoes)
   const posicoes = new Map<ExecucaoVisual, { x: number; y: number }>()
-  direcao.forEach((item, indice) => posicoes.set(item, planta.chefias[indice]))
-  equipes.forEach((item, indice) => posicoes.set(item, planta.equipes[indice]))
+  ordemSquads.forEach((squad) => {
+    const membros = grupos.get(squad) || []
+    const sala = salaDoSquad(planta.arquitetura.salas, squad)
+    const postos = sala ? posicoesNaSala(sala, membros.length) : planta.equipes.slice(0, membros.length)
+    membros.forEach((item, indice) => {
+      const posto = postos[indice]
+      if (posto) posicoes.set(item, posto)
+    })
+  })
+  planta.arquitetura.salas = planta.arquitetura.salas.map((sala) => {
+    if (sala.tipo !== 'squad' || !sala.squad) return sala
+    const ocupantes = (grupos.get(sala.squad as PixelAgentSquad) || []).filter((item) => item.ativa).length
+    return { ...sala, ativa: ocupantes > 0, ocupantes }
+  })
   const mesas: MesaVisual[] = ordenadas.map(item => {
     const posicao = posicoes.get(item)
     if (!posicao) throw new Error(`Sem posicao de mesa para ${item.chave}`)
@@ -821,8 +831,16 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       palco.scrollLeft = Math.max(0, (palco.scrollWidth - palco.clientWidth) / 2)
       palco.scrollTop = 0
     }
-    const quadro = window.requestAnimationFrame(centralizar)
-    return () => window.cancelAnimationFrame(quadro)
+    // O primeiro frame aplica o novo zoom ao canvas; no segundo, scrollWidth
+    // já representa o tamanho final e o centro não fica preso na borda direita.
+    let quadroFinal = 0
+    const quadroZoom = window.requestAnimationFrame(() => {
+      quadroFinal = window.requestAnimationFrame(centralizar)
+    })
+    return () => {
+      window.cancelAnimationFrame(quadroZoom)
+      window.cancelAnimationFrame(quadroFinal)
+    }
   }, [layout.largura, layout.zoomSugerido])
 
   useEffect(() => {

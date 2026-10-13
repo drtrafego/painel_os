@@ -17,6 +17,7 @@ export interface IlhaRpg {
 export interface SalaArquiteturaRpg {
   id: string; label: string; x: number; z: number; largura: number; profundidade: number
   alturaVidro: number; abertura: number
+  tipo?: 'squad' | 'reuniao' | 'apoio'; squad?: string; cor?: string; ativa?: boolean; ocupantes?: number
 }
 export interface ArquiteturaRpg {
   salas: ReadonlyArray<SalaArquiteturaRpg>

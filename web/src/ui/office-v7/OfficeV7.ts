@@ -1,3 +1,12 @@
+import humanLuanaSentada from '../pixel-office-rpg/human-luana-sentada.png'
+import humanRenatoSentado from '../pixel-office-rpg/human-renato-sentado.png'
+import humanBiaSentada from '../pixel-office-rpg/human-bia-sentada.png'
+import humanGastaoSentado from '../pixel-office-rpg/human-gastao-sentado.png'
+import robotAzulSentado from '../pixel-office-rpg/robot-azul-sentado.png'
+import robotVerdeSentado from '../pixel-office-rpg/robot-verde-sentado.png'
+import robotMarfimSentado from '../pixel-office-rpg/robot-marfim-sentado.png'
+import robotVioletaSentado from '../pixel-office-rpg/robot-violeta-sentado.png'
+
 /**
  * Casal do Tráfego · Office V7 — cenário tycoon 2.5D em Canvas.
  * Apenas renderização: reutiliza integralmente o quadro, poses, estados,
@@ -8,10 +17,14 @@
 
 type Point = { x: number; y: number }
 type Zone = { x: number; z: number; largura: number; profundidade: number }
-type Room = Zone & { id: string; label: string; alturaVidro: number; abertura: number }
+type Room = Zone & {
+  id: string; label: string; alturaVidro: number; abertura: number;
+  tipo?: 'squad'|'reuniao'|'apoio'; squad?: string; cor?: string; ativa?: boolean; ocupantes?: number
+}
 type Agent = {
   chave: string; nome: string; squad: string; tipoVisual: 'humano'|'robo';
   ativa: boolean; ordem: number; cor?: string; cabelo?: string; pele?: string;
+  ficha?: { id: string };
   execucao: { estado: string; tarefa?: string|null; ferramenta?: string|null }
 }
 type Desk = { x: number; y: number; execucao: Agent }
@@ -30,6 +43,27 @@ export type OfficeV7Frame = {
 export type OfficeV7Hit = { chave:string;x:number;y:number;largura:number;altura:number;modulo?:string }
 type View = { P:(x:number,z:number,e?:number)=>Point; sceneW:number;sceneH:number }
 const clamp=(n:number,a:number,b:number)=>Math.max(a,Math.min(b,n))
+const seatedHumans:Record<string,string>={
+  luana:humanLuanaSentada,renato:humanRenatoSentado,bia:humanBiaSentada,gastao:humanGastaoSentado,
+}
+const seatedRobots=[robotAzulSentado,robotVerdeSentado,robotMarfimSentado,robotVioletaSentado]
+const imageCache=new Map<string,HTMLImageElement>()
+function imageFor(url:string){
+  if(typeof Image==='undefined')return null
+  const cached=imageCache.get(url);if(cached)return cached
+  const image=new Image();image.decoding='async';image.src=url;imageCache.set(url,image);return image
+}
+function alpha(hex:string,opacity:number){
+  const clean=hex.replace('#','')
+  if(clean.length!==6)return `rgba(90,105,105,${opacity})`
+  const value=Number.parseInt(clean,16)
+  return `rgba(${value>>16},${value>>8&255},${value&255},${opacity})`
+}
+function seatedAsset(agent:Agent,seed:number){
+  const identity=(agent.ficha?.id||agent.nome).toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  if(agent.tipoVisual==='humano')return seatedHumans[identity]||seatedHumans[identity.split(/\s+/)[0]]
+  return seatedRobots[seed%seatedRobots.length]
+}
 function v(layout:Layout):View {
   const w=layout.largura,h=layout.altura
   const scale=Math.min(1,w/1430,h/820)
@@ -121,12 +155,8 @@ function floorAndWalls(ctx:CanvasRenderingContext2D,V:View,depth=780){
   for(const z of [185,347,509])path(ctx,[P(26,z,142),P(26,z)],'#d5eeead1',1.7);
   path(ctx,[P(25,26),P(1405,26)],'#e9d2a2',3);
   for(const x of [150,680,1220])lamp(ctx,V,x,26,111);
-  // Branding de operação no próprio ripado, sem duplicar a navegação da aplicação.
-  const brand=P(750,26,102);
-  ctx.save();ctx.shadowColor='#191f25bb';ctx.shadowBlur=12;
-  rect(ctx,brand.x-150,brand.y-25,300,51,'#1d3033',6,'#dec179');ctx.restore();
-  text(ctx,'CASAL DO TRÁFEGO',brand.x,brand.y-7,17,'#f1d47e',850);
-  text(ctx,'OFFICE  ·  OPERAÇÃO DE AGENTES',brand.x,brand.y+13,8,'#c3cdbf',650);
+  // O centro do ripado fica livre: os atalhos dos módulos ocupam essa faixa.
+  // A marca já aparece no cabeçalho da aplicação.
   // Dois painéis operacionais decorativos sem indicadores fabricados.
   for(const x of [355,1080]){
     const p=P(x,26,98);rect(ctx,p.x-69,p.y-23,138,46,'#233c42',4,'#647d7b');
@@ -177,9 +207,9 @@ function desk(ctx:CanvasRenderingContext2D,V:View,x:number,z:number,kind:'work'|
     const mug=V.P(x+w/2-13,z+2,29);ellipse(ctx,mug.x,mug.y-3,4,4,'#354b53');
   }
 }
-function glassPanel(ctx:CanvasRenderingContext2D,V:View,x1:number,z1:number,x2:number,z2:number,h:number){
+function glassPanel(ctx:CanvasRenderingContext2D,V:View,x1:number,z1:number,x2:number,z2:number,h:number,fill='#b1e3e637',stroke='#678b93bd'){
   const P=V.P;const corners=[P(x1,z1),P(x2,z2),P(x2,z2,h),P(x1,z1,h)];
-  polygon(ctx,corners,'#b1e3e637','#678b93bd',1.45);
+  polygon(ctx,corners,fill,stroke,1.45);
   path(ctx,[corners[3],corners[2]],'#e5fffbe0',2.1);
   path(ctx,[corners[0],corners[1]],'#526f7588',1.5);
   path(ctx,[corners[0],corners[3]],'#789ca3b8',1.5);
@@ -188,10 +218,18 @@ function glassPanel(ctx:CanvasRenderingContext2D,V:View,x1:number,z1:number,x2:n
 }
 function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room){
   const {x,z,largura:w,profundidade:d,alturaVidro:h,abertura:door}=room;
-  roundedArea(ctx,V,room,'#e8e3d0','#d1c9ad');
-  roundedArea(ctx,V,{x:x+8,z:z+8,largura:w-16,profundidade:d-16},'#cfd6d0a1');
-  glassPanel(ctx,V,x,z,x+w,z,h);glassPanel(ctx,V,x,z,x,z+d,h);glassPanel(ctx,V,x+w,z,x+w,z+d,h);
-  // Mobiliário coerente com a função, não robôs falsos.
+  const isSquad=room.tipo==='squad';
+  const active=isSquad&&room.ativa===true;
+  const color=room.cor||'#77938e';
+  const floor=isSquad?(active?alpha(color,.25):'#afb3ae'):'#e8e3d0';
+  const inner=isSquad?(active?alpha(color,.13):'#8f96919c'):'#cfd6d0a1';
+  const glassFill=isSquad?(active?alpha(color,.12):'#8a969630'):'#b1e3e637';
+  const glassStroke=isSquad?(active?alpha(color,.82):'#687170c7'):'#678b93bd';
+  roundedArea(ctx,V,room,floor,active?color:'#8c928c');
+  roundedArea(ctx,V,{x:x+7,z:z+7,largura:w-14,profundidade:d-14},inner);
+  glassPanel(ctx,V,x,z,x+w,z,h,glassFill,glassStroke);
+  glassPanel(ctx,V,x,z,x,z+d,h,glassFill,glassStroke);
+  glassPanel(ctx,V,x+w,z,x+w,z+d,h,glassFill,glassStroke);
   if(room.id==='reuniao'){
     desk(ctx,V,x+w/2,z+d/2,'meeting');
     for(const offset of [-48,-10,28,55])chair(ctx,V,x+w/2+offset,z+d/2+37,.7);
@@ -199,43 +237,51 @@ function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room){
   }else if(room.id==='apoio'){
     desk(ctx,V,x+w*.33,z+d*.55,'work');desk(ctx,V,x+w*.72,z+d*.55,'work');
     for(const offset of [.34,.73])chair(ctx,V,x+w*offset,z+d*.88,.78);
-  }else{
-    desk(ctx,V,x+w*.35,z+d*.59,'leader');
-    chair(ctx,V,x+w*.35,z+d*.90,.8);
-    const p=V.P(x+w*.78,z+d*.5);rect(ctx,p.x-21,p.y-25,43,29,'#25404a',3,'#9ba89a');
-    text(ctx,'CT',p.x,p.y-10,13,'#d9bf73');
+  }else if(isSquad&&!active){
+    ctx.save();ctx.globalAlpha=.34;
+    desk(ctx,V,x+w*.50,z+d*.60,'work');chair(ctx,V,x+w*.50,z+d*.89,.72);
+    ctx.restore();
   }
-  // Teto inexistente: portas e painéis de vidro dão perspectiva ao interior.
-  const half=(w-door)/2;
-  glassPanel(ctx,V,x,z+d,x+half,z+d,h);
-  glassPanel(ctx,V,x+half+door,z+d,x+w,z+d,h);
-  sign(ctx,room.label,V.P(x+w/2,z+10,h+17),clamp(room.label.length*6.7+28,125,197))
+  if(isSquad&&!active){
+    glassPanel(ctx,V,x,z+d,x+w,z+d,h,'#7180803d','#5b6464d9');
+    const closed=V.P(x+w/2,z+d,h*.48);
+    rect(ctx,closed.x-9,closed.y-11,18,22,'#596260d9',3,'#a7afaa');
+    text(ctx,'•',closed.x,closed.y,13,'#d2d5cf',800);
+  }else{
+    const half=(w-door)/2;
+    glassPanel(ctx,V,x,z+d,x+half,z+d,h,glassFill,glassStroke);
+    glassPanel(ctx,V,x+half+door,z+d,x+w,z+d,h,glassFill,glassStroke);
+  }
+  if(isSquad){
+    const p=V.P(x+w/2,z+8,h+18);const status=active?'ATIVO':'OCULTO';
+    const ww=clamp(room.label.length*6.7+58,112,185);
+    ctx.save();ctx.shadowColor='#0b1719aa';ctx.shadowBlur=8;rect(ctx,p.x-ww/2,p.y-13,ww,27,active?'#20383a':'#4b5352',4,active?color:'#7d8582');ctx.restore();
+    rect(ctx,p.x-ww/2+6,p.y-7,4,14,active?color:'#8e9693',1);
+    text(ctx,room.label,p.x-8,p.y-3,8.7,active?'#fff5d8':'#d3d7d3',820);
+    text(ctx,status,p.x-8,p.y+7,6.5,active?color:'#aeb5b1',800);
+  }else{
+    sign(ctx,room.label,V.P(x+w/2,z+10,h+17),clamp(room.label.length*6.7+28,125,197));
+  }
 }
 function drawZones(ctx:CanvasRenderingContext2D,V:View,architecture:Architecture,depth=780){
-  roundedArea(ctx,V,architecture.corredor,'#f9f1d8','#e6dcc0');
-  // Piso das mesas: greige fosco como o vídeo, não uma plataforma preta.
-  roundedArea(ctx,V,{x:412,z:255,largura:565,profundidade:395},'#c8c8ba','#f4eacb');
-  roundedArea(ctx,V,{x:428,z:135,largura:515,profundidade:115},'#d4d0bb','#efe5cc');
-  // Dois lounges + jardim frontal: ambientes distintos mesmo sem movimento.
-  roundedArea(ctx,V,{x:1005,z:190,largura:389,profundidade:218},'#c7cec5','#e9e4ce');
-  roundedArea(ctx,V,{x:1005,z:425,largura:389,profundidade:240},'#c9d1c6','#f0e6d5');
-  roundedArea(ctx,V,{x:427,z:653,largura:558,profundidade:Math.max(118,depth-653-7)},'#d8d1b2','#f4edcd');
-  sofa(ctx,V,1040,207,254);sofa(ctx,V,1035,443,275,true);
-  sofa(ctx,V,450,663,150);sofa(ctx,V,770,663,161,true);
-  for(const p of [[1016,220],[1380,216],[1025,462],[1385,454],[1019,638],[1383,630],[428,710],[958,728]] as const)plant(ctx,V,p[0],p[1],1.2);
-  sign(ctx,'CONVIVÊNCIA',V.P(1204,201,39),135);
-  sign(ctx,'DESCANSO',V.P(1197,437,36),108);
-  sign(ctx,'ESPERA / LOUNGE',V.P(700,667,32),149);
+  roundedArea(ctx,V,{x:315,z:55,largura:1070,profundidade:350},'#d4d0bb','#f0e6cc');
+  roundedArea(ctx,V,{x:400,z:420,largura:520,profundidade:235},'#d7d0b8','#f4eacb');
+  roundedArea(ctx,V,{x:45,z:370,largura:315,profundidade:215},'#d4d0bc','#eee5cd');
+  roundedArea(ctx,V,architecture.lounge,'#c7d0c8','#f0e6d5');
+  roundedArea(ctx,V,{x:410,z:748,largura:555,profundidade:Math.max(90,depth-755)},'#d8d1b2','#f4edcd');
+  sofa(ctx,V,1015,500,285,true);sofa(ctx,V,1030,635,260);
+  sofa(ctx,V,455,770,170);sofa(ctx,V,765,770,165,true);
+  for(const p of [[995,480],[1372,485],[995,690],[1375,692],[420,795],[950,805]] as const)plant(ctx,V,p[0],p[1],1.15);
+  sign(ctx,'ÁREA DE DESCANSO',V.P(1185,475,38),158);
+  sign(ctx,'ESPERA / LOUNGE',V.P(690,760,32),149);
   for(const room of architecture.salas)glassRoom(ctx,V,room);
-  // Corredor sinalizado, sem paredes atravessando a rota dos agentes.
-  path(ctx,[V.P(365,140),V.P(365,756)],'#b9a77f88',1.8);
-  for(let z=165;z<730;z+=63){let p=V.P(368,z);ellipse(ctx,p.x,p.y,1.5,1.5,'#c4ae85')}
-  // Recepção volumosa, principal ponto de chegada do visitante.
+  path(ctx,[V.P(372,70),V.P(372,820)],'#b9a77f88',1.8);
+  for(let z=100;z<810;z+=63){const p=V.P(375,z);ellipse(ctx,p.x,p.y,1.5,1.5,'#c4ae85')}
   const rec=architecture.recepcao;
   box(ctx,V,rec.x,rec.z,rec.largura,rec.profundidade,32,{top:'#f4e8c7',front:'#c9b58c',side:'#987e5a'});
   box(ctx,V,rec.x-3,rec.z-4,rec.largura+6,rec.profundidade+8,7,{top:'#fff2d2',front:'#e1cda3',side:'#c2a579',bottom:32});
   sign(ctx,'RECEPÇÃO',V.P(rec.x+rec.largura/2,rec.z+rec.profundidade,22),104);
-  for(const p of [[51,662],[314,678],[332,315],[332,477]] as const)plant(ctx,V,p[0],p[1],1.25)
+  for(const p of [[50,690],[315,700],[350,380],[350,570]] as const)plant(ctx,V,p[0],p[1],1.2)
 }
 function drawHuman(ctx:CanvasRenderingContext2D,x:number,y:number,size:number,seed:number,isWorking:boolean,walking:boolean,t:number){
   const skin=['#ecc49d','#c99572','#d7a67f','#a66d51'][seed%4];
@@ -285,6 +331,18 @@ function drawRobot(ctx:CanvasRenderingContext2D,x:number,y:number,size:number,se
   rect(ctx,-5,-36,10,7,'#def7f1',2,'#78b3b9');
   ctx.restore()
 }
+function drawSeatedAgent(ctx:CanvasRenderingContext2D,agent:Agent,x:number,y:number,seed:number,population:number){
+  const url=seatedAsset(agent,seed);if(!url)return null
+  const image=imageFor(url);if(!image||!image.complete||!image.naturalWidth)return null
+  const targetHeight=population>16?47:population>9?57:population>5?68:82
+  const targetWidth=targetHeight*(image.naturalWidth/image.naturalHeight)
+  const bottom=y+15
+  const left=x-targetWidth/2
+  const top=bottom-targetHeight
+  ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  ctx.drawImage(image,left,top,targetWidth,targetHeight);ctx.restore()
+  return {left,top,width:targetWidth,height:targetHeight}
+}
 function drawAgent(ctx:CanvasRenderingContext2D,V:View,character:Actor,frame:OfficeV7Frame):OfficeV7Hit{
   const a=character.mesa.execucao,pose=character.pose;
   const atDesk=pose.fase==='trabalhando'||pose.fase==='silencioso'||pose.fase==='sentando'||pose.fase==='levantando';
@@ -294,27 +352,34 @@ function drawAgent(ctx:CanvasRenderingContext2D,V:View,character:Actor,frame:Off
   const size=atDesk?.55:.64;
   const drawY=point.y+(atDesk?10:0);
   if(selected||hover){ctx.save();ctx.strokeStyle=selected?'#f4c75e':'#62cc99';ctx.lineWidth=selected?3:2;ctx.beginPath();ctx.ellipse(point.x,drawY,21,6,0,0,2*Math.PI);ctx.stroke();ctx.restore()}
-  if(a.tipoVisual==='humano')drawHuman(ctx,point.x,drawY,size,idhash,atDesk,pose.andando,frame.tempo);
-  else drawRobot(ctx,point.x,drawY,size,idhash,atDesk,pose.andando,frame.tempo);
+  const useSeatedSprite=pose.fase==='trabalhando'&&a.ativa;
+  const population=frame.layout.mesas.filter(d=>d.execucao.squad===a.squad&&d.execucao.ativa).length;
+  const seated=useSeatedSprite?drawSeatedAgent(ctx,a,point.x,drawY,idhash,population):null;
+  if(!seated){
+    if(a.tipoVisual==='humano')drawHuman(ctx,point.x,drawY,size,idhash,atDesk,pose.andando,frame.tempo);
+    else drawRobot(ctx,point.x,drawY,size,idhash,atDesk,pose.andando,frame.tempo);
+  }
   if(atDesk&&(a.ativa||pose.fase==='silencioso')){
-    ellipse(ctx,point.x+17,drawY-31,3.5,3.5,a.ativa?'#70e7aa':'#d9bf70')
+    ellipse(ctx,point.x+(seated?seated.width*.38:17),drawY-(seated?seated.height*.7:31),3.5,3.5,a.ativa?'#70e7aa':'#d9bf70')
   }
   // Tags só dos trabalhando/direção e seleção: descanso não gera parede de etiquetas.
   const isChief=a.squad==='coordenação';
   if(selected||hover||isChief||a.ativa){
     let label=a.nome.replace(/\s+/g,' ').trim();if(label.length>16)label=label.slice(0,15)+'…';
-    const ww=clamp(label.length*6.5+22,48,136), yy=drawY-(a.tipoVisual==='robo'?64:59);
+    const ww=clamp(label.length*6.5+22,48,136), yy=seated?seated.top-7:drawY-(a.tipoVisual==='robo'?64:59);
     rect(ctx,point.x-ww/2,yy-10,ww,19,selected?'#665228':'#233a3d',4,selected?'#f1c460':'#b0bca5');
     text(ctx,label,point.x,yy+.3,10.2,'#fff4d3',770)
   }
-  return {chave:a.chave,x:point.x-24,y:drawY-71,largura:48,altura:79}
+  return seated
+    ? {chave:a.chave,x:seated.left,y:seated.top-18,largura:seated.width,altura:seated.height+33}
+    : {chave:a.chave,x:point.x-24,y:drawY-71,largura:48,altura:79}
 }
 const nav=[['diretores','AGENTES'],['estudio','CONTEÚDO'],['pipeline','COMERCIAL'],['financeiro','FINANCEIRO'],['cofre','CONHECIMENTO'],['ferramentas','OPERAÇÃO']] as const;
 function moduleWall(ctx:CanvasRenderingContext2D,V:View):OfficeV7Hit[]{
   const hits:OfficeV7Hit[]=[];
   for(let i=0;i<nav.length;i++){
-    const [key,label]=nav[i],x=405+i*165,z=38;
-    const p=V.P(x,z,45);
+    const [key,label]=nav[i],x=405+i*165,z=32;
+    const p=V.P(x,z,137);
     const ww=136;
     rect(ctx,p.x-ww/2,p.y-13,ww,25,'#2c4145',4,'#9f9b82');
     text(ctx,label,p.x,p.y,9.1,'#e9ebdf',750);
@@ -327,31 +392,14 @@ function paintStatic(ctx:CanvasRenderingContext2D,V:View,frame:OfficeV7Frame){
   ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
   const depth=Math.max(780,frame.layout.altura-40);
   floorAndWalls(ctx,V,depth);drawZones(ctx,V,frame.layout.arquitetura,depth);
-  // Postos de trabalho em planta física, sem declarar operadores ativos.
-  // Mostrar somente 15 decorativos e quaisquer postos efetivamente em uso.
-  const busy=frame.layout.mesas.filter(d=>d.execucao.ativa||d.execucao.execucao.estado==='silencioso');
-  const all:[number,number][]=[];
-  for(const d of frame.layout.mesas.slice(0,18)){all.push([d.x,d.y])}
-  for(const d of busy){if(!all.some(a=>Math.abs(a[0]-d.x)<2&&Math.abs(a[1]-d.y)<2))all.push([d.x,d.y])}
-  for(const d of frame.layout.mesas.filter(d=>d.execucao.squad==='coordenação')){
-    if(!all.some(a=>Math.abs(a[0]-d.x)<2&&Math.abs(a[1]-d.y)<2))all.push([d.x,d.y]);
-  }
-  // ordenação da parte de trás para frente, a perspectiva mantém oclusão.
-  all.sort((a,b)=>a[1]-b[1]);
-  for(const [x,y] of all){
-    const chief=y<270;const active=busy.some(d=>d.x===x&&d.y===y);
-    chair(ctx,V,x,y+42,.95);
-    desk(ctx,V,x,y,chief?'leader':'work');
-    if(!active){const p=V.P(x,y-10,51);ellipse(ctx,p.x+21,p.y-8,2.3,2.3,'#7a8281')}
-  }
-  // Sala de espera com bancos e mesinha; na maquete há repouso mas nenhum
-  // boneco fake. As pessoas só vêm de frame.personagens.
-  for(const p of [[1027,405],[1391,405],[1029,680],[1395,680],[999,310],[388,756]] as const)plant(ctx,V,p[0],p[1],.8);
+  // As poses sentadas já incluem mesa e cadeira. Os módulos ativos deixam o
+  // posto livre para esse sprite; os inativos desenham só mobiliário fantasma.
+  for(const p of [[972,450],[1390,455],[976,790],[1395,790],[390,420],[390,735]] as const)plant(ctx,V,p[0],p[1],.8);
   ctx.restore()
 }
 type Cache={key:string;canvas:HTMLCanvasElement};let staticCache:Cache|null=null;
 function base(ctx:CanvasRenderingContext2D,V:View,f:OfficeV7Frame){
-  const key=JSON.stringify([V.sceneW,V.sceneH,f.layout.mesas.map(m=>[Math.round(m.x),Math.round(m.y),m.execucao.ativa,m.execucao.execucao.estado==='silencioso']),f.layout.arquitetura.salas]);
+  const key=JSON.stringify([V.sceneW,V.sceneH,f.layout.arquitetura.salas]);
   if(typeof document==='undefined'){paintStatic(ctx,V,f);return}
   if(!staticCache||staticCache.key!==key){
     const canvas=document.createElement('canvas');canvas.width=V.sceneW;canvas.height=V.sceneH;
@@ -376,10 +424,15 @@ export function desenharEscritorioV7(ctx:CanvasRenderingContext2D,frame:OfficeV7
     const p=V.P(1170,677,16);
     text(ctx,`${counts.rests} EM DESCANSO  ·  ${counts.active} ATIVOS`,p.x,p.y,10,'#425454',760)
   }finally{ctx.restore()}
-  ctx.canvas.dataset.officeRenderer='ct-tycoon-v7';
+  const squadRooms=frame.layout.arquitetura.salas.filter(room=>room.tipo==='squad');
+  ctx.canvas.dataset.officeRenderer='ct-modular-v8';
   ctx.canvas.dataset.officeSpriteAgents=String(frame.personagens.length);
+  ctx.canvas.dataset.officeSeatedAgents=String(frame.personagens.filter(a=>a.pose.fase==='trabalhando'&&a.mesa.execucao.ativa).length);
   ctx.canvas.dataset.officeRobotAgents=String(frame.personagens.filter(a=>a.mesa.execucao.tipoVisual==='robo').length);
   ctx.canvas.dataset.officeHumanAgents=String(frame.personagens.filter(a=>a.mesa.execucao.tipoVisual==='humano').length);
   ctx.canvas.dataset.officeResting=String(frame.personagens.filter(a=>a.mesa.execucao.execucao.estado==='parado').length);
+  ctx.canvas.dataset.officeModuleRooms=String(squadRooms.length);
+  ctx.canvas.dataset.officeActiveModules=String(squadRooms.filter(room=>room.ativa).length);
+  ctx.canvas.dataset.officeHiddenModules=String(squadRooms.filter(room=>!room.ativa).length);
   return hits
 }

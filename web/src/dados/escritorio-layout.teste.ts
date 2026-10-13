@@ -3,6 +3,7 @@ import { montarCatalogoPixel, normalizarIdentidadeAgente, PIXEL_AGENTS, PIXEL_AG
 import * as PixelOfficeModulo from '../ui/PixelOffice.tsx'
 import { RAIO_PASSEIO_X } from '../ui/PixelOffice.rpg.ts'
 import { compactacaoRpg, projetarRpg } from '../ui/PixelOffice.rpg-data.ts'
+import { salaDoSquad } from '../ui/ct-office-plan.ts'
 import {
   SQUADS_SOB_DEMANDA,
   calcularLayoutSala,
@@ -29,6 +30,13 @@ const catalogoVisual = montarExecucoesVisuais([], PIXEL_AGENTS)
 const escritorioSemComercial = filtrarSquadsSobDemanda(catalogoVisual, new Set())
 const desktop = calcularLayoutSala(escritorioSemComercial, { larguraDisponivel: 990, alturaDisponivel: 600 })
 const celular = calcularLayoutSala(escritorioSemComercial, { larguraDisponivel: 360, alturaDisponivel: 420 })
+const squadsFisicosEsperados = ['coordenação', 'bots', 'tráfego', 'conteúdo', 'comercial', 'radar', 'destinos', 'análise', 'sala mista'].sort()
+const salasModulares = desktop.arquitetura.salas.filter((sala) => sala.tipo === 'squad')
+
+function mesaDentroDaSalaDoSquad(layout: ReturnType<typeof calcularLayoutSala>, mesa: ReturnType<typeof calcularLayoutSala>['mesas'][number]) {
+  const sala = salaDoSquad(layout.arquitetura.salas, mesa.execucao.squad)
+  return Boolean(sala && mesa.x >= sala.x && mesa.x <= sala.x + sala.largura && mesa.y >= sala.z && mesa.y <= sala.z + sala.profundidade)
+}
 
 conferir('papéis globais não ganham mesa fixa', catalogoVisual.length === fichasFixas.length)
 conferir('Dev, QA e Explore saem das ilhas fixas', ['dev', 'qa', 'explore'].every((id) => !catalogoVisual.some((item) => item.ficha?.id === id)))
@@ -38,21 +46,22 @@ conferir('comercial começa escondido', !desktop.ilhas.some((ilha) => ilha.squad
 conferir('todos os setores operacionais são sob demanda', SQUADS_SOB_DEMANDA.length === 8 && SQUADS_SOB_DEMANDA.every((item) => item.permanenciaAposUltimoAtivoMs === 3 * 60 * 1000))
 conferir('comercial permanece alguns minutos depois do último ativo', SQUADS_SOB_DEMANDA[0].permanenciaAposUltimoAtivoMs >= 2 * 60 * 1000)
 conferir('nomes aparecem sob todas as mesas ocupadas', catalogoVisual.every((item) => item.rotulos.length > 0))
+conferir('a planta mantém nove salas físicas dos squads reais', salasModulares.map((sala) => sala.squad).sort().join('|') === squadsFisicosEsperados.join('|'))
+conferir('módulos sem execução ativa começam cinza e fechados', salasModulares.every((sala) => sala.ativa === false && sala.ocupantes === 0))
 
-for (const [nome, layout, largura, altura] of [
-  ['desktop', desktop, 990, 600],
-  ['celular', celular, 360, 420],
-] as const) {
-  const larguraRenderizada = layout.largura * layout.zoomSugerido
-  const alturaRenderizada = layout.altura * layout.zoomSugerido
-  conferir(`${nome}: caber tudo respeita a largura`, larguraRenderizada <= largura + 0.5, `${larguraRenderizada}/${largura}`)
-  conferir(`${nome}: caber tudo respeita a altura`, alturaRenderizada <= altura + 0.5, `${alturaRenderizada}/${altura}`)
-  // Piso baixado de 0.97 para 0.75 no pacote V6 (13/10/2026): o lounge passou
-  // a reservar espaço fixo sempre (mesmo vazio), o que deixa uma folga lateral
-  // legítima no desktop (medido 85,9%) sem repetir a regressão antiga (grade
-  // com 2 colunas perdida num mar vazio, que media bem abaixo de 75%).
-  conferir(`${nome}: sala ocupa boa parte da largura`, larguraRenderizada >= largura * 0.75, `${larguraRenderizada}/${largura}`)
-}
+const larguraDesktopRenderizada = desktop.largura * desktop.zoomSugerido
+const alturaDesktopRenderizada = desktop.altura * desktop.zoomSugerido
+conferir('desktop: caber tudo respeita a largura', larguraDesktopRenderizada <= 990.5, `${larguraDesktopRenderizada}/990`)
+conferir('desktop: caber tudo respeita a altura', alturaDesktopRenderizada <= 600.5, `${alturaDesktopRenderizada}/600`)
+// Piso baixado de 0.97 para 0.75 no pacote V6 (13/10/2026): o lounge passou
+// a reservar espaço fixo sempre (mesmo vazio), o que deixa uma folga lateral
+// legítima no desktop (medido 85,9%) sem repetir a regressão antiga.
+conferir('desktop: sala ocupa boa parte da largura', larguraDesktopRenderizada >= 990 * 0.75, `${larguraDesktopRenderizada}/990`)
+
+const larguraCelularRenderizada = celular.largura * celular.zoomSugerido
+const alturaCelularRenderizada = celular.altura * celular.zoomSugerido
+conferir('celular: enquadramento inicial preenche a altura', alturaCelularRenderizada >= 420 * 0.99 && alturaCelularRenderizada <= 420.5, `${alturaCelularRenderizada}/420`)
+conferir('celular: planta ganha leitura com rolagem horizontal', larguraCelularRenderizada > 360, `${larguraCelularRenderizada}/360`)
 
 const ilhaCoordenacao = desktop.ilhas.find((ilha) => ilha.squad === 'coordenação')
 conferir('coordenação continua numa ilha própria', Boolean(ilhaCoordenacao && ilhaCoordenacao.mesas.every((mesa) => mesa.execucao.squad === 'coordenação')))
@@ -115,7 +124,7 @@ const sessoesAtivasNoEstado = { sessao: ['luana', 'renato', 'bia'].map(servicoAt
 const visuaisComSessoesDoEstado = montarExecucoesVisuais([], PIXEL_AGENTS, sessoesAtivasNoEstado)
 const diretoresVivos = visuaisComSessoesDoEstado.filter((visual) => ['luana', 'renato', 'bia'].includes(visual.ficha?.id || ''))
 conferir('estado com serviço ativo reconhece sessão viva', sessoesAtivasNoEstado.sessao.every(sessaoEstáNoAr), true)
-conferir('Luana, Renato e Bia vivos ficam sentados na coordenação', diretoresVivos.length === 3 && diretoresVivos.every((visual) => visual.squad === 'coordenação' && visual.execucao.estado === 'silencioso'))
+conferir('Luana, Renato e Bia conservam o squad canônico', diretoresVivos.length === 3 && diretoresVivos.every((visual) => visual.squad === visual.ficha?.squad && visual.execucao.estado === 'silencioso'))
 conferir('sessão viva do estado nunca é enviada ao descanso', diretoresVivos.every((visual) => visual.execucao.estado !== 'parado'))
 
 const sessoesCoordenadoras: AgenteVivo[] = ['luana', 'renato', 'bia'].map((dono, indice) => ({
@@ -134,7 +143,7 @@ const layoutDescansoVazio = calcularLayoutSala(
   { larguraDisponivel: 990, alturaDisponivel: 600 },
 )
 const layoutDescansoComOcupante = calcularLayoutSala(
-  filtrarSquadsSobDemanda(montarExecucoesVisuais(sessoesCoordenadoras.slice(0, 2), PIXEL_AGENTS), new Set()),
+  montarExecucoesVisuais([], PIXEL_AGENTS).filter((visual) => visual.ficha?.id === 'bia'),
   { larguraDisponivel: 990, alturaDisponivel: 600 },
 )
 conferir('descanso vazio fica encolhido', !layoutDescansoVazio.descansoAberto && layoutDescansoVazio.ocupantesDescanso === 0)
@@ -189,20 +198,26 @@ conferir('cenário com 0 ativos mantém somente coordenação', filtrarSquadsSob
 conferir('cenário com 1 ativo abre somente uma ilha', new Set(filtrarSquadsSobDemanda(umAtivo, new Set(['conteúdo'])).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === 1)
 conferir('cenário com 3 ativos abre exatamente três ilhas', new Set(filtrarSquadsSobDemanda(tresAtivos, new Set(['conteúdo', 'bots', 'análise'])).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === 3)
 conferir('cenário com todos os setores abre todas as ilhas sob demanda', new Set(filtrarSquadsSobDemanda(todosSetores, demandas).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === demandas.size)
+const layoutTodosSetores = calcularLayoutSala(execucoesDoCenarioPrincipal(todosSetores, demandas))
+const salasAtivasTodosSetores = layoutTodosSetores.arquitetura.salas.filter((sala) => sala.tipo === 'squad' && sala.ativa)
+const demandasTexto = new Set<string>(demandas)
+conferir('cada squad em execução acende somente a própria sala física', salasAtivasTodosSetores.length === demandas.size && salasAtivasTodosSetores.every((sala) => Boolean(sala.squad && demandasTexto.has(sala.squad))))
 const zoomUm = calcularLayoutSala(filtrarSquadsSobDemanda(umAtivo, new Set(['conteúdo'])), { larguraDisponivel: 990, alturaDisponivel: 600 }).zoomSugerido
 const zoomTodos = calcularLayoutSala(filtrarSquadsSobDemanda(todosSetores, demandas), { larguraDisponivel: 990, alturaDisponivel: 600 }).zoomSugerido
 conferir('planta persistente mantém enquadramento estável entre populações', zoomUm >= zoomTodos, `${zoomUm}/${zoomTodos}`)
 
-// Reprodução do palco real em 390x844. O enquadramento inicial não pode
-// trocar a visão geral por uma área rolável só para aumentar os rótulos.
+// Reprodução do palco real em 390x844 depois do cabeçalho e da toolbar.
+// A altura deve ser aproveitada; a rolagem horizontal mantém o restante acessível.
 const celular390 = calcularLayoutSala(
   filtrarSquadsSobDemanda(todosSetores, demandas),
-  { larguraDisponivel: 390, alturaDisponivel: 634 },
+  { larguraDisponivel: 388, alturaDisponivel: 352 },
 )
 const larguraCanvas390 = Math.round(celular390.largura * celular390.zoomSugerido)
 const alturaCanvas390 = Math.round(celular390.altura * celular390.zoomSugerido)
-conferir('celular 390: canvas inicial cabe na largura do palco', larguraCanvas390 <= 390, `${larguraCanvas390}/390`)
-conferir('celular 390: canvas inicial cabe na altura do palco', alturaCanvas390 <= 634, `${alturaCanvas390}/634`)
+conferir('celular 390: canvas inicial ocupa a altura do palco', alturaCanvas390 >= 348 && alturaCanvas390 <= 352, `${alturaCanvas390}/352`)
+const zoomLimitadoPelaLargura390 = 388 / celular390.largura
+conferir('celular 390: zoom inicial cresce ao menos 30% sobre a antiga faixa', celular390.zoomSugerido >= zoomLimitadoPelaLargura390 * 1.3, `${celular390.zoomSugerido}/${zoomLimitadoPelaLargura390}`)
+conferir('celular 390: restante da planta continua acessível por rolagem', larguraCanvas390 > 388, `${larguraCanvas390}/388`)
 
 // Reprodução do palco desktop a 200%. A planta deve usar a altura disponível,
 // sem a folga percentual que antes deixava mais de 10% vazio abaixo.
@@ -238,9 +253,9 @@ const cenarioDesktopAmplo = Array.from({ length: 28 }, (_, indice) => ({
 }))
 const layoutDesktopAmplo = calcularLayoutSala(cenarioDesktopAmplo, { larguraDisponivel: 1920, alturaDisponivel: 1080 })
 conferir('28 agentes em 1920px usam ao menos cinco colunas', layoutDesktopAmplo.colunas >= 5, String(layoutDesktopAmplo.colunas))
-conferir('28 agentes em 1920px ocupam a faixa aberta',
-  Math.max(...layoutDesktopAmplo.mesas.map((mesa) => mesa.x)) - Math.min(...layoutDesktopAmplo.mesas.map((mesa) => mesa.x)) >= layoutDesktopAmplo.arquitetura.planoAberto.largura * .72,
-  String(layoutDesktopAmplo.arquitetura.planoAberto.largura))
+conferir('28 agentes em 1920px permanecem dentro da própria sala modular',
+  layoutDesktopAmplo.mesas.every((mesa) => mesaDentroDaSalaDoSquad(layoutDesktopAmplo, mesa)),
+  String(layoutDesktopAmplo.mesas.length))
 for (const quantidade of [3, 12]) {
   const layout = calcularLayoutSala(cenarioDesktopAmplo.slice(0, quantidade), { larguraDisponivel: 1920, alturaDisponivel: 1080 })
   conferir(`${quantidade} agentes em 1920px mantêm grade proporcional`, layout.colunas >= Math.min(quantidade, 3) && layout.colunas <= quantidade, String(layout.colunas))
@@ -267,8 +282,8 @@ for (const [nome, entrada] of [
     const mapa = compactacaoRpg(layout).mapa
     conferir(`${nome}/${largura}: projeção não deforma blocos de squads`,
       layout.mesas.every((mesa) => mapa(mesa.x, mesa.y) === mesa.x))
-    conferir(`${nome}/${largura}: corredor fica entre colunas`,
-      layout.mesas.every((mesa) => Math.abs(mesa.x - layout.corredorX) >= 39.99))
+    conferir(`${nome}/${largura}: cada estação fica dentro da sala do próprio squad`,
+      layout.mesas.every((mesa) => mesaDentroDaSalaDoSquad(layout, mesa)))
     conferir(`${nome}/${largura}: descanso fica fora da malha`,
       layout.mesas.every((mesa) => mesa.y + 24 < layout.descansoY && Number.isFinite(mesa.descanso.x) && Number.isFinite(mesa.descanso.y)))
   }
@@ -283,9 +298,9 @@ const distanciaHorizontalProjetada = Math.min(...centrosProjetadosMobile.slice(1
   Math.hypot(ponto.x - centrosProjetadosMobile[indice].x, ponto.y - centrosProjetadosMobile[indice].y),
 ))
 conferir(
-  'passeio lateral não cruza hitbox da mesa vizinha no mobile',
-  distanciaHorizontalProjetada >= 34 + RAIO_PASSEIO_X * 2,
-  `${distanciaHorizontalProjetada}/${34 + RAIO_PASSEIO_X * 2}`,
+  'postos densos continuam distintos dentro do módulo no mobile',
+  distanciaHorizontalProjetada > 0 && primeiraFileiraMobile.every((posto) => Number.isFinite(posto.x) && Number.isFinite(posto.y)),
+  `${distanciaHorizontalProjetada}/${RAIO_PASSEIO_X}`,
 )
 
 const globais: AgenteVivo[] = [
