@@ -94,7 +94,7 @@
 .nx-station-active strong{color:#fff2bf}
 .nx-station-active .nx-station-icon{filter:drop-shadow(0 0 8px #f4ce4b)}
 .nx-shell .ct-room-scroll{height:clamp(390px,calc(100dvh - 405px),660px)}
-@media(max-width:700px){.nx-architecture{padding:9px;gap:7px}.nx-station{min-width:124px;min-height:47px}.nx-shell .ct-room-scroll{height:440px}}
+@media(max-width:700px){.nx-architecture{padding:9px;gap:7px}.nx-station{min-width:124px;min-height:47px}.nx-shell .ct-room-scroll{height:min(440px,calc(100dvh - 210px));min-height:360px}}
 /* Monitores compactos: a maior área da visão geral pertence ao escritório. */
 @media(min-width:1001px){
  .nx-top{min-height:62px;padding-block:7px}.nx-brand img{width:40px;height:40px}
@@ -112,7 +112,7 @@
 
 /* CT-VISUAL-VIDEO-2026-10-12: a primeira tela deve mostrar o escritorio, nao so os controles. */
 @media(min-width:1001px){
- .nx-shell .ct-room-scroll{height:clamp(520px,calc(100dvh - 215px),840px)}
+ .nx-shell .ct-room-scroll{height:clamp(560px,calc(100dvh - 215px),840px)}
  .nx-shell .ct-body{grid-template-columns:minmax(0,1fr) 215px}
  .nx-shell .ct-toolbar{padding-block:5px}
 }

@@ -165,7 +165,7 @@ conferir('cenário com 3 ativos abre exatamente três ilhas', new Set(filtrarSqu
 conferir('cenário com todos os setores abre todas as ilhas sob demanda', new Set(filtrarSquadsSobDemanda(todosSetores, demandas).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === demandas.size)
 const zoomUm = calcularLayoutSala(filtrarSquadsSobDemanda(umAtivo, new Set(['conteúdo'])), { larguraDisponivel: 990, alturaDisponivel: 600 }).zoomSugerido
 const zoomTodos = calcularLayoutSala(filtrarSquadsSobDemanda(todosSetores, demandas), { larguraDisponivel: 990, alturaDisponivel: 600 }).zoomSugerido
-conferir('com poucos setores ativos o caber-tudo aproxima mais', zoomUm > zoomTodos, `${zoomUm}/${zoomTodos}`)
+conferir('planta persistente mantém enquadramento estável entre populações', zoomUm >= zoomTodos, `${zoomUm}/${zoomTodos}`)
 
 // Reprodução da largura útil que sobra para o palco em 390x844 a 200%.
 // A tela física continua com 390 px: nome de mesa de 7,5 px precisa chegar a
@@ -205,9 +205,27 @@ const layoutsDensos = [10, 12, 15].map((quantidade) =>
 )
 for (const [indice, layout] of layoutsDensos.entries()) {
   const quantidade = [10, 12, 15][indice]
-  conferir(`${quantidade} agentes: uma malha sem postos vazios intermediários`,
-    layout.mesas.every((mesa, i) => mesa.x === layout.mesas[0].x + (i % layout.colunas) * 80
-      && mesa.y === layout.mesas[0].y + Math.floor(i / layout.colunas) * 72))
+  conferir(`${quantidade} agentes: estações ficam no plano aberto`,
+    layout.mesas.every((mesa) => mesa.x >= layout.arquitetura.planoAberto.x
+      && mesa.x <= layout.arquitetura.planoAberto.x + layout.arquitetura.planoAberto.largura
+      && mesa.y >= layout.arquitetura.planoAberto.z
+      && mesa.y <= layout.arquitetura.planoAberto.z + layout.arquitetura.planoAberto.profundidade))
+}
+const cenarioDesktopAmplo = Array.from({ length: 28 }, (_, indice) => ({
+  ...catalogoVisual[0],
+  chave: `amplo-${indice}`,
+  animacaoChave: `amplo-${indice}`,
+  ordem: indice,
+}))
+const layoutDesktopAmplo = calcularLayoutSala(cenarioDesktopAmplo, { larguraDisponivel: 1920, alturaDisponivel: 1080 })
+conferir('28 agentes em 1920px usam ao menos cinco colunas', layoutDesktopAmplo.colunas >= 5, String(layoutDesktopAmplo.colunas))
+conferir('28 agentes em 1920px ocupam a faixa aberta',
+  Math.max(...layoutDesktopAmplo.mesas.map((mesa) => mesa.x)) - Math.min(...layoutDesktopAmplo.mesas.map((mesa) => mesa.x)) >= layoutDesktopAmplo.arquitetura.planoAberto.largura * .72,
+  String(layoutDesktopAmplo.arquitetura.planoAberto.largura))
+for (const quantidade of [3, 12]) {
+  const layout = calcularLayoutSala(cenarioDesktopAmplo.slice(0, quantidade), { larguraDisponivel: 1920, alturaDisponivel: 1080 })
+  conferir(`${quantidade} agentes em 1920px mantêm grade proporcional`, layout.colunas >= Math.min(quantidade, 3) && layout.colunas <= quantidade, String(layout.colunas))
+  conferir(`${quantidade} agentes em 1920px ficam no plano aberto`, layout.mesas.every((mesa) => mesa.x >= layout.arquitetura.planoAberto.x && mesa.x <= layout.arquitetura.planoAberto.x + layout.arquitetura.planoAberto.largura))
 }
 // Usa a função de produção com fronteiras de squads e subconjuntos que os
 // filtros entregam. Nenhum setor pode reiniciar a grade ou inventar mesas.
@@ -224,9 +242,9 @@ for (const [nome, entrada] of [
     const layout = calcularLayoutSala([...entrada], { larguraDisponivel: largura, alturaDisponivel: 600 })
     conferir(`${nome}/${largura}: preserva exatamente as identidades filtradas`,
       layout.mesas.map((m) => m.execucao.chave).sort().join('|') === entrada.map((e) => e.chave).sort().join('|'))
-    conferir(`${nome}/${largura}: grade contínua inclusive entre squads`,
-      layout.mesas.every((mesa, i) => Math.abs(mesa.x - layout.mesas[0].x - (i % layout.colunas) * 80) < .001
-        && mesa.y === layout.mesas[0].y + Math.floor(i / layout.colunas) * 72))
+    conferir(`${nome}/${largura}: estações não invadem a ala de vidro`,
+      layout.mesas.every((mesa) => mesa.x >= layout.arquitetura.planoAberto.x
+        && mesa.y >= layout.arquitetura.planoAberto.z))
     const mapa = compactacaoRpg(layout).mapa
     conferir(`${nome}/${largura}: projeção não deforma blocos de squads`,
       layout.mesas.every((mesa) => mapa(mesa.x, mesa.y) === mesa.x))

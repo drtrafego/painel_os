@@ -224,7 +224,7 @@
 .ct-office .ct-zoom { display:flex; align-items:center; border:1px solid #4a4636; border-radius:7px; overflow:hidden }
 .ct-office .ct-zoom button { min-height:36px; min-width:34px; border:0; background:#191e20; color:#ddd5b7; font-size:14px }.ct-office .ct-zoom button[title] { border-inline:1px solid #4a4636; font-size:10px; min-width:44px }
 .ct-office .ct-room { min-width:0; position:relative; background:#111519 }
-.ct-office .ct-room-scroll { height:clamp(420px,53vh,610px); width:100%; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#917638 #101417 }
+.ct-office .ct-room-scroll { height:clamp(520px,60vh,760px); width:100%; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#917638 #101417; background:radial-gradient(ellipse at 52% 0,#7e6a3826,transparent 62%),#0b1114 }
 .ct-office .ct-room canvas { display:block; max-width:none; cursor:pointer; touch-action:pan-x pan-y }
 .ct-office .ct-room canvas { image-rendering:auto; background:#09131e }
 .ct-office .ct-room canvas:focus-visible { outline:2px solid var(--ct-yellow); outline-offset:-3px }

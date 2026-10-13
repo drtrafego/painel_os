@@ -14,10 +14,24 @@ export interface IlhaRpg {
   nome: string; cor: string; tipo: string; compacta: boolean
   postos: ReadonlyArray<{ x: number; y: number }>; mesas: ReadonlyArray<MesaRpg>
 }
+export interface SalaArquiteturaRpg {
+  id: string; label: string; x: number; z: number; largura: number; profundidade: number
+  alturaVidro: number; abertura: number
+}
+export interface ArquiteturaRpg {
+  salas: ReadonlyArray<SalaArquiteturaRpg>
+  alaEsquerda: { x: number; largura: number }
+  corredor: { x: number; z: number; largura: number; profundidade: number }
+  recepcao: { x: number; z: number; largura: number; profundidade: number }
+  lounge: { x: number; z: number; largura: number; profundidade: number }
+  coordenacao: { x: number; z: number; largura: number; profundidade: number }
+  planoAberto: { x: number; z: number; largura: number; profundidade: number }
+}
 export interface PlantaRpg {
   largura: number; altura: number; corredorX: number; descansoY: number
   descansoAberto: boolean; ocupantesDescanso: number
   ilhas: ReadonlyArray<IlhaRpg>; mesas: ReadonlyArray<MesaRpg>
+  arquitetura: ArquiteturaRpg
 }
 export interface PoseRpg { x: number; y: number; sentado: number; andando: boolean; fase: string }
 export interface QuadroRpg {

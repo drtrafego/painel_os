@@ -19,6 +19,7 @@ import {
   projetarRpg,
   statusSeguroDaExecucao,
   type HitRpg,
+  type ArquiteturaRpg,
   type IlhaRpg,
   type PoseRpg,
   type QuadroRpg,
@@ -518,16 +519,7 @@ function drawRoom(island: IlhaRpg, project: ReturnType<typeof projection>, wallT
   }
 }
 
-// A grade permanece intacta: salas só envolvem trechos contíguos de uma
-// fileira. Nunca usamos o retângulo de um squad que atravessa outras mesas.
-function glassRooms(islands: ReadonlyArray<IlhaRpg>) {
-  const largest = [...islands].sort((a, b) => b.postos.length - a.postos.length)[0]
-  return islands.filter((island) => island !== largest && island.postos.length > 0 &&
-    island.postos.every((desk) => desk.y === island.postos[0].y))
-    .sort((a, b) => a.x - b.x || a.y - b.y).slice(0, 3)
-}
-
-function drawGlassRoom(ctx: CanvasRenderingContext2D, islands: ReadonlyArray<IlhaRpg>, project: ReturnType<typeof projection>) {
+function drawGlassRoom(ctx: CanvasRenderingContext2D, architecture: ArquiteturaRpg, project: ReturnType<typeof projection>) {
   ctx.save()
   ctx.lineJoin = 'round'
   const line = (points: Point[], color: string, width: number) => {
@@ -535,29 +527,50 @@ function drawGlassRoom(ctx: CanvasRenderingContext2D, islands: ReadonlyArray<Ilh
     points.forEach((point, index) => index ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y))
     ctx.stroke()
   }
-  for (const room of glassRooms(islands)) {
-    const left = Math.min(...room.postos.map((desk) => desk.x)) - 38
-    const right = Math.max(...room.postos.map((desk) => desk.x)) + 38
-    const back = room.postos[0].y - 27, front = room.postos[0].y + 40
-    // Faces laterais transparentes; frente aberta evita cobrir monitores.
-    for (const x of [left, right]) {
-      const points = [project(x, back), project(x, front), project(x, front, 52), project(x, back, 52)]
-      polygon(ctx, points, '#8ebac418')
-      line([project(x, back, 49), project(x, front, 49)], '#efffffad', 1.2)
-      line([project(x, back), project(x, front)], '#607f8366', 2.5)
+  for (const room of architecture.salas) {
+    const { x, z, largura, profundidade: depth, alturaVidro: height, abertura } = room
+    polygon(ctx, [project(x, z), project(x + largura, z), project(x + largura, z + depth), project(x, z + depth)], '#d9cdb3', '#b39d79', 1)
+    polygon(ctx, [project(x + 9, z + 10), project(x + largura - 9, z + 10), project(x + largura - 9, z + depth - 10), project(x + 9, z + depth - 10)], '#c7c0b1b8')
+    const frontSegments: Array<[number, number]> = [[x, x + (largura - abertura) / 2], [x + largura - (largura - abertura) / 2, x + largura]]
+    const panel = (x1: number, z1: number, x2: number, z2: number, h: number) => {
+      const a = project(x1, z1), b = project(x2, z2)
+      const topRight = project(x2, z2, h), topLeft = project(x1, z1, h)
+      polygon(ctx, [a, b, topRight, topLeft], '#9bdde04a', '#638f97d8', 1.6)
+      line([topLeft, topRight], '#f2ffffe8', 2.5)
+      line([a, b], '#536f78', 1.8)
+      const brilhoInicio = { x: a.x * .72 + topLeft.x * .28, y: a.y * .72 + topLeft.y * .28 }
+      const brilhoFim = { x: b.x * .34 + topRight.x * .66, y: b.y * .34 + topRight.y * .66 }
+      line([brilhoInicio, brilhoFim], '#ffffff8c', 1.1)
     }
-    for (const elevation of [0, 52]) {
-      line([project(left, front, elevation), project(left, back, elevation), project(right, back, elevation), project(right, front, elevation)], '#64858ca6', 1.6)
-      // Travessas curtas deixam uma porta larga voltada à circulação.
-      line([project(left, front, elevation), project(left + 12, front, elevation)], '#64858ca6', 1.6)
-      line([project(right - 12, front, elevation), project(right, front, elevation)], '#64858ca6', 1.6)
+    panel(x, z, x + largura, z, height)
+    panel(x, z, x, z + depth, height)
+    panel(x + largura, z, x + largura, z + depth, height)
+    frontSegments.forEach(([a, b]) => panel(a, z + depth, b, z + depth, height))
+    for (const [px, pz] of [[x, z], [x + largura, z], [x, z + depth], [x + largura, z + depth]]) {
+      line([project(px, pz), project(px, pz, height)], '#55757dbb', 2.4)
+      line([project(px + 1.5, pz), project(px + 1.5, pz, height)], '#f1ffff99', .8)
     }
-    for (const [x, y] of [[left, back], [right, back], [left, front], [right, front]]) {
-      line([project(x, y), project(x, y, 52)], '#607f83b3', 2)
-      const p = project(x, y), q = project(x, y, 52)
-      line([{ x: p.x + 1, y: p.y - 1 }, { x: q.x + 1, y: q.y + 2 }], '#f2ffffb3', .8)
+    const doorX = x + largura / 2
+    line([project(doorX - abertura / 2, z + depth), project(doorX - abertura / 2, z + depth, height)], '#d7eef0c0', 1.2)
+    line([project(doorX + abertura / 2, z + depth), project(doorX + abertura / 2, z + depth, height)], '#d7eef0c0', 1.2)
+    const label = project(doorX, z + 9, height + 8)
+    roundedPanel(ctx, label.x - Math.min(78, largura / 2 - 8), label.y - 11, Math.min(156, largura - 16), 21, 4, '#20343be8', '#d4b66f', .9)
+    ctx.fillStyle = '#fff0c8'; ctx.font = '800 9px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(room.label, label.x, label.y)
+    // Mobiliário fixo faz a sala continuar sendo um ambiente, sem criar agentes.
+    if (room.id === 'reuniao') {
+      const table = project(x + largura / 2, z + depth / 2)
+      drawSmoothFurniture(ctx, 'desk', table.x - 76, table.y - 20, 152, 42)
+      for (const offset of [-58, -20, 20, 58]) drawSmoothFurniture(ctx, 'chair', table.x + offset - 8, table.y + 23, 16, 22)
+    } else {
+      const desk = project(x + largura / 2, z + depth / 2 + 7)
+      drawSmoothFurniture(ctx, 'desk', desk.x - 35, desk.y - 20, 70, 42)
+      drawSmoothFurniture(ctx, 'chair', desk.x - 10, desk.y + 22, 20, 25)
     }
   }
+  const corridor = architecture.corredor
+  polygon(ctx, [project(corridor.x, corridor.z), project(corridor.x + corridor.largura, corridor.z), project(corridor.x + corridor.largura, corridor.z + corridor.profundidade), project(corridor.x, corridor.z + corridor.profundidade)], '#e8ddc5', '#bba980', 1)
+  line([project(corridor.x + 10, corridor.z), project(corridor.x + 10, corridor.z + corridor.profundidade)], '#fff7df99', 2)
+  line([project(corridor.x + corridor.largura - 10, corridor.z), project(corridor.x + corridor.largura - 10, corridor.z + corridor.profundidade)], '#b19a7899', 1)
   ctx.restore()
 }
 
@@ -677,7 +690,7 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
     }
   }
   ctx.restore()
-  drawGlassRoom(ctx, layout.ilhas, project)
+  drawGlassRoom(ctx, layout.arquitetura, project)
   layout.ilhas.forEach((island) => {
     roomSigns.push(drawRoom(island, project, wallTopLimit))
 
@@ -997,11 +1010,11 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
     const occupied: Bounds[] = []
     bubbles.sort((a, b) => Number(b.selected) - Number(a.selected)).forEach((bubble) => drawStatusBubble(ctx, bubble.text, bubble.point, occupied, quadro.layout.largura))
 
-    if (!quadro.layout.ilhas.length) {
+    if (!quadro.layout.mesas.length) {
       ctx.fillStyle = PALETTE.cream
       ctx.font = '700 11px "JetBrains Mono", monospace'
       ctx.textAlign = 'center'
-      ctx.fillText('NENHUM AMBIENTE VISIVEL', round(quadro.layout.largura / 2), round(quadro.layout.altura / 2))
+      ctx.fillText('ESCRITÓRIO EM PAUSA · SEM AGENTES VISÍVEIS', round(quadro.layout.largura * .68), round(quadro.layout.altura - 118))
     }
   } finally {
     ctx.restore()

@@ -27,6 +27,7 @@ import { useAgentesVivos } from '../dados/useAgentesVivos'
 import { ambienteForcadoDaUrl, resolverAmbiente, type AmbienteVisual } from '../dados/ambiente'
 import { agruparAgentesAtivosPorLancador, totalDeAgentesAgrupados, type GrupoLancador } from '../dados/lancadores'
 import { statusSeguroDaExecucao } from './PixelOffice.rpg-data'
+import type { ArquiteturaRpg } from './PixelOffice.rpg-data'
 
 export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, obterAtivosNoCatalogo }
 
@@ -102,6 +103,7 @@ export interface LayoutSala {
   ocupantesDescanso: number
   ilhas: IlhaVisual[]
   mesas: MesaVisual[]
+  arquitetura: ArquiteturaRpg
 }
 
 // O mínimo precisa continuar abaixo da escala que cabe no palco quando o
@@ -529,20 +531,37 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     ...PIXEL_AGENT_SQUADS.map((squad) => squad.id).filter((id) => id !== SALA_MISTA && grupos.has(id)),
     ...(grupos.has(SALA_MISTA) ? [SALA_MISTA] : []),
   ]
-  // Todos os postos compartilham a mesma malha, inclusive nas trocas de squad.
-  // As ilhas abaixo são apenas metadados de setor, nunca contêineres espaciais.
-  const margemX = 32
+  // A planta física é independente da população. Os agentes reais ocupam
+  // somente as estações do plano aberto, enquanto a ala de vidro permanece
+  // visível também em cenas vazias.
+  const larguraDisponivel = Math.max(0, opcoes.larguraDisponivel || 0)
+  const alturaDisponivel = Math.max(0, opcoes.alturaDisponivel || 0)
+  const margemX = 38
+  const larguraBase = Math.max(1120, larguraDisponivel ? larguraDisponivel / Math.max(.45, opcoes.zoomMinimo || .75) : 1120)
+  const larguraArquitetura = Math.max(larguraBase, 1180)
+  const alaLargura = 352
+  const corredorLargura = 54
+  const abertoX = margemX + alaLargura + corredorLargura
+  const abertoLarguraMaxima = larguraArquitetura - abertoX - margemX
   // Reserva coletiva para placas flutuantes quando o vão entre fileiras
   // não as comporta. Não cria cabeçalhos nem margens por bloco de mesas.
-  const margemTopo = 128 + ordemSquads.length * 15
-  const espacamentoMesaX = 80
-  const espacamentoMesaY = 72
+  const margemTopo = 268
+  const espacamentoMesaX = Math.max(82, Math.min(150, (abertoLarguraMaxima - 54) / 7))
+  const espacamentoMesaY = 104
   const ordenadas = ordemSquads.flatMap((squad) => grupos.get(squad) || [])
   const distribuir = (colunas: number) => {
     const linhas = Math.ceil(ordenadas.length / colunas)
     const descansoY = Math.max(margemTopo + 70 + linhas * espacamentoMesaY, 280)
     const paradas = execucoes.filter((execucao) => execucao.squad !== SALA_MISTA && execucao.execucao.estado === 'parado').length
-    const larguraNatural = Math.max(360, margemX * 2 + colunas * espacamentoMesaX)
+    // A largura precisa representar a malha candidata. Usar sempre a largura
+    // máxima da arquitetura fazia duas e sete colunas parecerem igualmente
+    // largas para a otimização e favorecia as poucas colunas por terem menos
+    // altura. A ala de vidro e o corredor ocupam o lado esquerdo; só a faixa
+    // das mesas cresce, até o teto físico já calculado para a arquitetura.
+    const larguraNatural = Math.min(
+      larguraArquitetura,
+      Math.max(abertoX + margemX + 36, abertoX + colunas * espacamentoMesaX + 36),
+    )
     const larguraDescanso = Math.min(larguraNatural - 60, 140 + paradas * 44)
     const porLinha = Math.max(1, Math.floor((larguraDescanso - 36) / 44))
     const linhasDescanso = paradas > 0 ? Math.ceil(paradas / porLinha) : 0
@@ -550,11 +569,9 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     return { descansoY, larguraNatural, altura: descansoY + alturaDescanso }
   }
 
-  const larguraDisponivel = Math.max(0, opcoes.larguraDisponivel || 0)
-  const alturaDisponivel = Math.max(0, opcoes.alturaDisponivel || 0)
   let melhor = { colunas: 1, ...distribuir(1), escala: Number.NEGATIVE_INFINITY }
   let melhorComAltura: typeof melhor | null = null
-  for (let colunas = 1; colunas <= Math.max(1, Math.min(12, ordenadas.length)); colunas += 1) {
+  for (let colunas = 1; colunas <= Math.max(1, Math.min(7, ordenadas.length)); colunas += 1) {
     const candidato = distribuir(colunas)
     const escala = larguraDisponivel && alturaDisponivel
       ? Math.min(larguraDisponivel / candidato.larguraNatural, alturaDisponivel / candidato.altura)
@@ -581,23 +598,38 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   // virava vazio vertical mensurável e um piso alto causava overflow horizontal.
   const zoomSugerido = limitar(zoomSugeridoNatural, opcoes.zoomMinimo ?? ZOOM_MIN, ZOOM_MAX)
   const largura = larguraDisponivel ? Math.max(melhor.larguraNatural, larguraDisponivel / zoomSugerido) : melhor.larguraNatural
-  const inicioGradeX = (largura - melhor.colunas * espacamentoMesaX) / 2
+  const abertoLargura = largura - abertoX - margemX
+  const arquitetura: ArquiteturaRpg = {
+    alaEsquerda: { x: margemX, largura: alaLargura },
+    salas: [
+      { id: 'reuniao', label: 'SALA DE REUNIÃO', x: margemX, z: 136, largura: alaLargura - 20, profundidade: 150, alturaVidro: 94, abertura: 58 },
+      { id: 'apoio', label: 'APOIO / ADMINISTRATIVO', x: margemX, z: 304, largura: alaLargura - 20, profundidade: 150, alturaVidro: 88, abertura: 52 },
+      { id: 'planejamento', label: 'PLANEJAMENTO', x: margemX, z: 472, largura: alaLargura - 20, profundidade: 150, alturaVidro: 88, abertura: 58 },
+    ],
+    corredor: { x: margemX + alaLargura, z: 126, largura: corredorLargura, profundidade: 540 },
+    recepcao: { x: margemX + 36, z: 690, largura: 166, profundidade: 54 },
+    lounge: { x: largura - 258, z: 650, largura: 210, profundidade: 104 },
+    coordenacao: { x: abertoX + 18, z: 110, largura: abertoLargura - 36, profundidade: 92 },
+    planoAberto: { x: abertoX, z: 238, largura: abertoLargura, profundidade: 475 },
+  }
+  const espacamentoGradeX = Math.max(82, Math.min(150, (abertoLargura - 48) / melhor.colunas))
+  const inicioGradeX = abertoX + Math.max(18, (abertoLargura - melhor.colunas * espacamentoGradeX) / 2)
   const mesas: MesaVisual[] = ordenadas.map((execucao, indice) => ({
     execucao,
-    x: inicioGradeX + (indice % melhor.colunas + 0.5) * espacamentoMesaX,
-    y: margemTopo + 70 + Math.floor(indice / melhor.colunas) * espacamentoMesaY,
+    x: inicioGradeX + (indice % melhor.colunas + 0.5) * espacamentoGradeX,
+    y: margemTopo + Math.floor(indice / melhor.colunas) * espacamentoMesaY,
     descanso: { x: 0, y: 0 },
   }))
   const ilhas: IlhaVisual[] = ordemSquads.map((squad) => {
     const mesasSquad = mesas.filter((mesa) => mesa.execucao.squad === squad)
-    const x = Math.min(...mesasSquad.map((mesa) => mesa.x)) - espacamentoMesaX / 2
+    const x = Math.min(...mesasSquad.map((mesa) => mesa.x)) - espacamentoGradeX / 2
     const y = Math.min(...mesasSquad.map((mesa) => mesa.y)) - 70
     return {
       squad, nome: mesasSquad[0].execucao.squadNome || NOMES_SQUAD.get(squad) || squad.toUpperCase(),
       cor: CORES_SQUAD.get(squad) || '#7bcaad',
       tipo: squad === SALA_MISTA ? 'coworking' : 'squad', compacta: false,
       x, y,
-      largura: Math.max(...mesasSquad.map((mesa) => mesa.x)) + espacamentoMesaX / 2 - x,
+      largura: Math.max(...mesasSquad.map((mesa) => mesa.x)) + espacamentoGradeX / 2 - x,
       altura: Math.max(...mesasSquad.map((mesa) => mesa.y)) + espacamentoMesaY - y,
       postos: mesasSquad.map(({ x, y }) => ({ x, y })), mesas: mesasSquad,
     }
@@ -629,12 +661,13 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     altura: descansoY + alturaDescanso,
     colunas: melhor.colunas,
     zoomSugerido,
-    corredorX: inicioGradeX + Math.floor(melhor.colunas / 2) * espacamentoMesaX,
+    corredorX: inicioGradeX + Math.floor(melhor.colunas / 2) * espacamentoGradeX,
     descansoY,
     descansoAberto: mesasEmDescanso.length > 0,
     ocupantesDescanso: mesasEmDescanso.length,
     ilhas,
     mesas,
+    arquitetura,
   }
 }
 
@@ -876,6 +909,17 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     zoomAutomaticoRef.current = layout.zoomSugerido
     setZoom(layout.zoomSugerido)
   }, [layout.zoomSugerido])
+
+  useEffect(() => {
+    const palco = palcoRef.current
+    if (!palco || !window.matchMedia('(max-width: 700px)').matches) return
+    const centralizar = () => {
+      palco.scrollLeft = Math.max(0, (palco.scrollWidth - palco.clientWidth) / 2)
+      palco.scrollTop = 0
+    }
+    const quadro = window.requestAnimationFrame(centralizar)
+    return () => window.cancelAnimationFrame(quadro)
+  }, [layout.largura, layout.zoomSugerido])
 
   useEffect(() => {
     const canvas = canvasRef.current
