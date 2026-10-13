@@ -137,11 +137,13 @@ const layoutDescansoComOcupante = calcularLayoutSala(
   { larguraDisponivel: 990, alturaDisponivel: 600 },
 )
 conferir('descanso vazio fica encolhido', !layoutDescansoVazio.descansoAberto && layoutDescansoVazio.ocupantesDescanso === 0)
-// 26 -> 87 no pacote V6 (13/10/2026): o lounge agora é desenhado sempre (chão,
+// 26 -> 87 (V6) -> 130 (V7, 13/10/2026): o pacote V7 separou o descanso em
+// duas áreas (convivência + descanso), aumentando de novo o espaço fixo
+// reservado. Mesma razão do V6: o lounge agora é desenhado sempre (chão,
 // sofá, placas), sem depender de cálculo condicional de profundidade, por
 // pedido explícito do Gastão (print de 30 agentes com lounge "praticamente
 // invisível"). Reservar mais espaço aqui é a mudança pedida, não regressão.
-conferir('faixa vazia usa 87 px da planta (lounge sempre desenhado)', layoutDescansoVazio.altura - layoutDescansoVazio.descansoY === 87)
+conferir('faixa vazia usa 130 px da planta (lounge sempre desenhado)', layoutDescansoVazio.altura - layoutDescansoVazio.descansoY === 130)
 conferir('descanso abre quando há ocupante', layoutDescansoComOcupante.descansoAberto && layoutDescansoComOcupante.ocupantesDescanso === 1)
 conferir('descanso ocupado recupera espaço para o boneco', layoutDescansoComOcupante.altura - layoutDescansoComOcupante.descansoY > 30)
 

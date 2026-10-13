@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { desenharEscritorioRpg } from './PixelOffice.rpg'
+import { desenharEscritorioV7 as desenharEscritorioRpg } from './office-v7/OfficeV7'
 import { PainelTarefas, PainelUsoPlanos } from './PixelOffice.wall'
 import { montarTarefasParede, type GastosIA } from './PixelOffice.wall-data'
 import type { QuadroTarefasSolicitadas } from './nucleo/dados'
