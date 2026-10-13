@@ -46,7 +46,11 @@ for (const [nome, layout, largura, altura] of [
   const alturaRenderizada = layout.altura * layout.zoomSugerido
   conferir(`${nome}: caber tudo respeita a largura`, larguraRenderizada <= largura + 0.5, `${larguraRenderizada}/${largura}`)
   conferir(`${nome}: caber tudo respeita a altura`, alturaRenderizada <= altura + 0.5, `${alturaRenderizada}/${altura}`)
-  conferir(`${nome}: sala ocupa praticamente toda a largura`, larguraRenderizada >= largura * 0.97, `${larguraRenderizada}/${largura}`)
+  // Piso baixado de 0.97 para 0.75 no pacote V6 (13/10/2026): o lounge passou
+  // a reservar espaço fixo sempre (mesmo vazio), o que deixa uma folga lateral
+  // legítima no desktop (medido 85,9%) sem repetir a regressão antiga (grade
+  // com 2 colunas perdida num mar vazio, que media bem abaixo de 75%).
+  conferir(`${nome}: sala ocupa boa parte da largura`, larguraRenderizada >= largura * 0.75, `${larguraRenderizada}/${largura}`)
 }
 
 const ilhaCoordenacao = desktop.ilhas.find((ilha) => ilha.squad === 'coordenação')
@@ -133,7 +137,11 @@ const layoutDescansoComOcupante = calcularLayoutSala(
   { larguraDisponivel: 990, alturaDisponivel: 600 },
 )
 conferir('descanso vazio fica encolhido', !layoutDescansoVazio.descansoAberto && layoutDescansoVazio.ocupantesDescanso === 0)
-conferir('faixa vazia usa só 26 px da planta', layoutDescansoVazio.altura - layoutDescansoVazio.descansoY === 26)
+// 26 -> 87 no pacote V6 (13/10/2026): o lounge agora é desenhado sempre (chão,
+// sofá, placas), sem depender de cálculo condicional de profundidade, por
+// pedido explícito do Gastão (print de 30 agentes com lounge "praticamente
+// invisível"). Reservar mais espaço aqui é a mudança pedida, não regressão.
+conferir('faixa vazia usa 87 px da planta (lounge sempre desenhado)', layoutDescansoVazio.altura - layoutDescansoVazio.descansoY === 87)
 conferir('descanso abre quando há ocupante', layoutDescansoComOcupante.descansoAberto && layoutDescansoComOcupante.ocupantesDescanso === 1)
 conferir('descanso ocupado recupera espaço para o boneco', layoutDescansoComOcupante.altura - layoutDescansoComOcupante.descansoY > 30)
 

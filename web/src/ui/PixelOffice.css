@@ -532,3 +532,11 @@
 .ct-office[data-office-visual="ct-rpg"] .ct-room { background:radial-gradient(ellipse at 50% 25%,#293732,transparent 74%),#0c1418; }
 .ct-office[data-office-visual="ct-rpg"] .ct-room canvas { image-rendering:auto; }
 .ct-office[data-office-visual="ct-rpg"] .ct-scene-live { border-color:#857754; background:#161e20ed; box-shadow:0 5px 16px #0007,inset 0 1px #fff1cc18; }
+
+/* CT-OFFICE-V6: diorama compactado e centralizado; HUD e interacoes mantidos. */
+.ct-office[data-office-visual="ct-rpg"] .ct-room-scroll canvas {
+  margin-inline:auto;
+}
+.ct-office[data-office-visual="ct-rpg"] .ct-room-scroll {
+  background: radial-gradient(ellipse at 50% 45%, #273133 0%, #0b1318 82%);
+}

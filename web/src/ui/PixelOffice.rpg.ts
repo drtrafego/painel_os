@@ -298,46 +298,48 @@ function drawSceneDecor(ctx: CanvasRenderingContext2D, layout: QuadroRpg['layout
     ctx.restore()
   }
   ctx.save()
-  const firstY = layout.mesas.length ? Math.min(...layout.mesas.map((desk) => desk.y)) : 318
-  // A reserva posterior acima da grade recebe uma saleta, longe das poses
-  // de descanso já existentes na frente. O conjunto cabe também sem parados.
-  const loungeWidth = Math.min(244, layout.largura - 100)
-  const loungeX = layout.largura - loungeWidth - 42
-  const loungeY = Math.max(136, firstY - 182)
-  const loungeDepth = Math.min(84, firstY - 88 - loungeY)
-  if (loungeDepth >= 70) {
-    const corners = [project(loungeX - 10, loungeY - 6, 30), project(loungeX + loungeWidth + 10, loungeY - 6, 30), project(loungeX - 10, loungeY + loungeDepth + 7), project(loungeX + loungeWidth + 10, loungeY + loungeDepth + 7)]
-    const left = Math.min(...corners.map((p) => p.x)), top = Math.min(...corners.map((p) => p.y))
-    obstacles.push({ x: left, y: top, width: Math.max(...corners.map((p) => p.x)) - left, height: Math.max(...corners.map((p) => p.y)) - top })
-    softPolygon(ctx, [project(loungeX - 10, loungeY - 6), project(loungeX + loungeWidth + 10, loungeY - 6), project(loungeX + loungeWidth + 10, loungeY + loungeDepth + 7), project(loungeX - 10, loungeY + loungeDepth + 7)], '#a8ada5', 9)
-    const sofaWidth = loungeWidth - 50
-    const sofa = (y: number, facingFront: boolean) => {
-      const x = loungeX + 25, depth = 24
-      shadow(x, y, sofaWidth, depth)
-      box(x + 3, y + 2, sofaWidth - 6, depth - 2, 0, 5, '#35414d', '#253039', '#202b35')
-      box(x, y, sofaWidth, depth, 5, 10, '#7f8c8b', '#47585d', '#35454c')
-      for (let i = 0; i < 3; i += 1) {
-        box(x + 9 + i * (sofaWidth - 18) / 3, y + 6, (sofaWidth - 24) / 3, 15, 15, 4, '#99a4a0', '#68797b', '#526569')
-      }
-      box(x, facingFront ? y : y + depth - 6, sofaWidth, 6, 14, 14, '#899893', '#53676b', '#3d5159')
-      for (const armX of [x, x + sofaWidth - 7]) box(armX, y + 2, 7, depth - 2, 15, 6, '#a0aaa1', '#657a7c', '#465f66')
-    }
-    sofa(loungeY, true)
-    // Mesa baixa entre os assentos: grupo face a face, sem fileira solta.
-    const tableX = loungeX + loungeWidth / 2 - 26
-    shadow(tableX, loungeY + 34, 52, 16)
-    box(tableX + 5, loungeY + 36, 42, 12, 0, 7, '#95713e', '#806344', '#705335')
-    box(tableX, loungeY + 33, 52, 18, 7, 4, '#efe0b8', '#c5ab7d', '#ad9062')
-    sofa(loungeY + loungeDepth - 24, false)
-    for (const x of [loungeX + 4, loungeX + loungeWidth - 4]) {
-      const p = project(x, loungeY + 29)
-      drawSmoothFurniture(ctx, 'plant', p.x - 9, p.y - 23, 18, 27)
-    }
+  // LOUNGE DO CT: área própria, preparada para ocupantes reais, sem fila frontal.
+  const lounge = layout.arquitetura.lounge
+  const lx = lounge.x, lz = lounge.z, lw = lounge.largura, ld = lounge.profundidade
+  const canto = [project(lx - 10, lz - 8), project(lx + lw + 10, lz - 8), project(lx + lw + 10, lz + ld + 7), project(lx - 10, lz + ld + 7)]
+  const bx = Math.min(...canto.map(p => p.x)), by = Math.min(...canto.map(p => p.y))
+  obstacles.push({ x: bx, y: by - 38, width: Math.max(...canto.map(p => p.x)) - bx, height: Math.max(...canto.map(p => p.y)) - by + 38 })
+  ctx.save()
+  const floor = ctx.createLinearGradient(0, project(lx, lz).y, 0, project(lx, lz + ld).y)
+  floor.addColorStop(0, '#9ca8a0'); floor.addColorStop(.4, '#b6b9ad'); floor.addColorStop(1, '#c5c5b6')
+  softPolygon(ctx, canto, floor, 10)
+  ctx.strokeStyle = '#f5f1d9a8'; ctx.lineWidth = 2
+  ctx.beginPath(); ctx.moveTo(canto[0].x, canto[0].y); ctx.lineTo(canto[1].x, canto[1].y); ctx.stroke()
+  // O sofá abraça o fundo do lounge, sem ocupar a grade de descanso.
+  const sofaW = lw - 70
+  shadow(lx + 35, lz + 15, sofaW, 24)
+  box(lx + 36, lz + 10, sofaW, 24, 0, 13, '#627674', '#455756', '#374648')
+  box(lx + 36, lz + 10, sofaW, 7, 13, 16, '#899994', '#576e6d', '#44595b')
+  for (let i = 0; i < 3; i += 1) {
+    box(lx + 44 + i * (sofaW - 18) / 3, lz + 18, (sofaW - 29) / 3, 13, 13, 5, '#9fafaa', '#687c76', '#4c625d')
   }
+  // Mesas laterais / plantas ancoram o espaço, sem inventar pessoas.
+  for (const x of [lx + 17, lx + lw - 18]) {
+    const point = project(x, lz + 25)
+    drawSmoothFurniture(ctx, 'plant', point.x - 11, point.y - 30, 22, 30)
+  }
+  const sign = project(lx + lw / 2, lz + 8, 21)
+  roundedPanel(ctx, sign.x - 74, sign.y - 12, 148, 23, 5, '#203038ef', '#c1ab79', .8)
+  ctx.font = '800 10px Arial, sans-serif'; ctx.fillStyle = '#f8edce'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(`LOUNGE · ${layout.ocupantesDescanso} EM DESCANSO`, sign.x, sign.y)
+  // Cada lugar de descanso corresponde a um agente real do estado recebido.
+  // Um banco vazio não se transforma em um agente ativo.
+  for (const seat of layout.arquitetura.assentosDescanso) {
+    const point = project(seat.x, seat.y + 10)
+    ctx.save(); ctx.globalAlpha = .62
+    drawSmoothFurniture(ctx, 'chair', point.x - 12, point.y - 16, 24, 20)
+    ctx.restore()
+  }
+  ctx.restore()
 
-  const receptionWidth = Math.min(126, layout.largura * .27)
-  const receptionX = Math.max(40, layout.largura * .22 - receptionWidth / 2)
-  const receptionY = layout.altura - 37
+  const receptionWidth = layout.arquitetura.recepcao.largura
+  const receptionX = layout.arquitetura.recepcao.x
+  const receptionY = layout.arquitetura.recepcao.z
   shadow(receptionX, receptionY, receptionWidth, 23)
   box(receptionX + 3, receptionY + 2, receptionWidth - 6, 20, 0, 4, '#9e8256', '#705f48', '#786044')
   box(receptionX, receptionY, receptionWidth, 23, 4, 25, '#eee0bd', '#d3b885', '#aa8959')
@@ -369,6 +371,9 @@ function sceneKey(quadro: QuadroRpg) {
     round(layout.altura),
     layout.descansoAberto,
     layout.ocupantesDescanso,
+    layout.arquitetura.lounge,
+    layout.arquitetura.postosLivres,
+    layout.arquitetura.assentosDescanso,
     layout.ilhas.map((island) => [
       island.squad,
       island.nome,
@@ -581,7 +586,8 @@ function drawCirculation(ctx: CanvasRenderingContext2D, layout: QuadroRpg['layou
   const strip = (x: number, y: number, width: number, depth: number) =>
     polygon(ctx, [project(x, y), project(x + width, y), project(x + width, y + depth), project(x, y + depth)], '#eee2c3', '#faf0d660', 1)
   // Galeria transversal de 46 unidades, conectada ao acesso frontal.
-  strip(28, firstY - 82, layout.largura - 56, 46)
+  const walk = layout.arquitetura.planoAberto
+  strip(walk.x - 10, 230, walk.largura + 17, 25)
   // Entre postos fixos de 62 px só cabe uma conexão estreita, sem invadi-los.
   const columns = [...new Set(layout.mesas.map((desk) => desk.x))].sort((a, b) => a - b)
   if (columns.length > 1) {
@@ -592,7 +598,7 @@ function drawCirculation(ctx: CanvasRenderingContext2D, layout: QuadroRpg['layou
     const passageWidth = Math.min(14, Math.max(0, screenGap / Math.max(.1, scaleX)))
     if (passageWidth >= 2) strip(x - passageWidth / 2, firstY - 36, passageWidth, lastY - firstY + 92)
   }
-  strip(28, lastY + 44, layout.largura - 56, 18)
+  strip(walk.x - 10, Math.min(lastY + 44, layout.altura - 56), walk.largura + 17, 18)
 }
 
 function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
@@ -691,6 +697,14 @@ function drawStaticScene(ctx: CanvasRenderingContext2D, quadro: QuadroRpg) {
   }
   ctx.restore()
   drawGlassRoom(ctx, layout.arquitetura, project)
+  // Estações reais desocupadas: a sala permanece mobiliada com 3 ou 30 ativos.
+  for (const spot of layout.arquitetura.postosLivres) {
+    const point = project(spot.x, spot.y + 18)
+    ctx.save(); ctx.globalAlpha = .8
+    drawSmoothFurniture(ctx, 'chair', point.x - 13, point.y - 35, 26, 34)
+    drawSmoothFurniture(ctx, 'desk', point.x - 31, point.y - 28, 62, 45)
+    ctx.restore()
+  }
   layout.ilhas.forEach((island) => {
     roomSigns.push(drawRoom(island, project, wallTopLimit))
 
@@ -749,7 +763,7 @@ const walkingState = new Map<string, boolean>()
 let lastWalkEventAt = 0
 
 // Mesa de 62 px domina a estação; preserva o recorte sentado e a âncora dos pés.
-const CHARACTER_SCALE = .8
+const CHARACTER_SCALE = .90
 
 type PasseioAmbiente = { x: number; y: number; direction: Direction }
 
@@ -766,20 +780,20 @@ function drawCharacterSprite(
   const identity = `${person.chave} ${person.nome} ${person.objeto}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const director = (Object.keys(DIRECTOR_ROBOTS) as Array<keyof typeof DIRECTOR_ROBOTS>).find((name) => identity.includes(name))
   const human = (Object.keys(HUMAN_VARIANTS) as Array<keyof typeof HUMAN_VARIANTS>).find((name) => identity.includes(name))
-  const variant = person.tipoVisual === 'humano' && human
-    ? HUMAN_VARIANTS[human]
-    : director
-      ? DIRECTOR_ROBOTS[director]
-      : ROBOT_VARIANTS[stableHash(person.chave) % ROBOT_VARIANTS.length]
+  // A escolha pelo tipoVisual vem do catálogo: humano nunca cai no PNG de robô.
+  const humanFallback = [HUMAN_VARIANTS.luana, HUMAN_VARIANTS.renato, HUMAN_VARIANTS.bia, HUMAN_VARIANTS.gastao]
+  const variant = person.tipoVisual === 'humano'
+    ? (human ? HUMAN_VARIANTS[human] : humanFallback[stableHash(person.chave) % humanFallback.length])
+    : (director ? DIRECTOR_ROBOTS[director] : ROBOT_VARIANTS[stableHash(person.chave) % ROBOT_VARIANTS.length])
   const image = loadRobotImage(direction === 'up' ? variant.back : variant.front)
   if (!image) return false
   // Humanos usam o tronco na pose sentada. Robôs mantêm o PNG inteiro
   // e a escala de pé: a mesa oculta o corpo, sem ampliar um recorte de 82%.
-  const sourceHeight = image.naturalHeight * (seatedAtDesk && person.tipoVisual === 'humano' ? .64 : 1)
+  const sourceHeight = image.naturalHeight // Sem recortar ou deformar o corpo humano sentado.
   const ratio = image.naturalWidth / sourceHeight
   const targetHeight = person.tipoVisual === 'robo' ? 69 * CHARACTER_SCALE : height + 5 * CHARACTER_SCALE
   const targetWidth = targetHeight * ratio
-  const drawY = round(y - 5 * CHARACTER_SCALE)
+  const drawY = round(y - (seatedAtDesk ? 4 : 5) * CHARACTER_SCALE)
   ctx.save()
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
@@ -794,7 +808,8 @@ function drawCharacterSprite(
     ctx.beginPath()
     ctx.rect(drawX, clothingTop, drawWidth, drawY + drawHeight - clothingTop)
     ctx.clip()
-    ctx.filter = 'grayscale(1) brightness(0.6)'
+    ctx.globalAlpha *= .22
+    ctx.filter = 'grayscale(.5) brightness(.93)'
     ctx.drawImage(image, 0, 0, image.naturalWidth, sourceHeight, drawX, drawY, drawWidth, drawHeight)
   }
   ctx.restore()
@@ -918,7 +933,7 @@ function drawCharacter(
   ctx.beginPath(); ctx.arc(spritePoint.x + 13, spritePoint.y - 36, 3, 0, Math.PI * 2); ctx.fill()
   ctx.restore()
 
-  return { point: spritePoint, x: spritePoint.x - 17, y: spritePoint.y - 58, width: 34, height: 61, selected, statusColor, robot: person.tipoVisual === 'robo', status: statusSeguroDaExecucao(person) } satisfies CharacterBounds
+  return { point: spritePoint, x: spritePoint.x - 24, y: spritePoint.y - 69, width: 48, height: 72, selected, statusColor, robot: person.tipoVisual === 'robo', status: statusSeguroDaExecucao(person) } satisfies CharacterBounds
 }
 
 function drawName(ctx: CanvasRenderingContext2D, name: string, point: Point, color: string, selected: boolean) {
@@ -954,7 +969,7 @@ function drawStatusBubble(ctx: CanvasRenderingContext2D, text: string, point: Po
   })
   const width = Math.max(...lines.map((line) => ctx.measureText(line).width)) + 20 * unit
   const height = (lines.length * 15 + 12) * unit
-  const head = { x: point.x, y: point.y - 55 }
+  const head = { x: point.x, y: point.y - 66 }
   const minX = 4, maxX = Math.max(minX, sceneWidth - width - 4)
   let bounds: Bounds = { x: clamp(head.x - width / 2, minX, maxX), y: Math.max(4, head.y - height - 10 * unit), width, height }
   // Tenta os dois lados da cabeça antes de subir uma linha. Nenhum ativo é
@@ -1004,7 +1019,7 @@ export function desenharEscritorioRpg(ctx: CanvasRenderingContext2D, quadro: Qua
       if (!bounds) return
       hits.push({ chave: character.mesa.execucao.chave, x: bounds.x, y: bounds.y, largura: bounds.width, altura: bounds.height })
       if (bounds.status) bubbles.push({ text: bounds.status, point: bounds.point, selected: bounds.selected })
-      else if (!bounds.robot || bounds.selected) labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: bounds.selected })
+      else if (!bounds.robot || bounds.selected || character.mesa.execucao.chave === quadro.hoverId) labels.push({ name: character.mesa.execucao.nome, point: bounds.point, color: bounds.statusColor, selected: bounds.selected })
     })
     labels.forEach((label) => drawName(ctx, label.name, label.point, label.color, label.selected))
     const occupied: Bounds[] = []

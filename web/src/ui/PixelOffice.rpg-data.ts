@@ -26,6 +26,8 @@ export interface ArquiteturaRpg {
   lounge: { x: number; z: number; largura: number; profundidade: number }
   coordenacao: { x: number; z: number; largura: number; profundidade: number }
   planoAberto: { x: number; z: number; largura: number; profundidade: number }
+  postosLivres: ReadonlyArray<{ x: number; y: number }>
+  assentosDescanso: ReadonlyArray<{ x: number; y: number }>
 }
 export interface PlantaRpg {
   largura: number; altura: number; corredorX: number; descansoY: number
@@ -73,7 +75,6 @@ type Point = { x: number; y: number }
 type Coluna = { x0: number; x1: number; topo: number; fundo: number; fator: number }
 // CT-VISUAL-VIDEO-2026-10-12: projecao 3/4 aplicada igualmente a objetos e cliques.
 const CAMERA = { cisalhamento: .18, subida: .085, profundidade: .76, topo: 104 } as const
-const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, Number.isFinite(value) ? value : min))
 
 function camera(width: number, height: number): (x: number, z: number, elevation?: number) => Point {
   const raw = (x: number, z: number, elevation: number): Point => ({ x: x - z * CAMERA.cisalhamento, y: x * CAMERA.subida + z * CAMERA.profundidade - elevation })
@@ -89,30 +90,11 @@ export function projetarRpg(layout: Pick<PlantaRpg, 'largura' | 'altura'>, x: nu
   return camera(layout.largura, layout.altura)(x, z, elevation)
 }
 
+/** A planta V6 e projetada sem cisalhamento local extra, preservando paredes e hits. */
 export function compactacaoRpg(layout: PlantaRpg): { mapa: (x: number, z: number) => number; colunas: Coluna[] } {
-  const colunas: Coluna[] = []
-  layout.ilhas.forEach((ilha) => {
-    const porFileira = Math.max(1, new Set(ilha.postos.map((posto) => Math.round(posto.x))).size)
-    const fator = Math.min(1, Math.max(.45, (porFileira * 150 + 56) / Math.max(1, ilha.largura)))
-    const existente = colunas.find((coluna) => Math.abs(coluna.x0 - ilha.x) < 1)
-    if (existente) { existente.topo = Math.min(existente.topo, ilha.y); existente.fundo = Math.max(existente.fundo, ilha.y + ilha.altura); existente.fator = Math.max(existente.fator, fator) }
-    else colunas.push({ x0: ilha.x, x1: ilha.x + ilha.largura, topo: ilha.y, fundo: ilha.y + ilha.altura, fator })
-  })
-  colunas.sort((a, b) => a.x0 - b.x0)
-  // A grade compacta já tem passo uniforme. Seus setores podem atravessar
-  // fileiras e ter extents sobrepostos; não interpolar limites por squad.
-  if (colunas.every((coluna) => coluna.fator === 1)) return { colunas, mapa: (x: number, _z: number) => x }
-  const pontos: Array<[number, number]> = [[-1e6, -1e6]]
-  colunas.forEach((coluna) => { const centro = (coluna.x0 + coluna.x1) / 2, meia = (coluna.x1 - coluna.x0) / 2; pontos.push([coluna.x0, centro - meia * coluna.fator], [coluna.x1, centro + meia * coluna.fator]) })
-  pontos.push([1e6, 1e6])
-  const mapearX = (x: number) => {
-    for (let index = 1; index < pontos.length; index += 1) {
-      const [a, fa] = pontos[index - 1], [b, fb] = pontos[index]
-      if (x <= b) return b === a ? fb : fa + (x - a) * (fb - fa) / (b - a)
-    }
-    return x
-  }
-  const inicio = colunas.length ? Math.min(...colunas.map((coluna) => coluna.topo)) - 20 : 0
-  const peso = (z: number) => clamp((z - inicio) / 16) * clamp((layout.descansoY + 2 - z) / 16)
-  return { colunas, mapa: (x, z) => { const atual = peso(z); return atual <= 0 ? x : x + (mapearX(x) - x) * atual } }
+  const colunas: Coluna[] = layout.ilhas.map(ilha => ({
+    x0: ilha.x, x1: ilha.x + ilha.largura,
+    topo: ilha.y, fundo: ilha.y + ilha.altura, fator: 1,
+  }))
+  return { colunas, mapa: (x: number, _z: number) => x }
 }

@@ -28,6 +28,7 @@ import { ambienteForcadoDaUrl, resolverAmbiente, type AmbienteVisual } from '../
 import { agruparAgentesAtivosPorLancador, totalDeAgentesAgrupados, type GrupoLancador } from '../dados/lancadores'
 import { statusSeguroDaExecucao } from './PixelOffice.rpg-data'
 import type { ArquiteturaRpg } from './PixelOffice.rpg-data'
+import { planejarCTOffice } from './ct-office-plan'
 
 export { chaveAgente, formatarRotulo, resolverAgenteNoCatalogo, obterAtivosNoCatalogo }
 
@@ -523,6 +524,7 @@ type OpcoesLayoutSala = {
 }
 
 /** Escolhe a planta cuja escala uniforme é a maior que cabe nos dois eixos. */
+/** Distribui os agentes reais numa planta mais compacta. Somente apresentação. */
 export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes: boolean | OpcoesLayoutSala = false): LayoutSala {
   const opcoes = typeof compactoOuOpcoes === 'object' ? compactoOuOpcoes : {}
   const grupos = new Map<PixelAgentSquad, ExecucaoVisual[]>()
@@ -531,143 +533,47 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
     ...PIXEL_AGENT_SQUADS.map((squad) => squad.id).filter((id) => id !== SALA_MISTA && grupos.has(id)),
     ...(grupos.has(SALA_MISTA) ? [SALA_MISTA] : []),
   ]
-  // A planta física é independente da população. Os agentes reais ocupam
-  // somente as estações do plano aberto, enquanto a ala de vidro permanece
-  // visível também em cenas vazias.
-  const larguraDisponivel = Math.max(0, opcoes.larguraDisponivel || 0)
-  const alturaDisponivel = Math.max(0, opcoes.alturaDisponivel || 0)
-  const margemX = 38
-  const larguraBase = Math.max(1120, larguraDisponivel ? larguraDisponivel / Math.max(.45, opcoes.zoomMinimo || .75) : 1120)
-  const larguraArquitetura = Math.max(larguraBase, 1180)
-  const alaLargura = 352
-  const corredorLargura = 54
-  const abertoX = margemX + alaLargura + corredorLargura
-  const abertoLarguraMaxima = larguraArquitetura - abertoX - margemX
-  // Reserva coletiva para placas flutuantes quando o vão entre fileiras
-  // não as comporta. Não cria cabeçalhos nem margens por bloco de mesas.
-  const margemTopo = 268
-  const espacamentoMesaX = Math.max(82, Math.min(150, (abertoLarguraMaxima - 54) / 7))
-  const espacamentoMesaY = 104
   const ordenadas = ordemSquads.flatMap((squad) => grupos.get(squad) || [])
-  const distribuir = (colunas: number) => {
-    const linhas = Math.ceil(ordenadas.length / colunas)
-    const descansoY = Math.max(margemTopo + 70 + linhas * espacamentoMesaY, 280)
-    const paradas = execucoes.filter((execucao) => execucao.squad !== SALA_MISTA && execucao.execucao.estado === 'parado').length
-    // A largura precisa representar a malha candidata. Usar sempre a largura
-    // máxima da arquitetura fazia duas e sete colunas parecerem igualmente
-    // largas para a otimização e favorecia as poucas colunas por terem menos
-    // altura. A ala de vidro e o corredor ocupam o lado esquerdo; só a faixa
-    // das mesas cresce, até o teto físico já calculado para a arquitetura.
-    const larguraNatural = Math.min(
-      larguraArquitetura,
-      Math.max(abertoX + margemX + 36, abertoX + colunas * espacamentoMesaX + 36),
-    )
-    const larguraDescanso = Math.min(larguraNatural - 60, 140 + paradas * 44)
-    const porLinha = Math.max(1, Math.floor((larguraDescanso - 36) / 44))
-    const linhasDescanso = paradas > 0 ? Math.ceil(paradas / porLinha) : 0
-    const alturaDescanso = paradas > 0 ? 40 + linhasDescanso * 44 : 26
-    return { descansoY, larguraNatural, altura: descansoY + alturaDescanso }
-  }
-
-  let melhor = { colunas: 1, ...distribuir(1), escala: Number.NEGATIVE_INFINITY }
-  let melhorComAltura: typeof melhor | null = null
-  for (let colunas = 1; colunas <= Math.max(1, Math.min(7, ordenadas.length)); colunas += 1) {
-    const candidato = distribuir(colunas)
-    const escala = larguraDisponivel && alturaDisponivel
-      ? Math.min(larguraDisponivel / candidato.larguraNatural, alturaDisponivel / candidato.altura)
-      : colunas === Math.max(1, Math.min(6, ordenadas.length)) ? 1 : 0
-    const avaliado = { colunas, ...candidato, escala }
-    if (escala > melhor.escala + 0.001 || (Math.abs(escala - melhor.escala) <= 0.001 && colunas > melhor.colunas)) {
-      melhor = avaliado
-    }
-    // Quando há espaço vertical sobrando, prefira a planta mais ampliada que
-    // também preenche pelo menos 90% da altura. A escala continua uniforme e
-    // a largura final continua limitada pelo palco, sem criar rolagem lateral.
-    const preencheAltura = !alturaDisponivel || escala * candidato.altura >= alturaDisponivel * 0.9
-    if (preencheAltura && (!melhorComAltura || escala > melhorComAltura.escala + 0.001 || (Math.abs(escala - melhorComAltura.escala) <= 0.001 && colunas > melhorComAltura.colunas))) {
-      melhorComAltura = avaliado
-    }
-  }
-  if (melhorComAltura) melhor = melhorComAltura
-
-  const zoomSugeridoNatural = larguraDisponivel && alturaDisponivel
-    ? Math.min(larguraDisponivel / melhor.larguraNatural, alturaDisponivel / melhor.altura)
-    : 1
-  // A margem de dois pixels da medição do palco já protege o arredondamento do
-  // canvas. Não reduza esta escala com uma "folga" percentual: em 200% ela
-  // virava vazio vertical mensurável e um piso alto causava overflow horizontal.
-  const zoomSugerido = limitar(zoomSugeridoNatural, opcoes.zoomMinimo ?? ZOOM_MIN, ZOOM_MAX)
-  const largura = larguraDisponivel ? Math.max(melhor.larguraNatural, larguraDisponivel / zoomSugerido) : melhor.larguraNatural
-  const abertoLargura = largura - abertoX - margemX
-  const arquitetura: ArquiteturaRpg = {
-    alaEsquerda: { x: margemX, largura: alaLargura },
-    salas: [
-      { id: 'reuniao', label: 'SALA DE REUNIÃO', x: margemX, z: 136, largura: alaLargura - 20, profundidade: 150, alturaVidro: 94, abertura: 58 },
-      { id: 'apoio', label: 'APOIO / ADMINISTRATIVO', x: margemX, z: 304, largura: alaLargura - 20, profundidade: 150, alturaVidro: 88, abertura: 52 },
-      { id: 'planejamento', label: 'PLANEJAMENTO', x: margemX, z: 472, largura: alaLargura - 20, profundidade: 150, alturaVidro: 88, abertura: 58 },
-    ],
-    corredor: { x: margemX + alaLargura, z: 126, largura: corredorLargura, profundidade: 540 },
-    recepcao: { x: margemX + 36, z: 690, largura: 166, profundidade: 54 },
-    lounge: { x: largura - 258, z: 650, largura: 210, profundidade: 104 },
-    coordenacao: { x: abertoX + 18, z: 110, largura: abertoLargura - 36, profundidade: 92 },
-    planoAberto: { x: abertoX, z: 238, largura: abertoLargura, profundidade: 475 },
-  }
-  const espacamentoGradeX = Math.max(82, Math.min(150, (abertoLargura - 48) / melhor.colunas))
-  const inicioGradeX = abertoX + Math.max(18, (abertoLargura - melhor.colunas * espacamentoGradeX) / 2)
-  const mesas: MesaVisual[] = ordenadas.map((execucao, indice) => ({
-    execucao,
-    x: inicioGradeX + (indice % melhor.colunas + 0.5) * espacamentoGradeX,
-    y: margemTopo + Math.floor(indice / melhor.colunas) * espacamentoMesaY,
-    descanso: { x: 0, y: 0 },
-  }))
-  const ilhas: IlhaVisual[] = ordemSquads.map((squad) => {
-    const mesasSquad = mesas.filter((mesa) => mesa.execucao.squad === squad)
-    const x = Math.min(...mesasSquad.map((mesa) => mesa.x)) - espacamentoGradeX / 2
-    const y = Math.min(...mesasSquad.map((mesa) => mesa.y)) - 70
+  // Liderança ocupa o fundo. Chefias além da capacidade visual não desaparecem:
+  // continuam em uma estação normal do salão, com sua identificação preservada.
+  const direcao = ordenadas.filter(item => item.squad === 'coordenação').slice(0, 3)
+  const equipes = ordenadas.filter(item => !direcao.includes(item))
+  const parados = ordenadas.filter(item => item.execucao.estado === 'parado')
+  const planta = planejarCTOffice(direcao.length, equipes.length, parados.length, opcoes)
+  const posicoes = new Map<ExecucaoVisual, { x: number; y: number }>()
+  direcao.forEach((item, indice) => posicoes.set(item, planta.chefias[indice]))
+  equipes.forEach((item, indice) => posicoes.set(item, planta.equipes[indice]))
+  const mesas: MesaVisual[] = ordenadas.map(item => {
+    const posicao = posicoes.get(item)
+    if (!posicao) throw new Error(`Sem posicao de mesa para ${item.chave}`)
+    return { execucao: item, x: posicao.x, y: posicao.y, descanso: { x: 0, y: 0 } }
+  })
+  const ilhas: IlhaVisual[] = ordemSquads.map(squad => {
+    const mesasSquad = mesas.filter(mesa => mesa.execucao.squad === squad)
+    const xs = mesasSquad.map(mesa => mesa.x)
+    const ys = mesasSquad.map(mesa => mesa.y)
+    const x = Math.min(...xs) - 43
+    const y = Math.min(...ys) - 51
     return {
       squad, nome: mesasSquad[0].execucao.squadNome || NOMES_SQUAD.get(squad) || squad.toUpperCase(),
       cor: CORES_SQUAD.get(squad) || '#7bcaad',
       tipo: squad === SALA_MISTA ? 'coworking' : 'squad', compacta: false,
-      x, y,
-      largura: Math.max(...mesasSquad.map((mesa) => mesa.x)) + espacamentoGradeX / 2 - x,
-      altura: Math.max(...mesasSquad.map((mesa) => mesa.y)) + espacamentoMesaY - y,
-      postos: mesasSquad.map(({ x, y }) => ({ x, y })), mesas: mesasSquad,
+      x, y, largura: Math.max(...xs) - x + 43, altura: Math.max(...ys) - y + 65,
+      postos: mesasSquad.map(({ x: px, y: py }) => ({ x: px, y: py })), mesas: mesasSquad,
     }
   })
-
-  const descansoY = melhor.descansoY
-  const mesasFixas = mesas.filter((mesa) => mesa.execucao.squad !== SALA_MISTA)
-  const mesasEmDescanso = mesasFixas.filter((mesa) => mesa.execucao.execucao.estado === 'parado')
-  const larguraDescanso = Math.min(largura - 60, 140 + mesasEmDescanso.length * 44)
-  const porLinha = Math.max(1, Math.floor((larguraDescanso - 36) / 44))
-  mesasFixas.forEach((mesa) => {
-    mesa.descanso = { x: largura / 2, y: descansoY + 16 }
+  mesas.forEach(mesa => { mesa.descanso = { x: planta.arquitetura.lounge.x + planta.arquitetura.lounge.largura / 2, y: planta.arquitetura.lounge.z + 40 } })
+  mesas.filter(mesa => mesa.execucao.execucao.estado === 'parado').forEach((mesa, indice) => {
+    // 25 parados => varias fileiras no lounge, nao fila frontal.
+    const destino = planta.descansos[indice]
+    if (destino) mesa.descanso = { ...destino }
   })
-  mesasEmDescanso.forEach((mesa, indice) => {
-    const linha = Math.floor(indice / porLinha)
-    const itensNaLinha = Math.min(porLinha, mesasEmDescanso.length - linha * porLinha)
-    const intervalo = Math.min(44, (larguraDescanso - 36) / Math.max(1, itensNaLinha - 1 || 1))
-    const inicio = (largura - intervalo * (itensNaLinha - 1)) / 2
-    mesa.descanso = { x: inicio + (indice % porLinha) * intervalo, y: descansoY + 30 + linha * 44 }
-  })
-  const ilhaMista = ilhas.find((ilha) => ilha.squad === SALA_MISTA)
-  ilhaMista?.mesas.forEach((mesa, indice) => {
-    mesa.descanso = { x: largura - 18, y: descansoY - 24 - (indice % 2) * 12 }
-  })
-  const linhasDescanso = mesasEmDescanso.length > 0 ? Math.ceil(mesasEmDescanso.length / porLinha) : 0
-  const alturaDescanso = mesasEmDescanso.length > 0 ? 40 + linhasDescanso * 44 : 26
   return {
-    largura,
-    altura: descansoY + alturaDescanso,
-    colunas: melhor.colunas,
-    zoomSugerido,
-    corredorX: inicioGradeX + Math.floor(melhor.colunas / 2) * espacamentoGradeX,
-    descansoY,
-    descansoAberto: mesasEmDescanso.length > 0,
-    ocupantesDescanso: mesasEmDescanso.length,
-    ilhas,
-    mesas,
-    arquitetura,
+    largura: planta.largura, altura: planta.altura,
+    colunas: planta.colunas, zoomSugerido: planta.zoomSugerido,
+    corredorX: planta.corredorX, descansoY: planta.descansoY,
+    descansoAberto: parados.length > 0, ocupantesDescanso: parados.length,
+    ilhas, mesas, arquitetura: planta.arquitetura,
   }
 }
 
