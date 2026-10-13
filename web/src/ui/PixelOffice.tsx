@@ -833,20 +833,12 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       ? filtradas
       : filtrarSquadsSobDemanda(filtradas, squadsSobDemandaAbertos)
   }, [filtroStatus, soAtivos, squadsSobDemandaAbertos, termoBusca, todasExecucoes])
-  // O nome principal da mesa é desenhado com 7,5 px no canvas. Em tela física
-  // de celular, sua escala nunca pode deixá-lo abaixo de 9 px. A sobra vira
-  // rolagem DENTRO do palco, não overflow da página. A conta inclui o DPR,
-  // portanto continua válida entre 50% e 200% de zoom do navegador.
-  const zoomMinimoLegivel = dimensoesPalco.larguraFisica < 700
-    ? limitar(9 / (7.5 * dimensoesPalco.dpr), ZOOM_MIN, ZOOM_MAX)
-    : ZOOM_MIN
   const layout = useMemo(() => calcularLayoutSala(execucoesVisiveis, {
     larguraDisponivel: dimensoesPalco.largura,
     alturaDisponivel: dimensoesPalco.altura,
-    zoomMinimo: zoomMinimoLegivel,
-  }), [dimensoesPalco.altura, dimensoesPalco.largura, execucoesVisiveis, zoomMinimoLegivel])
-  // O palco é deliberadamente rolável. Limitar a aproximação à própria largura
-  // obrigaria o desenho a voltar a encolher e tornaria os nomes ilegíveis.
+  }), [dimensoesPalco.altura, dimensoesPalco.largura, execucoesVisiveis])
+  // A abertura sempre começa no enquadramento que cabe no palco. A rolagem
+  // interna continua disponível somente quando a pessoa aproxima manualmente.
   const zoomMaximoSeguro = ZOOM_MAX
   const totalAtivos = todasExecucoes.filter((execucao) => execucao.ativa).length
   const totalDescanso = todasExecucoes.filter((execucao) => execucao.execucao.estado === 'parado').length

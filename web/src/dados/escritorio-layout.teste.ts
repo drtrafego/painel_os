@@ -167,23 +167,16 @@ const zoomUm = calcularLayoutSala(filtrarSquadsSobDemanda(umAtivo, new Set(['con
 const zoomTodos = calcularLayoutSala(filtrarSquadsSobDemanda(todosSetores, demandas), { larguraDisponivel: 990, alturaDisponivel: 600 }).zoomSugerido
 conferir('planta persistente mantém enquadramento estável entre populações', zoomUm >= zoomTodos, `${zoomUm}/${zoomTodos}`)
 
-// Reprodução da largura útil que sobra para o palco em 390x844 a 200%.
-// A tela física continua com 390 px: nome de mesa de 7,5 px precisa chegar a
-// 9 px efetivos, mesmo que isso transforme o palco, e só o palco, em rolável.
-const celularZoomAlto = calcularLayoutSala(
+// Reprodução do palco real em 390x844. O enquadramento inicial não pode
+// trocar a visão geral por uma área rolável só para aumentar os rótulos.
+const celular390 = calcularLayoutSala(
   filtrarSquadsSobDemanda(todosSetores, demandas),
-  { larguraDisponivel: 143, alturaDisponivel: 420, zoomMinimo: 9 / (7.5 * 2) },
+  { larguraDisponivel: 390, alturaDisponivel: 634 },
 )
-conferir('celular ampliado preserva nome de mesa com ao menos 9 px físicos', 7.5 * celularZoomAlto.zoomSugerido * 2 >= 9, String(7.5 * celularZoomAlto.zoomSugerido * 2))
-conferir('celular ampliado usa rolagem do palco em vez de reduzir o nome', celularZoomAlto.largura * celularZoomAlto.zoomSugerido > 143, `${celularZoomAlto.largura * celularZoomAlto.zoomSugerido}/143`)
-
-// Em 50%, o DPR cai a 0,5. O piso acompanha essa mudança e não sacrifica a
-// leitura para encaixar a planta inteira na página.
-const celularZoomBaixo = calcularLayoutSala(
-  filtrarSquadsSobDemanda(todosSetores, demandas),
-  { larguraDisponivel: 688, alturaDisponivel: 600, zoomMinimo: 9 / (7.5 * 0.5) },
-)
-conferir('celular em 50% preserva nome de mesa com ao menos 9 px físicos', 7.5 * celularZoomBaixo.zoomSugerido * 0.5 >= 9, String(7.5 * celularZoomBaixo.zoomSugerido * 0.5))
+const larguraCanvas390 = Math.round(celular390.largura * celular390.zoomSugerido)
+const alturaCanvas390 = Math.round(celular390.altura * celular390.zoomSugerido)
+conferir('celular 390: canvas inicial cabe na largura do palco', larguraCanvas390 <= 390, `${larguraCanvas390}/390`)
+conferir('celular 390: canvas inicial cabe na altura do palco', alturaCanvas390 <= 634, `${alturaCanvas390}/634`)
 
 // Reprodução do palco desktop a 200%. A planta deve usar a altura disponível,
 // sem a folga percentual que antes deixava mais de 10% vazio abaixo.
