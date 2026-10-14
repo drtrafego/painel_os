@@ -39,6 +39,12 @@ type Layout = { largura:number; altura:number; arquitetura:Architecture; mesas: 
 export type OfficeV7Frame = {
   layout:Layout; personagens:readonly Actor[]; tempo:number; progressoDia:number;
   reduzirMovimento:boolean; selecionadoId?:string|null;hoverId?:string|null
+  /** Progresso de entrada/saída (0..1) por squad "sob demanda", calculado em
+   * PixelOffice.tsx (transição de 720ms, ver DURACAO_TRANSICAO_AMBIENTE_MS).
+   * Antes este valor era calculado e nunca chegava ao renderer: a sala
+   * aparecia/sumia seca. Squad ausente do mapa (ex. coordenação, que não é
+   * sob demanda) é tratado como sempre visível (progresso 1). */
+  progressos?: ReadonlyMap<string, number>
 }
 export type OfficeV7Hit = { chave:string;x:number;y:number;largura:number;altura:number;modulo?:string }
 type View = { P:(x:number,z:number,e?:number)=>Point; sceneW:number;sceneH:number }
@@ -216,16 +222,38 @@ function glassPanel(ctx:CanvasRenderingContext2D,V:View,x1:number,z1:number,x2:n
   path(ctx,[corners[1],corners[2]],'#789ca3b8',1.5);
   const a=P(x1,z1,h*.72),b=P(x2,z2,h*.38);path(ctx,[a,b],'#ffffff37',2.6)
 }
-function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room){
+/**
+ * Sala de vidro. `opacidade` (0..1) é a transição de entrada/saída do squad
+ * (ver OfficeV7Frame.progressos); abaixo do limiar a sala não desenha NADA
+ * (ela realmente some, em vez de ficar com um indício morto na tela).
+ *
+ * Squad sem ninguém ativo agora (room.ativa===false) não desenha mais
+ * parede/porta/mobília fantasma com a etiqueta "OCULTO" (achado 1 da
+ * auditoria de 14/10/2026): vira um indício mínimo, só o contorno do piso e
+ * o nome da sala — sem fingir um ambiente fechado que não existe.
+ */
+function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room,opcoes:{opacidade?:number}={}){
+  const opacidade=opcoes.opacidade??1;
+  if(opacidade<=0.01)return;
   const {x,z,largura:w,profundidade:d,alturaVidro:h,abertura:door}=room;
   const isSquad=room.tipo==='squad';
   const active=isSquad&&room.ativa===true;
   const color=room.cor||'#77938e';
-  const floor=isSquad?(active?alpha(color,.25):'#afb3ae'):'#e8e3d0';
-  const inner=isSquad?(active?alpha(color,.13):'#8f96919c'):'#cfd6d0a1';
-  const glassFill=isSquad?(active?alpha(color,.12):'#8a969630'):'#b1e3e637';
-  const glassStroke=isSquad?(active?alpha(color,.82):'#687170c7'):'#678b93bd';
-  roundedArea(ctx,V,room,floor,active?color:'#8c928c');
+  ctx.save();ctx.globalAlpha=opacidade;
+  if(isSquad&&!active){
+    roundedArea(ctx,V,room,alpha(color,.08),alpha(color,.3));
+    const p=V.P(x+w/2,z+d/2,10);
+    const ww=clamp(room.label.length*5.2+34,64,140);
+    rect(ctx,p.x-ww/2,p.y-9,ww,18,'#1c2b2d9c',4,alpha(color,.4));
+    text(ctx,room.label,p.x,p.y,7.4,'#c7cfc8',760);
+    ctx.restore();
+    return;
+  }
+  const floor=isSquad?alpha(color,.25):'#e8e3d0';
+  const inner=isSquad?alpha(color,.13):'#cfd6d0a1';
+  const glassFill=isSquad?alpha(color,.12):'#b1e3e637';
+  const glassStroke=isSquad?alpha(color,.82):'#678b93bd';
+  roundedArea(ctx,V,room,floor,isSquad?color:'#8c928c');
   roundedArea(ctx,V,{x:x+7,z:z+7,largura:w-14,profundidade:d-14},inner);
   glassPanel(ctx,V,x,z,x+w,z,h,glassFill,glassStroke);
   glassPanel(ctx,V,x,z,x,z+d,h,glassFill,glassStroke);
@@ -237,31 +265,21 @@ function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room){
   }else if(room.id==='apoio'){
     desk(ctx,V,x+w*.33,z+d*.55,'work');desk(ctx,V,x+w*.72,z+d*.55,'work');
     for(const offset of [.34,.73])chair(ctx,V,x+w*offset,z+d*.88,.78);
-  }else if(isSquad&&!active){
-    ctx.save();ctx.globalAlpha=.34;
-    desk(ctx,V,x+w*.50,z+d*.60,'work');chair(ctx,V,x+w*.50,z+d*.89,.72);
-    ctx.restore();
   }
-  if(isSquad&&!active){
-    glassPanel(ctx,V,x,z+d,x+w,z+d,h,'#7180803d','#5b6464d9');
-    const closed=V.P(x+w/2,z+d,h*.48);
-    rect(ctx,closed.x-9,closed.y-11,18,22,'#596260d9',3,'#a7afaa');
-    text(ctx,'•',closed.x,closed.y,13,'#d2d5cf',800);
-  }else{
-    const half=(w-door)/2;
-    glassPanel(ctx,V,x,z+d,x+half,z+d,h,glassFill,glassStroke);
-    glassPanel(ctx,V,x+half+door,z+d,x+w,z+d,h,glassFill,glassStroke);
-  }
+  const half=(w-door)/2;
+  glassPanel(ctx,V,x,z+d,x+half,z+d,h,glassFill,glassStroke);
+  glassPanel(ctx,V,x+half+door,z+d,x+w,z+d,h,glassFill,glassStroke);
   if(isSquad){
-    const p=V.P(x+w/2,z+8,h+18);const status=active?'ATIVO':'OCULTO';
+    const p=V.P(x+w/2,z+8,h+18);const status='ATIVO';
     const ww=clamp(room.label.length*6.7+58,112,185);
-    ctx.save();ctx.shadowColor='#0b1719aa';ctx.shadowBlur=8;rect(ctx,p.x-ww/2,p.y-13,ww,27,active?'#20383a':'#4b5352',4,active?color:'#7d8582');ctx.restore();
-    rect(ctx,p.x-ww/2+6,p.y-7,4,14,active?color:'#8e9693',1);
-    text(ctx,room.label,p.x-8,p.y-3,8.7,active?'#fff5d8':'#d3d7d3',820);
-    text(ctx,status,p.x-8,p.y+7,6.5,active?color:'#aeb5b1',800);
+    ctx.save();ctx.shadowColor='#0b1719aa';ctx.shadowBlur=8;rect(ctx,p.x-ww/2,p.y-13,ww,27,'#20383a',4,color);ctx.restore();
+    rect(ctx,p.x-ww/2+6,p.y-7,4,14,color,1);
+    text(ctx,room.label,p.x-8,p.y-3,8.7,'#fff5d8',820);
+    text(ctx,status,p.x-8,p.y+7,6.5,color,800);
   }else{
     sign(ctx,room.label,V.P(x+w/2,z+10,h+17),clamp(room.label.length*6.7+28,125,197));
   }
+  ctx.restore();
 }
 function drawZones(ctx:CanvasRenderingContext2D,V:View,architecture:Architecture,depth=780){
   roundedArea(ctx,V,{x:315,z:55,largura:1070,profundidade:350},'#d4d0bb','#f0e6cc');
@@ -274,7 +292,11 @@ function drawZones(ctx:CanvasRenderingContext2D,V:View,architecture:Architecture
   for(const p of [[995,480],[1372,485],[995,690],[1375,692],[420,795],[950,805]] as const)plant(ctx,V,p[0],p[1],1.15);
   sign(ctx,'ÁREA DE DESCANSO',V.P(1185,475,38),158);
   sign(ctx,'ESPERA / LOUNGE',V.P(690,760,32),149);
-  for(const room of architecture.salas)glassRoom(ctx,V,room);
+  // Salas de squad NÃO entram no fundo cacheado: a opacidade delas depende
+  // do progresso de transição por quadro (ver drawSquadRooms), então são
+  // desenhadas de novo a cada frame em desenharEscritorioV7. Aqui só as
+  // salas fixas (reunião/apoio), que não têm transição de entrada/saída.
+  for(const room of architecture.salas.filter(r=>r.tipo!=='squad'))glassRoom(ctx,V,room);
   path(ctx,[V.P(372,70),V.P(372,820)],'#b9a77f88',1.8);
   for(let z=100;z<810;z+=63){const p=V.P(375,z);ellipse(ctx,p.x,p.y,1.5,1.5,'#c4ae85')}
   const rec=architecture.recepcao;
@@ -387,6 +409,53 @@ function moduleWall(ctx:CanvasRenderingContext2D,V:View):OfficeV7Hit[]{
   }
   return hits
 }
+/** Caixa de clique (AABB) do volume projetado da sala — parede, porta e
+ * placa inteiras ficam clicáveis, não só o ponto exato do letreiro. */
+function roomAabb(V:View,room:Zone&{alturaVidro:number}):{x:number;y:number;largura:number;altura:number}{
+  const {x,z,largura:w,profundidade:d,alturaVidro:h}=room;
+  // +40 de margem acima do vidro: a placa (sign/status) flutua acima do
+  // telhado (h+18 na hora de desenhar) e também precisa estar dentro da
+  // área clicável — "placa" é parte do que o achado 3 pediu.
+  const topo=h+40;
+  const pontos=[V.P(x,z),V.P(x+w,z),V.P(x,z+d),V.P(x+w,z+d),V.P(x,z,topo),V.P(x+w,z,topo),V.P(x,z+d,topo),V.P(x+w,z+d,topo)];
+  const xs=pontos.map(p=>p.x),ys=pontos.map(p=>p.y);
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  return {x:minX,y:minY,largura:maxX-minX,altura:maxY-minY};
+}
+/** Sala de reunião e apoio/administrativo eram decorativas (achado 2): clicar
+ * nelas agora abre o módulo que representa o que a sala mostraria — quem
+ * está reunido (lista de agentes) e o painel administrativo (financeiro). */
+const MODULO_DA_SALA_ESPECIAL:Record<string,string>={reuniao:'diretores',apoio:'financeiro'};
+function salaEspecialHits(V:View,arquitetura:Architecture):OfficeV7Hit[]{
+  return arquitetura.salas
+    .filter(room=>room.tipo!=='squad'&&MODULO_DA_SALA_ESPECIAL[room.id])
+    .map(room=>{
+      const modulo=MODULO_DA_SALA_ESPECIAL[room.id];
+      return {chave:`navegacao:${modulo}`,modulo,...roomAabb(V,room)};
+    });
+}
+/**
+ * Desenha as salas de squad FORA do fundo cacheado (opacidade muda a cada
+ * quadro) e devolve um hit por sala inteira (parede/porta/placa), achado 3:
+ * clicar em qualquer ponto da sala seleciona o mesmo agente que clicar na
+ * mesa dele (o ativo, ou o primeiro da ficha quando ninguém está ativo).
+ * Sala com progresso 0 nem desenha nem gera hit — ela realmente some
+ * (achado 4: a transição de 720ms de PixelOffice.tsx finalmente chega aqui).
+ */
+function drawSquadRooms(ctx:CanvasRenderingContext2D,V:View,frame:OfficeV7Frame):OfficeV7Hit[]{
+  const hits:OfficeV7Hit[]=[];
+  for(const room of frame.layout.arquitetura.salas){
+    if(room.tipo!=='squad')continue;
+    const progresso=room.squad!=null?(frame.progressos?.get(room.squad)??1):1;
+    glassRoom(ctx,V,room,{opacidade:progresso});
+    if(progresso<=0.01)continue;
+    const mesasDoSquad=frame.layout.mesas.filter(mesa=>mesa.execucao.squad===room.squad);
+    if(!mesasDoSquad.length)continue;
+    const alvo=mesasDoSquad.find(mesa=>mesa.execucao.ativa)??mesasDoSquad[0];
+    hits.push({chave:alvo.execucao.chave,...roomAabb(V,room)});
+  }
+  return hits;
+}
 function paintStatic(ctx:CanvasRenderingContext2D,V:View,frame:OfficeV7Frame){
   ctx.fillStyle='#0a1520';ctx.fillRect(0,0,V.sceneW,V.sceneH);
   ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
@@ -413,6 +482,8 @@ export function desenharEscritorioV7(ctx:CanvasRenderingContext2D,frame:OfficeV7
   ctx.save();try{
     base(ctx,V,frame);
     hits.push(...moduleWall(ctx,V));
+    hits.push(...salaEspecialHits(V,frame.layout.arquitetura));
+    hits.push(...drawSquadRooms(ctx,V,frame));
     const avatars=[...frame.personagens].sort((a,b)=>{
       const pa=(a.pose.fase==='descanso')?V.P(a.pose.x,a.pose.y):V.P(a.mesa.x,a.mesa.y+15);
       const pb=(b.pose.fase==='descanso')?V.P(b.pose.x,b.pose.y):V.P(b.mesa.x,b.mesa.y+15);
@@ -434,5 +505,11 @@ export function desenharEscritorioV7(ctx:CanvasRenderingContext2D,frame:OfficeV7
   ctx.canvas.dataset.officeModuleRooms=String(squadRooms.length);
   ctx.canvas.dataset.officeActiveModules=String(squadRooms.filter(room=>room.ativa).length);
   ctx.canvas.dataset.officeHiddenModules=String(squadRooms.filter(room=>!room.ativa).length);
+  // Prova de que a transição de PixelOffice.tsx chega ao renderer (achado 4):
+  // quantas salas estão a meio de entrar/sair agora mesmo (0<progresso<1).
+  ctx.canvas.dataset.officeTransitioningModules=String(squadRooms.filter(room=>{
+    const progresso=room.squad!=null?frame.progressos?.get(room.squad):undefined;
+    return progresso!==undefined&&progresso>0.01&&progresso<0.99;
+  }).length);
   return hits
 }
