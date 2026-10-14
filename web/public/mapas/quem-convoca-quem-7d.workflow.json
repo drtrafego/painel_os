@@ -466,19 +466,109 @@
       "lane": "operacao",
       "col": 5,
       "type": "external",
-      "label": "outros (2)",
-      "sublabel": "2 chamadas sem ficha",
+      "label": "outros (12)",
+      "sublabel": "25 chamadas sem ficha",
       "width": 136,
       "yOffset": 180
     }
   ],
   "edges": [
     {
-      "id": "elza-hugo-analista",
-      "from": "elza",
-      "to": "hugo-analista",
-      "label": "7 chamadas",
+      "id": "luana-dev",
+      "from": "luana",
+      "to": "dev",
+      "label": "28 chamadas",
+      "variant": "emphasis",
+      "role": "main",
+      "width": 2.8
+    },
+    {
+      "id": "luana-outros",
+      "from": "luana",
+      "to": "outros",
+      "label": "24 chamadas",
+      "variant": "emphasis",
+      "role": "main",
+      "width": 2.4
+    },
+    {
+      "id": "luana-qa",
+      "from": "luana",
+      "to": "qa",
+      "label": "15 chamadas",
       "variant": "default",
+      "role": "main",
+      "width": 1.5
+    },
+    {
+      "id": "luana-dani-designer",
+      "from": "luana",
+      "to": "dani-designer",
+      "label": "9 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "tereza-gestor",
+      "from": "tereza",
+      "to": "gestor",
+      "label": "9 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-cleo-produtor",
+      "from": "luana",
+      "to": "cleo-produtor",
+      "label": "6 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-designer",
+      "from": "luana",
+      "to": "designer",
+      "label": "6 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-guardiao",
+      "from": "luana",
+      "to": "guardiao",
+      "label": "5 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-hugo-analista",
+      "from": "luana",
+      "to": "hugo-analista",
+      "label": "5 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-suri-estrategista",
+      "from": "luana",
+      "to": "suri-estrategista",
+      "label": "4 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-theo-criador",
+      "from": "luana",
+      "to": "theo-criador",
+      "label": "4 chamadas",
+      "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
@@ -486,79 +576,52 @@
       "id": "bia-copy",
       "from": "bia",
       "to": "copy",
-      "label": "4 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "renato-heitor",
-      "from": "renato",
-      "to": "heitor",
-      "label": "4 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "bia-dani-designer",
-      "from": "bia",
-      "to": "dani-designer",
-      "label": "3 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "bia-video-editor",
-      "from": "bia",
-      "to": "video-editor",
-      "label": "3 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "elza-maya-abordagem",
-      "from": "elza",
-      "to": "maya-abordagem",
-      "label": "3 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "elza-olga-fiscal",
-      "from": "elza",
-      "to": "olga-fiscal",
-      "label": "3 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "heitor-dev",
-      "from": "heitor",
-      "to": "dev",
-      "label": "3 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "bia-gestor",
-      "from": "bia",
-      "to": "gestor",
       "label": "2 chamadas",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "luana-dev",
+      "id": "luana-analista",
       "from": "luana",
-      "to": "dev",
+      "to": "analista",
       "label": "2 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-arquiteto",
+      "from": "luana",
+      "to": "arquiteto",
+      "label": "2 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-video-validator",
+      "from": "luana",
+      "to": "video-validator",
+      "label": "2 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "tereza-jade-fiscal",
+      "from": "tereza",
+      "to": "jade-fiscal",
+      "label": "2 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-copy",
+      "from": "luana",
+      "to": "copy",
+      "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
@@ -567,60 +630,42 @@
       "id": "luana-elza",
       "from": "luana",
       "to": "elza",
-      "label": "2 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "heitor-vitor-fiscal",
-      "from": "heitor",
-      "to": "vitor-fiscal",
-      "label": "2 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "bia-analista",
-      "from": "bia",
-      "to": "analista",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "bia-social",
-      "from": "bia",
-      "to": "social",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "bia-video-validator",
-      "from": "bia",
-      "to": "video-validator",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "luana-outros",
+      "id": "luana-tereza",
       "from": "luana",
+      "to": "tereza",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-vega-radar",
+      "from": "luana",
+      "to": "vega-radar",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-video-editor",
+      "from": "luana",
+      "to": "video-editor",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "dani-designer-outros",
+      "from": "dani-designer",
       "to": "outros",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "luana-qa",
-      "from": "luana",
-      "to": "qa",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
@@ -636,18 +681,36 @@
       "width": 1.2
     },
     {
-      "id": "elza-dev",
+      "id": "elza-maya-abordagem",
       "from": "elza",
-      "to": "dev",
+      "to": "maya-abordagem",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "elza-outros",
+      "id": "elza-olga-fiscal",
       "from": "elza",
-      "to": "outros",
+      "to": "olga-fiscal",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "tereza-analista",
+      "from": "tereza",
+      "to": "analista",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "theo-criador-copy",
+      "from": "theo-criador",
+      "to": "copy",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",

@@ -474,19 +474,19 @@
   ],
   "edges": [
     {
-      "id": "elza-hugo-analista",
-      "from": "elza",
-      "to": "hugo-analista",
-      "label": "5 chamadas",
-      "variant": "default",
+      "id": "luana-dev",
+      "from": "luana",
+      "to": "dev",
+      "label": "2 chamadas",
+      "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "luana-elza",
+      "id": "luana-theo-criador",
       "from": "luana",
-      "to": "elza",
-      "label": "1 chamada",
+      "to": "theo-criador",
+      "label": "2 chamadas",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
@@ -495,24 +495,33 @@
       "id": "luana-outros",
       "from": "luana",
       "to": "outros",
-      "label": "1 chamada",
+      "label": "2 chamadas",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "luana-qa",
+      "id": "luana-dani-designer",
       "from": "luana",
-      "to": "qa",
+      "to": "dani-designer",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "elza-outros",
-      "from": "elza",
-      "to": "outros",
+      "id": "luana-suri-estrategista",
+      "from": "luana",
+      "to": "suri-estrategista",
+      "label": "1 chamada",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-vega-radar",
+      "from": "luana",
+      "to": "vega-radar",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",

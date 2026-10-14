@@ -466,8 +466,8 @@
       "lane": "operacao",
       "col": 5,
       "type": "external",
-      "label": "outros (10)",
-      "sublabel": "298 chamadas sem ficha",
+      "label": "outros (17)",
+      "sublabel": "178 chamadas sem ficha",
       "width": 136,
       "yOffset": 180
     }
@@ -483,24 +483,6 @@
       "width": 4
     },
     {
-      "id": "luana-dev",
-      "from": "luana",
-      "to": "dev",
-      "label": "148 chamadas",
-      "variant": "emphasis",
-      "role": "main",
-      "width": 4
-    },
-    {
-      "id": "luana-outros",
-      "from": "luana",
-      "to": "outros",
-      "label": "145 chamadas",
-      "variant": "emphasis",
-      "role": "main",
-      "width": 4
-    },
-    {
       "id": "heitor-dev",
       "from": "heitor",
       "to": "dev",
@@ -510,10 +492,10 @@
       "width": 4
     },
     {
-      "id": "luana-qa",
+      "id": "luana-outros",
       "from": "luana",
-      "to": "qa",
-      "label": "77 chamadas",
+      "to": "outros",
+      "label": "87 chamadas",
       "variant": "emphasis",
       "role": "main",
       "width": 4
@@ -528,28 +510,10 @@
       "width": 4
     },
     {
-      "id": "luana-theo-criador",
-      "from": "luana",
-      "to": "theo-criador",
-      "label": "51 chamadas",
-      "variant": "emphasis",
-      "role": "main",
-      "width": 4
-    },
-    {
       "id": "renato-heitor",
       "from": "renato",
       "to": "heitor",
       "label": "46 chamadas",
-      "variant": "emphasis",
-      "role": "main",
-      "width": 4
-    },
-    {
-      "id": "luana-dani-designer",
-      "from": "luana",
-      "to": "dani-designer",
-      "label": "43 chamadas",
       "variant": "emphasis",
       "role": "main",
       "width": 4
@@ -573,49 +537,13 @@
       "width": 4
     },
     {
-      "id": "luana-gestor",
+      "id": "luana-dev",
       "from": "luana",
-      "to": "gestor",
-      "label": "40 chamadas",
+      "to": "dev",
+      "label": "30 chamadas",
       "variant": "emphasis",
       "role": "main",
-      "width": 4
-    },
-    {
-      "id": "luana-cleo-produtor",
-      "from": "luana",
-      "to": "cleo-produtor",
-      "label": "35 chamadas",
-      "variant": "emphasis",
-      "role": "main",
-      "width": 3.5
-    },
-    {
-      "id": "luana-video-editor",
-      "from": "luana",
-      "to": "video-editor",
-      "label": "28 chamadas",
-      "variant": "emphasis",
-      "role": "main",
-      "width": 2.8
-    },
-    {
-      "id": "luana-guardiao",
-      "from": "luana",
-      "to": "guardiao",
-      "label": "26 chamadas",
-      "variant": "emphasis",
-      "role": "main",
-      "width": 2.6
-    },
-    {
-      "id": "luana-video-validator",
-      "from": "luana",
-      "to": "video-validator",
-      "label": "24 chamadas",
-      "variant": "emphasis",
-      "role": "main",
-      "width": 2.4
+      "width": 3.0
     },
     {
       "id": "renato-deployer",
@@ -645,31 +573,22 @@
       "width": 2.0
     },
     {
-      "id": "luana-arquiteto",
+      "id": "luana-dani-designer",
       "from": "luana",
-      "to": "arquiteto",
+      "to": "dani-designer",
+      "label": "20 chamadas",
+      "variant": "emphasis",
+      "role": "main",
+      "width": 2.0
+    },
+    {
+      "id": "luana-qa",
+      "from": "luana",
+      "to": "qa",
       "label": "19 chamadas",
       "variant": "default",
       "role": "main",
       "width": 1.9
-    },
-    {
-      "id": "luana-designer",
-      "from": "luana",
-      "to": "designer",
-      "label": "17 chamadas",
-      "variant": "default",
-      "role": "main",
-      "width": 1.7
-    },
-    {
-      "id": "qa-outros",
-      "from": "qa",
-      "to": "outros",
-      "label": "17 chamadas",
-      "variant": "default",
-      "role": "main",
-      "width": 1.7
     },
     {
       "id": "bia-outros",
@@ -681,24 +600,6 @@
       "width": 1.6
     },
     {
-      "id": "dev-qa",
-      "from": "dev",
-      "to": "qa",
-      "label": "16 chamadas",
-      "variant": "default",
-      "role": "main",
-      "width": 1.6
-    },
-    {
-      "id": "dev-outros",
-      "from": "dev",
-      "to": "outros",
-      "label": "15 chamadas",
-      "variant": "default",
-      "role": "main",
-      "width": 1.5
-    },
-    {
       "id": "renato-arquiteto",
       "from": "renato",
       "to": "arquiteto",
@@ -708,37 +609,37 @@
       "width": 1.4
     },
     {
-      "id": "luana-suri-estrategista",
-      "from": "luana",
-      "to": "suri-estrategista",
-      "label": "12 chamadas",
-      "variant": "default",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "elza-maya-abordagem",
-      "from": "elza",
-      "to": "maya-abordagem",
-      "label": "12 chamadas",
-      "variant": "default",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
       "id": "tereza-gestor",
       "from": "tereza",
       "to": "gestor",
-      "label": "11 chamadas",
+      "label": "13 chamadas",
       "variant": "default",
       "role": "branch",
-      "width": 1.2
+      "width": 1.3
     },
     {
-      "id": "luana-copy",
+      "id": "luana-guardiao",
       "from": "luana",
-      "to": "copy",
-      "label": "11 chamadas",
+      "to": "guardiao",
+      "label": "13 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.3
+    },
+    {
+      "id": "luana-theo-criador",
+      "from": "luana",
+      "to": "theo-criador",
+      "label": "13 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.3
+    },
+    {
+      "id": "luana-cleo-produtor",
+      "from": "luana",
+      "to": "cleo-produtor",
+      "label": "12 chamadas",
       "variant": "default",
       "role": "branch",
       "width": 1.2
@@ -753,9 +654,9 @@
       "width": 1.2
     },
     {
-      "id": "elza-olga-fiscal",
-      "from": "elza",
-      "to": "olga-fiscal",
+      "id": "luana-maya-abordagem",
+      "from": "luana",
+      "to": "maya-abordagem",
       "label": "10 chamadas",
       "variant": "default",
       "role": "branch",
@@ -771,17 +672,17 @@
       "width": 1.2
     },
     {
-      "id": "luana-vega-radar",
+      "id": "luana-gestor",
       "from": "luana",
-      "to": "vega-radar",
+      "to": "gestor",
       "label": "9 chamadas",
       "variant": "default",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "elza-hugo-analista",
-      "from": "elza",
+      "id": "luana-hugo-analista",
+      "from": "luana",
       "to": "hugo-analista",
       "label": "9 chamadas",
       "variant": "default",
@@ -789,28 +690,19 @@
       "width": 1.2
     },
     {
-      "id": "luana-analista",
+      "id": "luana-olga-fiscal",
       "from": "luana",
-      "to": "analista",
-      "label": "9 chamadas",
-      "variant": "default",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "elza-outros",
-      "from": "elza",
-      "to": "outros",
-      "label": "9 chamadas",
-      "variant": "default",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "luana-elza",
-      "from": "luana",
-      "to": "elza",
+      "to": "olga-fiscal",
       "label": "8 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "bia-copy",
+      "from": "bia",
+      "to": "copy",
+      "label": "7 chamadas",
       "variant": "default",
       "role": "branch",
       "width": 1.2
@@ -834,37 +726,19 @@
       "width": 1.2
     },
     {
-      "id": "vega-radar-outros",
-      "from": "vega-radar",
-      "to": "outros",
+      "id": "luana-designer",
+      "from": "luana",
+      "to": "designer",
       "label": "6 chamadas",
       "variant": "default",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "arquiteto-outros",
-      "from": "arquiteto",
-      "to": "outros",
+      "id": "dev-qa",
+      "from": "dev",
+      "to": "qa",
       "label": "6 chamadas",
-      "variant": "default",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "gestor-outros",
-      "from": "gestor",
-      "to": "outros",
-      "label": "6 chamadas",
-      "variant": "default",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "bia-copy",
-      "from": "bia",
-      "to": "copy",
-      "label": "5 chamadas",
       "variant": "default",
       "role": "branch",
       "width": 1.2
@@ -879,17 +753,8 @@
       "width": 1.2
     },
     {
-      "id": "luana-tereza",
+      "id": "luana-bento-estrategista",
       "from": "luana",
-      "to": "tereza",
-      "label": "5 chamadas",
-      "variant": "default",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "elza-bento-estrategista",
-      "from": "elza",
       "to": "bento-estrategista",
       "label": "5 chamadas",
       "variant": "default",
@@ -897,9 +762,18 @@
       "width": 1.2
     },
     {
-      "id": "gestor-dani-designer",
-      "from": "gestor",
-      "to": "dani-designer",
+      "id": "luana-copy",
+      "from": "luana",
+      "to": "copy",
+      "label": "5 chamadas",
+      "variant": "default",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "qa-outros",
+      "from": "qa",
+      "to": "outros",
       "label": "5 chamadas",
       "variant": "default",
       "role": "branch",
@@ -915,18 +789,18 @@
       "width": 1.2
     },
     {
-      "id": "dev-guardiao",
-      "from": "dev",
-      "to": "guardiao",
+      "id": "luana-suri-estrategista",
+      "from": "luana",
+      "to": "suri-estrategista",
       "label": "4 chamadas",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "suri-estrategista-theo-criador",
-      "from": "suri-estrategista",
-      "to": "theo-criador",
+      "id": "elza-olga-fiscal",
+      "from": "elza",
+      "to": "olga-fiscal",
       "label": "4 chamadas",
       "variant": "dashed",
       "role": "branch",
@@ -942,63 +816,45 @@
       "width": 1.2
     },
     {
+      "id": "elza-maya-abordagem",
+      "from": "elza",
+      "to": "maya-abordagem",
+      "label": "3 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "luana-jade-fiscal",
+      "from": "luana",
+      "to": "jade-fiscal",
+      "label": "3 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
+      "id": "theo-criador-copy",
+      "from": "theo-criador",
+      "to": "copy",
+      "label": "3 chamadas",
+      "variant": "dashed",
+      "role": "branch",
+      "width": 1.2
+    },
+    {
       "id": "theo-criador-outros",
       "from": "theo-criador",
       "to": "outros",
-      "label": "4 chamadas",
+      "label": "3 chamadas",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "tereza-outros",
-      "from": "tereza",
-      "to": "outros",
-      "label": "4 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "luana-publicador",
+      "id": "luana-analista",
       "from": "luana",
-      "to": "publicador",
-      "label": "3 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "arquiteto-qa",
-      "from": "arquiteto",
-      "to": "qa",
-      "label": "3 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "designer-qa",
-      "from": "designer",
-      "to": "qa",
-      "label": "3 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "luana-olga-fiscal",
-      "from": "luana",
-      "to": "olga-fiscal",
-      "label": "3 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "analista-outros",
-      "from": "analista",
-      "to": "outros",
+      "to": "analista",
       "label": "3 chamadas",
       "variant": "dashed",
       "role": "branch",
@@ -1050,35 +906,26 @@
       "width": 1.2
     },
     {
-      "id": "luana-analista-conteudo",
+      "id": "luana-arquiteto",
       "from": "luana",
-      "to": "analista-conteudo",
+      "to": "arquiteto",
       "label": "2 chamadas",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "luana-closer",
+      "id": "luana-video-validator",
       "from": "luana",
-      "to": "closer",
+      "to": "video-validator",
       "label": "2 chamadas",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "analista-qa",
-      "from": "analista",
-      "to": "qa",
-      "label": "2 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "elza-otto-radar",
-      "from": "elza",
+      "id": "luana-otto-radar",
+      "from": "luana",
       "to": "otto-radar",
       "label": "2 chamadas",
       "variant": "dashed",
@@ -1086,8 +933,8 @@
       "width": 1.2
     },
     {
-      "id": "elza-zara-triagem",
-      "from": "elza",
+      "id": "luana-zara-triagem",
+      "from": "luana",
       "to": "zara-triagem",
       "label": "2 chamadas",
       "variant": "dashed",
@@ -1095,54 +942,27 @@
       "width": 1.2
     },
     {
-      "id": "gestor-copy",
-      "from": "gestor",
-      "to": "copy",
+      "id": "tereza-analista",
+      "from": "tereza",
+      "to": "analista",
       "label": "2 chamadas",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "gestor-gestor",
-      "from": "gestor",
-      "to": "gestor",
+      "id": "luana-elza",
+      "from": "luana",
+      "to": "elza",
       "label": "2 chamadas",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "qa-guardiao",
-      "from": "qa",
-      "to": "guardiao",
-      "label": "2 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "suri-estrategista-outros",
-      "from": "suri-estrategista",
+      "id": "dev-outros",
+      "from": "dev",
       "to": "outros",
-      "label": "2 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "suri-estrategista-cleo-produtor",
-      "from": "suri-estrategista",
-      "to": "cleo-produtor",
-      "label": "2 chamadas",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "theo-criador-copy",
-      "from": "theo-criador",
-      "to": "copy",
       "label": "2 chamadas",
       "variant": "dashed",
       "role": "branch",
@@ -1158,72 +978,36 @@
       "width": 1.2
     },
     {
-      "id": "luana-deployer",
+      "id": "luana-tereza",
       "from": "luana",
-      "to": "deployer",
+      "to": "tereza",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "luana-maya-abordagem",
+      "id": "luana-vega-radar",
       "from": "luana",
-      "to": "maya-abordagem",
+      "to": "vega-radar",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "luana-social",
+      "id": "luana-video-editor",
       "from": "luana",
-      "to": "social",
+      "to": "video-editor",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "arquiteto-dev",
+      "id": "arquiteto-outros",
       "from": "arquiteto",
-      "to": "dev",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "arquiteto-jade-fiscal",
-      "from": "arquiteto",
-      "to": "jade-fiscal",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "cleo-produtor-outros",
-      "from": "cleo-produtor",
       "to": "outros",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "cleo-produtor-qa",
-      "from": "cleo-produtor",
-      "to": "qa",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "copy-qa",
-      "from": "copy",
-      "to": "qa",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
@@ -1239,99 +1023,18 @@
       "width": 1.2
     },
     {
-      "id": "designer-outros",
-      "from": "designer",
-      "to": "outros",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "dev-analista",
-      "from": "dev",
-      "to": "analista",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "dev-dani-designer",
-      "from": "dev",
-      "to": "dani-designer",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "dev-dev",
-      "from": "dev",
-      "to": "dev",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "elza-dev",
+      "id": "elza-bento-estrategista",
       "from": "elza",
-      "to": "dev",
+      "to": "bento-estrategista",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
       "width": 1.2
     },
     {
-      "id": "gestor-cleo-produtor",
-      "from": "gestor",
-      "to": "cleo-produtor",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "gestor-dev",
-      "from": "gestor",
-      "to": "dev",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "gestor-guardiao",
-      "from": "gestor",
-      "to": "guardiao",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "gestor-qa",
-      "from": "gestor",
-      "to": "qa",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "gestor-theo-criador",
-      "from": "gestor",
-      "to": "theo-criador",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "qa-analista",
-      "from": "qa",
-      "to": "analista",
+      "id": "elza-outros",
+      "from": "elza",
+      "to": "outros",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
@@ -1341,51 +1044,6 @@
       "id": "qa-dev",
       "from": "qa",
       "to": "dev",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "qa-qa",
-      "from": "qa",
-      "to": "qa",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "suri-estrategista-qa",
-      "from": "suri-estrategista",
-      "to": "qa",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "tereza-analista",
-      "from": "tereza",
-      "to": "analista",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "tereza-elza",
-      "from": "tereza",
-      "to": "elza",
-      "label": "1 chamada",
-      "variant": "dashed",
-      "role": "branch",
-      "width": 1.2
-    },
-    {
-      "id": "theo-criador-cleo-produtor",
-      "from": "theo-criador",
-      "to": "cleo-produtor",
       "label": "1 chamada",
       "variant": "dashed",
       "role": "branch",
