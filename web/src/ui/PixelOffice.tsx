@@ -410,7 +410,13 @@ function criarVisual(execucao: AgenteVivo, ficha: PixelAgent | undefined, squad:
   const semente = hashTexto(`${ficha?.id || execucao.id}:${ordem}`)
   const nome = nomeForcado || nomeLegivelDaExecucao(execucao, ficha)
   const identidadeHumana = normalizarPapel(ficha?.id || execucao.identidade || execucao.nome || execucao.id)
-  const tipoVisual = ['luana', 'renato', 'bia', 'gastao'].includes(identidadeHumana) ? 'humano' : 'robo'
+  // Regressão corrigida (ver CLAUDE.md "correção que não alcança todas as
+  // cópias"): só a mesa FIXA do diretor (a primeira execução daquela ficha,
+  // temporaria=false) é o boneco humano. Uma segunda sessão simultânea do
+  // mesmo dono (extra, temporaria=true) usa a MESMA ficha (mesmo id/cor), e
+  // sem este guard ela clonava a identidade visual humana do diretor em vez
+  // de aparecer como um subagente genérico (robô) na sala.
+  const tipoVisual = !temporaria && ['luana', 'renato', 'bia', 'gastao'].includes(identidadeHumana) ? 'humano' : 'robo'
   return {
     chave: temporaria || execucao.estado !== 'parado' ? chaveAgente(execucao.dono, execucao.id) : ficha?.id || execucao.id,
     animacaoChave: ficha && !temporaria ? `catalogo:${ficha.id}` : `temporario:${chaveAgente(execucao.dono, execucao.id)}`,
