@@ -1,0 +1,300 @@
+{
+  "personagem": "renato",
+  "tamanhoQuadro": {
+    "largura": 384,
+    "altura": 512
+  },
+  "ancora": {
+    "x": 192,
+    "y": 496,
+    "descricao": "ponto do chão sob o personagem (pé/base); x = centro da cabeça"
+  },
+  "alturaEmPePx": 460,
+  "formato": "PNG RGBA, fundo transparente",
+  "estados": {
+    "andar-baixo-direita": {
+      "direcao": "baixo-direita (isométrico 3/4 frente-direita)",
+      "loop": true,
+      "fps": 10,
+      "nota": "escala = altura 460 x ajuste 0.972 (meio-termo altura/cabeça contra o quadro em pé)",
+      "origem": "image_gen (Codex), folha única de 6 quadros ancorada em referencias/03-personagens.png",
+      "frames": 6,
+      "arquivos": [
+        "/sprites/renato/andar-baixo-direita/frame-1.png",
+        "/sprites/renato/andar-baixo-direita/frame-2.png",
+        "/sprites/renato/andar-baixo-direita/frame-3.png",
+        "/sprites/renato/andar-baixo-direita/frame-4.png",
+        "/sprites/renato/andar-baixo-direita/frame-5.png",
+        "/sprites/renato/andar-baixo-direita/frame-6.png"
+      ],
+      "bboxOpaco": [
+        [
+          102,
+          49,
+          274,
+          496
+        ],
+        [
+          98,
+          50,
+          256,
+          496
+        ],
+        [
+          122,
+          50,
+          248,
+          496
+        ],
+        [
+          91,
+          50,
+          273,
+          496
+        ],
+        [
+          108,
+          50,
+          259,
+          496
+        ],
+        [
+          111,
+          50,
+          258,
+          496
+        ]
+      ]
+    },
+    "andar-baixo-esquerda": {
+      "direcao": "baixo-esquerda (isométrico 3/4 frente-esquerda)",
+      "loop": true,
+      "fps": 10,
+      "nota": "escala = altura 460 x ajuste 0.972 (meio-termo altura/cabeça contra o quadro em pé)",
+      "origem": "ESPELHO horizontal de andar-baixo-direita (assimetrias de roupa/cabelo/ícone ficam invertidas)",
+      "frames": 6,
+      "arquivos": [
+        "/sprites/renato/andar-baixo-esquerda/frame-1.png",
+        "/sprites/renato/andar-baixo-esquerda/frame-2.png",
+        "/sprites/renato/andar-baixo-esquerda/frame-3.png",
+        "/sprites/renato/andar-baixo-esquerda/frame-4.png",
+        "/sprites/renato/andar-baixo-esquerda/frame-5.png",
+        "/sprites/renato/andar-baixo-esquerda/frame-6.png"
+      ],
+      "bboxOpaco": [
+        [
+          110,
+          49,
+          282,
+          496
+        ],
+        [
+          128,
+          50,
+          286,
+          496
+        ],
+        [
+          136,
+          50,
+          262,
+          496
+        ],
+        [
+          111,
+          50,
+          293,
+          496
+        ],
+        [
+          125,
+          50,
+          276,
+          496
+        ],
+        [
+          126,
+          50,
+          273,
+          496
+        ]
+      ]
+    },
+    "digitar": {
+      "direcao": "frente 3/4",
+      "loop": true,
+      "fps": 6,
+      "origem": "image_gen (Codex), folha única de 6 quadros (digitar x3, sentado, levantando, em pé)",
+      "nota": "sentado SEM cadeira/mesa/notebook: o renderer desenha cadeira atrás e mesa na frente; âncora = pés no chão sob o assento",
+      "frames": 3,
+      "arquivos": [
+        "/sprites/renato/digitar/frame-1.png",
+        "/sprites/renato/digitar/frame-2.png",
+        "/sprites/renato/digitar/frame-3.png"
+      ],
+      "bboxOpaco": [
+        [
+          109,
+          116,
+          295,
+          496
+        ],
+        [
+          109,
+          115,
+          295,
+          496
+        ],
+        [
+          109,
+          115,
+          296,
+          496
+        ]
+      ]
+    },
+    "levantar": {
+      "direcao": "frente 3/4",
+      "loop": false,
+      "fps": 6,
+      "origem": "image_gen (Codex), folha única de 6 quadros (digitar x3, sentado, levantando, em pé)",
+      "nota": "sentado -> meio -> em pé; tocar 1 vez e seguir para andar",
+      "frames": 3,
+      "arquivos": [
+        "/sprites/renato/levantar/frame-1.png",
+        "/sprites/renato/levantar/frame-2.png",
+        "/sprites/renato/levantar/frame-3.png"
+      ],
+      "bboxOpaco": [
+        [
+          110,
+          113,
+          291,
+          496
+        ],
+        [
+          74,
+          77,
+          242,
+          496
+        ],
+        [
+          103,
+          36,
+          264,
+          496
+        ]
+      ]
+    },
+    "sentar": {
+      "direcao": "frente 3/4",
+      "loop": false,
+      "fps": 6,
+      "origem": "mesmos quadros de levantar em ordem inversa (não é desenho próprio)",
+      "frames": 3,
+      "arquivos": [
+        "/sprites/renato/sentar/frame-1.png",
+        "/sprites/renato/sentar/frame-2.png",
+        "/sprites/renato/sentar/frame-3.png"
+      ],
+      "bboxOpaco": [
+        [
+          103,
+          36,
+          264,
+          496
+        ],
+        [
+          74,
+          77,
+          242,
+          496
+        ],
+        [
+          110,
+          113,
+          291,
+          496
+        ]
+      ]
+    },
+    "sentado-parado": {
+      "direcao": "frente 3/4",
+      "loop": true,
+      "fps": 3,
+      "origem": "quadro 'sentado' do image_gen + respiração procedural (estica 0,7-1,4% do tronco acima da cintura)",
+      "frames": 4,
+      "arquivos": [
+        "/sprites/renato/sentado-parado/frame-1.png",
+        "/sprites/renato/sentado-parado/frame-2.png",
+        "/sprites/renato/sentado-parado/frame-3.png",
+        "/sprites/renato/sentado-parado/frame-4.png"
+      ],
+      "bboxOpaco": [
+        [
+          110,
+          113,
+          291,
+          496
+        ],
+        [
+          110,
+          112,
+          291,
+          496
+        ],
+        [
+          110,
+          110,
+          291,
+          496
+        ],
+        [
+          110,
+          112,
+          291,
+          496
+        ]
+      ]
+    },
+    "parado": {
+      "direcao": "frente 3/4",
+      "loop": true,
+      "fps": 3,
+      "origem": "quadro 'em pé' do image_gen + respiração procedural (estica 0,7-1,4% do tronco acima da cintura)",
+      "frames": 4,
+      "arquivos": [
+        "/sprites/renato/parado/frame-1.png",
+        "/sprites/renato/parado/frame-2.png",
+        "/sprites/renato/parado/frame-3.png",
+        "/sprites/renato/parado/frame-4.png"
+      ],
+      "bboxOpaco": [
+        [
+          103,
+          36,
+          264,
+          496
+        ],
+        [
+          103,
+          34,
+          264,
+          496
+        ],
+        [
+          103,
+          32,
+          264,
+          496
+        ],
+        [
+          103,
+          34,
+          264,
+          496
+        ]
+      ]
+    }
+  }
+}

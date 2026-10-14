@@ -522,9 +522,26 @@ export function filtrarSquadsSobDemanda(execucoes: ExecucaoVisual[], squadsAbert
   return execucoes.filter((execucao) => !sobDemanda.has(execucao.squad) || squadsAbertos.has(execucao.squad))
 }
 
-/** A cena principal representa trabalho em curso; lista e indicadores mantêm o inventário completo. */
-export function execucoesDoCenarioPrincipal(execucoes: ExecucaoVisual[], squadsAbertos: ReadonlySet<PixelAgentSquad>) {
-  return filtrarSquadsSobDemanda(execucoes.filter((execucao) => execucao.ativa), squadsAbertos)
+/**
+ * A cena principal representa trabalho em curso (`ativa`, isto é,
+ * `estado === 'trabalhando'` — contrato preservado, ver
+ * escritorio-layout.teste.ts: "cenário principal mostra somente agentes
+ * trabalhando") mais quem ainda está no meio da saída: `retidos` (por
+ * `animacaoChave`) guarda quem acabou de deixar `trabalhando` para `parado` e
+ * ainda não terminou de levantar e caminhar para fora (ver useSaidaRetida —
+ * é o bug de ocultação do PROBLEMAS-COMPROVADOS.md). Sem argumento, o
+ * comportamento é idêntico ao de antes (retidos vazio não muda nada), por
+ * isso as chamadas existentes (só com 2 argumentos) continuam corretas.
+ * Lista e indicadores da barra lateral mantêm o inventário completo (não
+ * passam por este filtro).
+ */
+export function execucoesDoCenarioPrincipal(
+  execucoes: ExecucaoVisual[],
+  squadsAbertos: ReadonlySet<PixelAgentSquad>,
+  retidos: ReadonlySet<string> = new Set(),
+) {
+  const presentes = execucoes.filter((execucao) => execucao.ativa || retidos.has(execucao.animacaoChave))
+  return filtrarSquadsSobDemanda(presentes, squadsAbertos)
 }
 
 type OpcoesLayoutSala = {
@@ -615,7 +632,11 @@ function rotuloFase(fase: FaseBoneco | undefined, ativa: boolean) {
 function poseDoEstado(estado: EstadoAnimacaoBoneco, corredorX: number) {
   const sentado = estado.fase === 'trabalhando' || estado.fase === 'silencioso' || estado.fase === 'descanso'
     ? 1 : estado.fase === 'sentando' ? estado.progressoFase : estado.fase === 'levantando' ? 1 - estado.progressoFase : 0
-  return { x: estado.x + corredorX, y: estado.y, sentado, andando: estado.fase === 'caminhando_para_mesa' || estado.fase === 'caminhando_para_descanso', fase: estado.fase }
+  const andando = estado.fase === 'caminhando_para_mesa' || estado.fase === 'caminhando_para_descanso'
+  // Sentido do deslocamento: só importa durante a caminhada (o renderer usa
+  // para escolher o ciclo espelhado certo); fora dela fica indefinido.
+  const direcao: 'esquerda' | 'direita' = estado.destinoX - estado.origemX < 0 ? 'esquerda' : 'direita'
+  return { x: estado.x + corredorX, y: estado.y, sentado, andando, fase: estado.fase, direcao, progressoFase: estado.progressoFase }
 }
 
 function aplicarCaminhadaDebug(pose: ReturnType<typeof poseDoEstado>, tempo: number, ativa: boolean) {
@@ -626,12 +647,79 @@ function aplicarCaminhadaDebug(pose: ReturnType<typeof poseDoEstado>, tempo: num
   const voltando = ciclo >= 2 && ciclo < 2 + duracao
   if (!saindo && !voltando) return pose
   const progresso = saindo ? ciclo / duracao : 1 - (ciclo - 2) / duracao
-  return { ...pose, x: pose.x + progresso * 48, sentado: 0, andando: true, fase: 'debug_walk' }
+  const direcao: 'esquerda' | 'direita' = saindo ? 'direita' : 'esquerda'
+  return { ...pose, x: pose.x + progresso * 48, sentado: 0, andando: true, fase: 'debug_walk', direcao }
 }
 
 function squadsAtivosSobDemanda(execucoes: ExecucaoVisual[]) {
   const configurados = new Set(SQUADS_SOB_DEMANDA.map((item) => item.id))
   return new Set(execucoes.filter((item) => item.ativa && configurados.has(item.squad)).map((item) => item.squad))
+}
+
+/**
+ * Retenção de saída (achado "bug de ocultação", PROBLEMAS-COMPROVADOS.md):
+ * sem isto, `execucoesDoCenarioPrincipal` tira a execução da cena no MESMO
+ * quadro em que a sonda deixa de reportar `trabalhando`, antes de qualquer
+ * quadro de "levantar" ou "caminhar" aparecer — a máquina de estados em
+ * escritorio-animacao.ts já sabe fazer a saída completa (levantando ->
+ * caminhando_para_descanso -> descanso), mas só avança enquanto a execução
+ * está mesmo na cena (só quem tem `Desk` em `layout.mesas` recebe
+ * `estadoDaMesa` por quadro).
+ *
+ * Mecanismo: ao perceber (comparando com o quadro anterior) que uma execução
+ * estava `ativa` (trabalhando) e passou a reportar `parado` — é exatamente a
+ * transição que a máquina de estados sabe animar até o fim (levantando ->
+ * caminhando_para_descanso -> descanso) — ela entra no conjunto retido; o
+ * laço de desenho (no `useEffect` do canvas) a libera de volta assim que
+ * `fasesRef` reportar 'descanso' — só então ela some da cena de verdade.
+ * `trabalhando -> silencioso` NÃO entra aqui de propósito: silencioso nunca
+ * fez a execução sumir da cena por ociosidade de posição (a máquina de
+ * estados mantém sentado=1, sem levantar) — contrato preservado de
+ * `execucoesDoCenarioPrincipal` continua sendo só `ativa` fora da retenção.
+ */
+function useSaidaRetida(execucoes: ExecucaoVisual[]) {
+  const retidosRef = useRef<Set<string>>(new Set())
+  const ativaAnteriorRef = useRef<Map<string, boolean>>(new Map())
+  const [versao, setVersao] = useState(0)
+
+  useEffect(() => {
+    let mudou = false
+    const vistos = new Set<string>()
+    execucoes.forEach((execucao) => {
+      const chave = execucao.animacaoChave
+      vistos.add(chave)
+      const eraAtiva = ativaAnteriorRef.current.get(chave)
+      const estaParado = execucao.execucao.estado === 'parado'
+      if (eraAtiva && !execucao.ativa && estaParado && !retidosRef.current.has(chave)) {
+        retidosRef.current.add(chave)
+        mudou = true
+      }
+      ativaAnteriorRef.current.set(chave, execucao.ativa)
+    })
+    // Fichas que saíram do catálogo (ex. troca de catálogo em teste) não
+    // ficam presas: purga quem não apareceu mais nesta rodada.
+    Array.from(ativaAnteriorRef.current.keys()).forEach((chave) => {
+      if (!vistos.has(chave)) ativaAnteriorRef.current.delete(chave)
+    })
+    if (mudou) setVersao((v) => v + 1)
+  }, [execucoes])
+
+  /** Chamado pelo laço de desenho a cada quadro: libera quem já terminou a
+   * saída (fase chegou em 'descanso'). Barato de checar todo quadro porque
+   * só mexe em estado quando algo de fato muda. */
+  const liberarConcluidos = (faseAtual: (chave: string) => FaseBoneco | undefined) => {
+    if (retidosRef.current.size === 0) return
+    let mudou = false
+    retidosRef.current.forEach((chave) => {
+      if (faseAtual(chave) === 'descanso') {
+        retidosRef.current.delete(chave)
+        mudou = true
+      }
+    })
+    if (mudou) setVersao((v) => v + 1)
+  }
+
+  return { retidos: retidosRef, versao, liberarConcluidos }
 }
 
 function useSquadsSobDemanda(execucoes: ExecucaoVisual[]) {
@@ -735,6 +823,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
 
   const todasExecucoes = useMemo(() => montarExecucoesVisuais(agentes, catalogo, estado), [agentes, catalogo, estado])
   const { abertos: squadsSobDemandaAbertos, saindo: squadsSobDemandaSaindo } = useSquadsSobDemanda(todasExecucoes)
+  const { retidos: retidosNaSaidaRef, versao: versaoRetencao, liberarConcluidos } = useSaidaRetida(todasExecucoes)
   const execucoesVisiveis = useMemo(() => {
     let filtradas = todasExecucoes
     if (filtroStatus === 'ativos' || soAtivos) {
@@ -760,7 +849,11 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       ? filtradas
       : filtrarSquadsSobDemanda(filtradas, squadsSobDemandaAbertos)
   }, [filtroStatus, soAtivos, squadsSobDemandaAbertos, termoBusca, todasExecucoes])
-  const execucoesDoCenario = useMemo(() => execucoesDoCenarioPrincipal(todasExecucoes, squadsSobDemandaAbertos), [squadsSobDemandaAbertos, todasExecucoes])
+  const execucoesDoCenario = useMemo(
+    () => execucoesDoCenarioPrincipal(todasExecucoes, squadsSobDemandaAbertos, retidosNaSaidaRef.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `versaoRetencao` é o gatilho de recomputo; o Set em si é um ref mutável.
+    [squadsSobDemandaAbertos, todasExecucoes, versaoRetencao],
+  )
   const layout = useMemo(() => calcularLayoutSala(execucoesDoCenario, {
     larguraDisponivel: dimensoesPalco.largura,
     alturaDisponivel: dimensoesPalco.altura,
@@ -888,6 +981,10 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, 0, 0); ctx.clearRect(0, 0, layout.largura, layout.altura)
       const estados = layout.mesas.map((mesa) => ({ mesa, estado: estadoDaMesa(mesa, agoraAnimacaoMs) }))
       estados.sort((a, b) => a.estado.y - b.estado.y)
+      // Libera (tira da retenção) quem terminou de verdade a saída: a troca
+      // só acontece quando `fasesRef` relatou 'descanso' NESTE quadro, nunca
+      // antes — é o que garante levantar+caminhar completos antes de sumir.
+      liberarConcluidos((chave) => fasesRef.current.get(chave))
       try {
         const frame = {
           layout,
@@ -911,7 +1008,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     }
     quadro = requestAnimationFrame(desenhar)
     return () => { ativo = false; cancelAnimationFrame(quadro) }
-  }, [agenteSelecionadoId, ambiente, dimensoesPalco.dpr, filtroStatus, layout, pausado, reduzirMovimento, soAtivos, squadsSobDemandaSaindo, zoom])
+  }, [agenteSelecionadoId, ambiente, dimensoesPalco.dpr, filtroStatus, layout, liberarConcluidos, pausado, reduzirMovimento, soAtivos, squadsSobDemandaSaindo, zoom])
 
   const selecionar = (chave: string) => aoSelecionarAgente?.(chave)
   const visualDoAgente = (agente: AgenteVivo) => todasExecucoes.find((visual) => visual.execucao === agente)
@@ -985,14 +1082,17 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
 
     const instanteLeitura = recebidoEm ? `${Math.max(0, Math.round((Date.now() - recebidoEm.getTime()) / 1000))}s atrás` : null
 
+    // 'confirmado' prova que O COLETOR respondeu com dado fresco, nunca que
+    // "todas as APIs" ou a infraestrutura inteira estão de pé (essa frase já
+    // foi cobrada: sonda conectada != todas as APIs conectadas).
     const apiItem: { estado: EstadoChecagem; texto: string } =
       statusLeitura === 'confirmado'
-        ? { estado: 'ok', texto: `APIs conectadas${instanteLeitura ? ` · ${instanteLeitura}` : ''}` }
+        ? { estado: 'ok', texto: `Sonda conectada${instanteLeitura ? ` · ${instanteLeitura}` : ''}` }
         : statusLeitura === 'consultando'
-        ? { estado: 'indeterminado', texto: 'APIs: consultando agora' }
+        ? { estado: 'indeterminado', texto: 'Sonda: consultando agora' }
         : statusLeitura === 'leitura_vencida'
-        ? { estado: 'alerta', texto: `APIs com leitura vencida · ${falhouHaSegundos ?? 0}s` }
-        : { estado: 'falha', texto: `APIs indisponíveis${erroSonda ? ` · ${erroSonda}` : ''}` }
+        ? { estado: 'alerta', texto: `Sonda com leitura vencida · ${falhouHaSegundos ?? 0}s` }
+        : { estado: 'falha', texto: `Sonda indisponível${erroSonda ? ` · ${erroSonda}` : ''}` }
 
     // 'confirmado' é a única leitura fresca. 'leitura_vencida' ainda tem dado, mas
     // desatualizado: nenhuma afirmação derivada dele pode sair como 'ok'.

@@ -1,0 +1,300 @@
+{
+  "personagem": "robo",
+  "tamanhoQuadro": {
+    "largura": 384,
+    "altura": 512
+  },
+  "ancora": {
+    "x": 192,
+    "y": 496,
+    "descricao": "ponto do chão sob o personagem (pé/base); x = centro da cabeça"
+  },
+  "alturaEmPePx": 460,
+  "formato": "PNG RGBA, fundo transparente",
+  "estados": {
+    "andar-baixo-direita": {
+      "direcao": "baixo-direita (isométrico 3/4 frente-direita)",
+      "loop": true,
+      "fps": 10,
+      "nota": "escala = altura 460 x ajuste 0.988 (meio-termo altura/cabeça contra o quadro em pé)",
+      "origem": "image_gen (Codex), folha única de 6 quadros ancorada em referencias/03-personagens.png",
+      "frames": 6,
+      "arquivos": [
+        "/sprites/robo/andar-baixo-direita/frame-1.png",
+        "/sprites/robo/andar-baixo-direita/frame-2.png",
+        "/sprites/robo/andar-baixo-direita/frame-3.png",
+        "/sprites/robo/andar-baixo-direita/frame-4.png",
+        "/sprites/robo/andar-baixo-direita/frame-5.png",
+        "/sprites/robo/andar-baixo-direita/frame-6.png"
+      ],
+      "bboxOpaco": [
+        [
+          59,
+          41,
+          296,
+          496
+        ],
+        [
+          85,
+          41,
+          285,
+          496
+        ],
+        [
+          62,
+          48,
+          282,
+          496
+        ],
+        [
+          68,
+          44,
+          298,
+          496
+        ],
+        [
+          87,
+          45,
+          278,
+          496
+        ],
+        [
+          85,
+          48,
+          302,
+          496
+        ]
+      ]
+    },
+    "andar-baixo-esquerda": {
+      "direcao": "baixo-esquerda (isométrico 3/4 frente-esquerda)",
+      "loop": true,
+      "fps": 10,
+      "nota": "escala = altura 460 x ajuste 0.988 (meio-termo altura/cabeça contra o quadro em pé)",
+      "origem": "ESPELHO horizontal de andar-baixo-direita (assimetrias de roupa/cabelo/ícone ficam invertidas)",
+      "frames": 6,
+      "arquivos": [
+        "/sprites/robo/andar-baixo-esquerda/frame-1.png",
+        "/sprites/robo/andar-baixo-esquerda/frame-2.png",
+        "/sprites/robo/andar-baixo-esquerda/frame-3.png",
+        "/sprites/robo/andar-baixo-esquerda/frame-4.png",
+        "/sprites/robo/andar-baixo-esquerda/frame-5.png",
+        "/sprites/robo/andar-baixo-esquerda/frame-6.png"
+      ],
+      "bboxOpaco": [
+        [
+          88,
+          41,
+          325,
+          496
+        ],
+        [
+          99,
+          41,
+          299,
+          496
+        ],
+        [
+          102,
+          48,
+          322,
+          496
+        ],
+        [
+          86,
+          44,
+          316,
+          496
+        ],
+        [
+          106,
+          45,
+          297,
+          496
+        ],
+        [
+          82,
+          48,
+          299,
+          496
+        ]
+      ]
+    },
+    "digitar": {
+      "direcao": "frente 3/4",
+      "loop": true,
+      "fps": 6,
+      "origem": "image_gen (Codex), folha única de 6 quadros (digitar x3, sentado, levantando, em pé)",
+      "nota": "sentado SEM cadeira/mesa/notebook: o renderer desenha cadeira atrás e mesa na frente; âncora = pés no chão sob o assento",
+      "frames": 3,
+      "arquivos": [
+        "/sprites/robo/digitar/frame-1.png",
+        "/sprites/robo/digitar/frame-2.png",
+        "/sprites/robo/digitar/frame-3.png"
+      ],
+      "bboxOpaco": [
+        [
+          98,
+          89,
+          292,
+          496
+        ],
+        [
+          109,
+          88,
+          304,
+          496
+        ],
+        [
+          104,
+          89,
+          295,
+          496
+        ]
+      ]
+    },
+    "levantar": {
+      "direcao": "frente 3/4",
+      "loop": false,
+      "fps": 6,
+      "origem": "image_gen (Codex), folha única de 6 quadros (digitar x3, sentado, levantando, em pé)",
+      "nota": "sentado -> meio -> em pé; tocar 1 vez e seguir para andar",
+      "frames": 3,
+      "arquivos": [
+        "/sprites/robo/levantar/frame-1.png",
+        "/sprites/robo/levantar/frame-2.png",
+        "/sprites/robo/levantar/frame-3.png"
+      ],
+      "bboxOpaco": [
+        [
+          108,
+          89,
+          297,
+          496
+        ],
+        [
+          96,
+          75,
+          271,
+          496
+        ],
+        [
+          96,
+          36,
+          282,
+          496
+        ]
+      ]
+    },
+    "sentar": {
+      "direcao": "frente 3/4",
+      "loop": false,
+      "fps": 6,
+      "origem": "mesmos quadros de levantar em ordem inversa (não é desenho próprio)",
+      "frames": 3,
+      "arquivos": [
+        "/sprites/robo/sentar/frame-1.png",
+        "/sprites/robo/sentar/frame-2.png",
+        "/sprites/robo/sentar/frame-3.png"
+      ],
+      "bboxOpaco": [
+        [
+          96,
+          36,
+          282,
+          496
+        ],
+        [
+          96,
+          75,
+          271,
+          496
+        ],
+        [
+          108,
+          89,
+          297,
+          496
+        ]
+      ]
+    },
+    "sentado-parado": {
+      "direcao": "frente 3/4",
+      "loop": true,
+      "fps": 3,
+      "origem": "quadro 'sentado' do image_gen + respiração procedural (estica 0,7-1,4% do tronco acima da cintura)",
+      "frames": 4,
+      "arquivos": [
+        "/sprites/robo/sentado-parado/frame-1.png",
+        "/sprites/robo/sentado-parado/frame-2.png",
+        "/sprites/robo/sentado-parado/frame-3.png",
+        "/sprites/robo/sentado-parado/frame-4.png"
+      ],
+      "bboxOpaco": [
+        [
+          108,
+          89,
+          297,
+          496
+        ],
+        [
+          108,
+          87,
+          297,
+          496
+        ],
+        [
+          108,
+          86,
+          297,
+          496
+        ],
+        [
+          108,
+          87,
+          297,
+          496
+        ]
+      ]
+    },
+    "parado": {
+      "direcao": "frente 3/4",
+      "loop": true,
+      "fps": 3,
+      "origem": "quadro 'em pé' do image_gen + respiração procedural (estica 0,7-1,4% do tronco acima da cintura)",
+      "frames": 4,
+      "arquivos": [
+        "/sprites/robo/parado/frame-1.png",
+        "/sprites/robo/parado/frame-2.png",
+        "/sprites/robo/parado/frame-3.png",
+        "/sprites/robo/parado/frame-4.png"
+      ],
+      "bboxOpaco": [
+        [
+          96,
+          36,
+          282,
+          496
+        ],
+        [
+          96,
+          34,
+          282,
+          496
+        ],
+        [
+          96,
+          32,
+          282,
+          496
+        ],
+        [
+          96,
+          34,
+          282,
+          496
+        ]
+      ]
+    }
+  }
+}

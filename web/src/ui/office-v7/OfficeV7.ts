@@ -1,11 +1,10 @@
-import humanLuanaSentada from '../pixel-office-rpg/human-luana-sentada.png'
-import humanRenatoSentado from '../pixel-office-rpg/human-renato-sentado.png'
-import humanBiaSentada from '../pixel-office-rpg/human-bia-sentada.png'
-import humanGastaoSentado from '../pixel-office-rpg/human-gastao-sentado.png'
-import robotAzulSentado from '../pixel-office-rpg/robot-azul-sentado.png'
-import robotVerdeSentado from '../pixel-office-rpg/robot-verde-sentado.png'
-import robotMarfimSentado from '../pixel-office-rpg/robot-marfim-sentado.png'
-import robotVioletaSentado from '../pixel-office-rpg/robot-violeta-sentado.png'
+import {
+  CONTRATO_SPRITE,
+  imagemDoFrame,
+  personagemDoAgente,
+  quadroAtivo,
+  type EstadoSprite,
+} from './sprites'
 
 /**
  * Casal do Tráfego · Office V7 — cenário tycoon 2.5D em Canvas.
@@ -28,7 +27,15 @@ type Agent = {
   execucao: { estado: string; tarefa?: string|null; ferramenta?: string|null }
 }
 type Desk = { x: number; y: number; execucao: Agent }
-type Actor = { mesa: Desk; pose: { x:number;y:number;andando:boolean;sentado:number;fase:string } }
+type Actor = { mesa: Desk; pose: {
+  x:number;y:number;andando:boolean;sentado:number;fase:string
+  /** Sentido do deslocamento atual (quando `andando`), para escolher o ciclo
+   * de caminhada espelhado certo. Ausente fora de fases de caminhada. */
+  direcao?:'esquerda'|'direita'
+  /** Progresso 0..1 da fase atual (vem da máquina de estados). Usado pelas
+   * transições de um só sentido (levantar/sentar) para escolher o quadro. */
+  progressoFase?:number
+} }
 type Architecture = {
   salas: readonly Room[]; corredor:Zone; recepcao:Zone; lounge:Zone;
   coordenacao:Zone; planoAberto:Zone;
@@ -49,26 +56,31 @@ export type OfficeV7Frame = {
 export type OfficeV7Hit = { chave:string;x:number;y:number;largura:number;altura:number;modulo?:string }
 type View = { P:(x:number,z:number,e?:number)=>Point; sceneW:number;sceneH:number }
 const clamp=(n:number,a:number,b:number)=>Math.max(a,Math.min(b,n))
-const seatedHumans:Record<string,string>={
-  luana:humanLuanaSentada,renato:humanRenatoSentado,bia:humanBiaSentada,gastao:humanGastaoSentado,
-}
-const seatedRobots=[robotAzulSentado,robotVerdeSentado,robotMarfimSentado,robotVioletaSentado]
-const imageCache=new Map<string,HTMLImageElement>()
-function imageFor(url:string){
-  if(typeof Image==='undefined')return null
-  const cached=imageCache.get(url);if(cached)return cached
-  const image=new Image();image.decoding='async';image.src=url;imageCache.set(url,image);return image
-}
 function alpha(hex:string,opacity:number){
   const clean=hex.replace('#','')
   if(clean.length!==6)return `rgba(90,105,105,${opacity})`
   const value=Number.parseInt(clean,16)
   return `rgba(${value>>16},${value>>8&255},${value&255},${opacity})`
 }
-function seatedAsset(agent:Agent,seed:number){
-  const identity=(agent.ficha?.id||agent.nome).toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-  if(agent.tipoVisual==='humano')return seatedHumans[identity]||seatedHumans[identity.split(/\s+/)[0]]
-  return seatedRobots[seed%seatedRobots.length]
+function identidadeDoAgente(agent:Agent){
+  return (agent.ficha?.id||agent.nome).toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/\s+/)[0]
+}
+/** Traduz a fase real da maquina de estados (escritorio-animacao.ts) para o
+ * estado de sprite correspondente. 'descanso'/padrao cai em 'parado' (de pe,
+ * respiracao procedural) como fallback discreto, na pratica um agente comum
+ * some da cena antes de chegar la (ver retencao em PixelOffice.tsx); so
+ * diretores e frames de borda chegam a usar esse fallback. */
+function estadoSpriteDaPose(pose:Actor['pose']):EstadoSprite{
+  // `andando` manda primeiro: cobre as duas fases de caminhada E o modo de
+  // depuração (?debug_walk=1), que usa uma fase própria sem nome oficial.
+  if(pose.andando)return pose.direcao==='esquerda'?'andar-baixo-esquerda':'andar-baixo-direita'
+  switch(pose.fase){
+    case 'trabalhando':return 'digitar'
+    case 'silencioso':return 'sentado-parado'
+    case 'sentando':return 'sentar'
+    case 'levantando':return 'levantar'
+    default:return 'parado'
+  }
 }
 function v(layout:Layout):View {
   const w=layout.largura,h=layout.altura
@@ -353,17 +365,28 @@ function drawRobot(ctx:CanvasRenderingContext2D,x:number,y:number,size:number,se
   rect(ctx,-5,-36,10,7,'#def7f1',2,'#78b3b9');
   ctx.restore()
 }
-function drawSeatedAgent(ctx:CanvasRenderingContext2D,agent:Agent,x:number,y:number,seed:number,population:number){
-  const url=seatedAsset(agent,seed);if(!url)return null
-  const image=imageFor(url);if(!image||!image.complete||!image.naturalWidth)return null
+/**
+ * Desenha o sprite real (384x512, âncora do chão em 192,496) no quadro certo
+ * do ciclo da fase atual. `ancoraX,ancoraY` é o ponto do CHÃO onde os pés do
+ * personagem devem pisar (mesmo ponto que `drawHuman`/`drawRobot` usavam).
+ * Devolve null quando a imagem ainda não carregou (fallback do chamador
+ * desenha o boneco vetorial antigo sem deixar o quadro em branco).
+ */
+function drawSpriteAgent(ctx:CanvasRenderingContext2D,agent:Agent,pose:Actor['pose'],ancoraX:number,ancoraY:number,population:number,tempo:number){
+  const personagem=personagemDoAgente(identidadeDoAgente(agent),agent.tipoVisual)
+  const estadoSprite=estadoSpriteDaPose(pose)
+  const indiceFrame=quadroAtivo(estadoSprite,tempo,pose.progressoFase??0)
+  const image=imagemDoFrame(personagem,estadoSprite,indiceFrame)
+  if(!image||!image.complete||!image.naturalWidth)return null
   const targetHeight=population>16?47:population>9?57:population>5?68:82
-  const targetWidth=targetHeight*(image.naturalWidth/image.naturalHeight)
-  const bottom=y+15
-  const left=x-targetWidth/2
-  const top=bottom-targetHeight
+  const scale=targetHeight/CONTRATO_SPRITE.alturaEmPePx
+  const width=CONTRATO_SPRITE.largura*scale
+  const height=CONTRATO_SPRITE.altura*scale
+  const left=ancoraX-CONTRATO_SPRITE.ancoraX*scale
+  const top=ancoraY-CONTRATO_SPRITE.ancoraY*scale
   ctx.save();ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-  ctx.drawImage(image,left,top,targetWidth,targetHeight);ctx.restore()
-  return {left,top,width:targetWidth,height:targetHeight}
+  ctx.drawImage(image,left,top,width,height);ctx.restore()
+  return {left,top,width,height}
 }
 function drawAgent(ctx:CanvasRenderingContext2D,V:View,character:Actor,frame:OfficeV7Frame):OfficeV7Hit{
   const a=character.mesa.execucao,pose=character.pose;
@@ -374,9 +397,8 @@ function drawAgent(ctx:CanvasRenderingContext2D,V:View,character:Actor,frame:Off
   const size=atDesk?.55:.64;
   const drawY=point.y+(atDesk?10:0);
   if(selected||hover){ctx.save();ctx.strokeStyle=selected?'#f4c75e':'#62cc99';ctx.lineWidth=selected?3:2;ctx.beginPath();ctx.ellipse(point.x,drawY,21,6,0,0,2*Math.PI);ctx.stroke();ctx.restore()}
-  const useSeatedSprite=pose.fase==='trabalhando'&&a.ativa;
   const population=frame.layout.mesas.filter(d=>d.execucao.squad===a.squad&&d.execucao.ativa).length;
-  const seated=useSeatedSprite?drawSeatedAgent(ctx,a,point.x,drawY,idhash,population):null;
+  const seated=drawSpriteAgent(ctx,a,pose,point.x,drawY,population,frame.tempo);
   if(!seated){
     if(a.tipoVisual==='humano')drawHuman(ctx,point.x,drawY,size,idhash,atDesk,pose.andando,frame.tempo);
     else drawRobot(ctx,point.x,drawY,size,idhash,atDesk,pose.andando,frame.tempo);
@@ -502,6 +524,13 @@ export function desenharEscritorioV7(ctx:CanvasRenderingContext2D,frame:OfficeV7
   ctx.canvas.dataset.officeRobotAgents=String(frame.personagens.filter(a=>a.mesa.execucao.tipoVisual==='robo').length);
   ctx.canvas.dataset.officeHumanAgents=String(frame.personagens.filter(a=>a.mesa.execucao.tipoVisual==='humano').length);
   ctx.canvas.dataset.officeResting=String(frame.personagens.filter(a=>a.mesa.execucao.execucao.estado==='parado').length);
+  // Diagnóstico opcional da animação (achado "loop visual precisa de sprites
+  // animados"): quantos atores estão em cada fase de transição agora mesmo.
+  // Lido do próprio `frame.personagens`, nunca inventado.
+  ctx.canvas.dataset.officeDigitando=String(frame.personagens.filter(a=>a.pose.fase==='trabalhando').length);
+  ctx.canvas.dataset.officeCaminhando=String(frame.personagens.filter(a=>a.pose.fase==='caminhando_para_mesa'||a.pose.fase==='caminhando_para_descanso').length);
+  ctx.canvas.dataset.officeLevantando=String(frame.personagens.filter(a=>a.pose.fase==='levantando').length);
+  ctx.canvas.dataset.officeSentando=String(frame.personagens.filter(a=>a.pose.fase==='sentando').length);
   ctx.canvas.dataset.officeModuleRooms=String(squadRooms.length);
   ctx.canvas.dataset.officeActiveModules=String(squadRooms.filter(room=>room.ativa).length);
   ctx.canvas.dataset.officeHiddenModules=String(squadRooms.filter(room=>!room.ativa).length);

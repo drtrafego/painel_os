@@ -1,0 +1,76 @@
+{
+  "versao": "v8-2026-10-14",
+  "contrato": {
+    "tamanhoQuadro": {
+      "largura": 384,
+      "altura": 512
+    },
+    "ancora": {
+      "x": 192,
+      "y": 496,
+      "descricao": "ponto do chão sob o personagem: pixel opaco mais baixo (pé/sola) em y=496; centro da cabeça em x=192 (ciclos 'no lugar', o renderer move o sprite)"
+    },
+    "alturaEmPePx": 460,
+    "formato": "PNG RGBA, fundo transparente (recorte de fundo magenta por conectividade + despill)",
+    "caminho": "/sprites/<personagem>/<estado>/frame-<N>.png (N começa em 1)",
+    "semMoveis": "nenhum quadro traz mesa, cadeira, notebook ou objeto: são objetos da cena (desk()/chair() do OfficeV7). Sentado = pés no chão sob o assento."
+  },
+  "proveniencia": {
+    "geracao": "image_gen nativo do Codex CLI (OpenAI), via /opt/gastaomatos/luana/codex_mecanico.sh, em 14/10/2026",
+    "referenciaIdentidade": "entregas/2026-10-14_escritorio-v8-pacote/.../referencias/03-personagens.png (enviada pelo Gastão)",
+    "referenciaMovimento": "entregas/2026-10-14_escritorio-v8-pacote/.../referencias/04-guia-de-movimentos.png (só a ideia do ciclo; nada copiado)",
+    "fonte": "/opt/gastaomatos/luana/entregas/2026-10-14_escritorio-v8-pacote/sprites-fonte (folhas brutas, pedidos e scripts; ver scripts/REFAZER.txt)",
+    "posProcessamento": "fatiar.py (recorte e fatiamento) + montar.py (escala e âncora) + respiração procedural nos estados 'parado' e 'sentado-parado' + espelho horizontal nos 'andar-baixo-esquerda'",
+    "licenca": "imagens geradas por IA sob encomenda da operação Gastão Matos / casaldotrafego.com, uso interno no Painel OS; sem asset de terceiros"
+  },
+  "personagens": {
+    "luana": {
+      "metadados": "/sprites/luana/sprite.json",
+      "estados": {
+        "andar-baixo-direita": 6,
+        "andar-baixo-esquerda": 6,
+        "digitar": 3,
+        "levantar": 3,
+        "sentar": 3,
+        "sentado-parado": 4,
+        "parado": 4
+      }
+    },
+    "renato": {
+      "metadados": "/sprites/renato/sprite.json",
+      "estados": {
+        "andar-baixo-direita": 6,
+        "andar-baixo-esquerda": 6,
+        "digitar": 3,
+        "levantar": 3,
+        "sentar": 3,
+        "sentado-parado": 4,
+        "parado": 4
+      }
+    },
+    "bia": {
+      "metadados": "/sprites/bia/sprite.json",
+      "estados": {
+        "andar-baixo-direita": 6,
+        "andar-baixo-esquerda": 6,
+        "digitar": 3,
+        "levantar": 3,
+        "sentar": 3,
+        "sentado-parado": 4,
+        "parado": 4
+      }
+    },
+    "robo": {
+      "metadados": "/sprites/robo/sprite.json",
+      "estados": {
+        "andar-baixo-direita": 6,
+        "andar-baixo-esquerda": 6,
+        "digitar": 3,
+        "levantar": 3,
+        "sentar": 3,
+        "sentado-parado": 4,
+        "parado": 4
+      }
+    }
+  }
+}
