@@ -1,0 +1,5 @@
+.ct-habblaud { position:relative; width:100%; min-width:0; background:#12151d; color:#d7dce3; overflow:hidden; }
+.ct-habblaud iframe { display:block; border:0; width:100%; height:clamp(520px,60vh,760px); background:#12151d; }
+.ct-habblaud-status { position:absolute; z-index:3; top:16px; left:16px; border:1px solid #484e54; padding:9px 12px; border-radius:8px; background:#12151ddd; font-size:12px; }
+.ct-habblaud-error { color:#ffbbaa; }
+.ct-habblaud-footer { display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;min-height:28px;padding:7px 12px;border-top:1px solid #37414a;background:#111821;font:11px/1.4 system-ui,Arial,sans-serif;color:#9ba9ad }

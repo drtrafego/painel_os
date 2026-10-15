@@ -1,0 +1,5 @@
+Habblaud: https://github.com/marmottajr/habblaud
+Commit-fonte: 4ccce2537472fe5a8d432f06974494d2e778ff15
+Licença: MIT, texto completo em HABBLAUD-LICENSE.txt
+Adaptador: Casal do Tráfego (ct-bridge.ts)
+Apenas cliente visual; sem monitor, hooks ou backend Habblaud.
