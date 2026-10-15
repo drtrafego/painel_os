@@ -131,6 +131,7 @@ export const SQUADS_SOB_DEMANDA: ReadonlyArray<{
 ]
 
 const IDS_CATALOGO_SALA_MISTA = new Set(['dev', 'qa', 'explore'])
+const IDS_DIRETORES = new Set(['luana', 'renato', 'bia'])
 const PAPEIS_SALA_MISTA = new Set([
   'copy', 'designer', 'social', 'closer', 'frank', 'lex', 'arquiteto',
   'deployer', 'dev', 'qa', 'explore', 'general-purpose', 'general purpose',
@@ -396,7 +397,7 @@ function execucaoParada(ficha: PixelAgent): AgenteVivo {
     papel: ficha.papel,
     descricao: ficha.descricao,
     tipo: 'catálogo',
-    estado: 'parado',
+    estado: IDS_DIRETORES.has(ficha.id) ? 'silencioso' : 'parado',
     fase: ficha.área,
     etapa: ficha.descricao || ficha.papel,
     ferramenta: null,
@@ -520,14 +521,21 @@ export function montarExecucoesVisuais(agentes: AgenteVivo[], catalogo: PixelAge
 
 export function filtrarSquadsSobDemanda(execucoes: ExecucaoVisual[], squadsAbertos: ReadonlySet<PixelAgentSquad>) {
   const sobDemanda = new Set(SQUADS_SOB_DEMANDA.map((item) => item.id))
-  return execucoes.filter((execucao) => !sobDemanda.has(execucao.squad) || squadsAbertos.has(execucao.squad))
+  // Diretor (Renato em bots, Bia em tráfego) não some quando o squad dele
+  // está fechado por falta de atividade: ele é o motivo do squad existir,
+  // não um ocupante comum. Achado real 15/10: sem esta exceção, o diretor
+  // ficava fora do cenarioPrincipal mesmo depois do ajuste em
+  // execucoesDoCenarioPrincipal, porque este filtro roda DEPOIS e reaplicava
+  // a regra de squad fechado por cima.
+  return execucoes.filter((execucao) =>
+    IDS_DIRETORES.has(execucao.ficha?.id || '') || !sobDemanda.has(execucao.squad) || squadsAbertos.has(execucao.squad),
+  )
 }
 
 /**
  * A cena principal representa trabalho em curso (`ativa`, isto é,
- * `estado === 'trabalhando'` — contrato preservado, ver
- * escritorio-layout.teste.ts: "cenário principal mostra somente agentes
- * trabalhando") mais quem ainda está no meio da saída: `retidos` (por
+ * `estado === 'trabalhando'`), os três diretores fixos mesmo sem sessão
+ * ativa (sentados como ausentes), mais quem ainda está no meio da saída: `retidos` (por
  * `animacaoChave`) guarda quem acabou de deixar `trabalhando` para `parado` e
  * ainda não terminou de levantar e caminhar para fora (ver useSaidaRetida —
  * é o bug de ocultação do PROBLEMAS-COMPROVADOS.md). Sem argumento, o
@@ -541,7 +549,9 @@ export function execucoesDoCenarioPrincipal(
   squadsAbertos: ReadonlySet<PixelAgentSquad>,
   retidos: ReadonlySet<string> = new Set(),
 ) {
-  const presentes = execucoes.filter((execucao) => execucao.ativa || retidos.has(execucao.animacaoChave))
+  const presentes = execucoes.filter((execucao) =>
+    execucao.ativa || IDS_DIRETORES.has(execucao.ficha?.id || '') || retidos.has(execucao.animacaoChave),
+  )
   return filtrarSquadsSobDemanda(presentes, squadsAbertos)
 }
 

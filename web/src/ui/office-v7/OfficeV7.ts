@@ -251,13 +251,14 @@ function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room,opcoes:{opacida
   const isSquad=room.tipo==='squad';
   const active=isSquad&&room.ativa===true;
   const color=room.cor||'#77938e';
+  const labelComOcupantes=isSquad?`${room.label} · ${room.ocupantes??0}`:room.label;
   ctx.save();ctx.globalAlpha=opacidade;
   if(isSquad&&!active){
     roundedArea(ctx,V,room,alpha(color,.08),alpha(color,.3));
     const p=V.P(x+w/2,z+d/2,10);
-    const ww=clamp(room.label.length*5.2+34,64,140);
+    const ww=clamp(labelComOcupantes.length*5.2+34,64,140);
     rect(ctx,p.x-ww/2,p.y-9,ww,18,'#1c2b2d9c',4,alpha(color,.4));
-    text(ctx,room.label,p.x,p.y,7.4,'#c7cfc8',760);
+    text(ctx,labelComOcupantes,p.x,p.y,7.4,'#c7cfc8',760);
     ctx.restore();
     return;
   }
@@ -283,10 +284,10 @@ function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room,opcoes:{opacida
   glassPanel(ctx,V,x+half+door,z+d,x+w,z+d,h,glassFill,glassStroke);
   if(isSquad){
     const p=V.P(x+w/2,z+8,h+18);const status='ATIVO';
-    const ww=clamp(room.label.length*6.7+58,112,185);
+    const ww=clamp(labelComOcupantes.length*6.7+58,112,185);
     ctx.save();ctx.shadowColor='#0b1719aa';ctx.shadowBlur=8;rect(ctx,p.x-ww/2,p.y-13,ww,27,'#20383a',4,color);ctx.restore();
     rect(ctx,p.x-ww/2+6,p.y-7,4,14,color,1);
-    text(ctx,room.label,p.x-8,p.y-3,8.7,'#fff5d8',820);
+    text(ctx,labelComOcupantes,p.x-8,p.y-3,8.7,'#fff5d8',820);
     text(ctx,status,p.x-8,p.y+7,6.5,color,800);
   }else{
     sign(ctx,room.label,V.P(x+w/2,z+10,h+17),clamp(room.label.length*6.7+28,125,197));
@@ -372,13 +373,13 @@ function drawRobot(ctx:CanvasRenderingContext2D,x:number,y:number,size:number,se
  * Devolve null quando a imagem ainda não carregou (fallback do chamador
  * desenha o boneco vetorial antigo sem deixar o quadro em branco).
  */
-function drawSpriteAgent(ctx:CanvasRenderingContext2D,agent:Agent,pose:Actor['pose'],ancoraX:number,ancoraY:number,population:number,tempo:number){
+function drawSpriteAgent(ctx:CanvasRenderingContext2D,agent:Agent,pose:Actor['pose'],ancoraX:number,ancoraY:number,tempo:number){
   const personagem=personagemDoAgente(identidadeDoAgente(agent),agent.tipoVisual)
   const estadoSprite=estadoSpriteDaPose(pose)
   const indiceFrame=quadroAtivo(estadoSprite,tempo,pose.progressoFase??0)
   const image=imagemDoFrame(personagem,estadoSprite,indiceFrame)
   if(!image||!image.complete||!image.naturalWidth)return null
-  const targetHeight=population>16?47:population>9?57:population>5?68:82
+  const targetHeight=68
   const scale=targetHeight/CONTRATO_SPRITE.alturaEmPePx
   const width=CONTRATO_SPRITE.largura*scale
   const height=CONTRATO_SPRITE.altura*scale
@@ -397,8 +398,7 @@ function drawAgent(ctx:CanvasRenderingContext2D,V:View,character:Actor,frame:Off
   const size=atDesk?.55:.64;
   const drawY=point.y+(atDesk?10:0);
   if(selected||hover){ctx.save();ctx.strokeStyle=selected?'#f4c75e':'#62cc99';ctx.lineWidth=selected?3:2;ctx.beginPath();ctx.ellipse(point.x,drawY,21,6,0,0,2*Math.PI);ctx.stroke();ctx.restore()}
-  const population=frame.layout.mesas.filter(d=>d.execucao.squad===a.squad&&d.execucao.ativa).length;
-  const seated=drawSpriteAgent(ctx,a,pose,point.x,drawY,population,frame.tempo);
+  const seated=drawSpriteAgent(ctx,a,pose,point.x,drawY,frame.tempo);
   if(!seated){
     if(a.tipoVisual==='humano')drawHuman(ctx,point.x,drawY,size,idhash,atDesk,pose.andando,frame.tempo);
     else drawRobot(ctx,point.x,drawY,size,idhash,atDesk,pose.andando,frame.tempo);
