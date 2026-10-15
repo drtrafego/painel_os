@@ -20,7 +20,9 @@ import {
 } from '../dados/pixel-agents'
 import {
   avancarEstadoAnimacao,
+  calcularRotaEscritorio,
   criarEstadoInicialBoneco,
+  pontoEntradaDoEscritorio,
   type EstadoAnimacaoBoneco,
   type FaseBoneco,
 } from '../dados/escritorio-animacao'
@@ -566,7 +568,11 @@ type OpcoesLayoutSala = {
 
 /** Escolhe a planta cuja escala uniforme é a maior que cabe nos dois eixos. */
 /** Distribui os agentes reais numa planta mais compacta. Somente apresentação. */
-export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes: boolean | OpcoesLayoutSala = false): LayoutSala {
+export function calcularLayoutSala(
+  execucoes: ExecucaoVisual[],
+  compactoOuOpcoes: boolean | OpcoesLayoutSala = false,
+  agentesEmTransicao: ReadonlySet<string> = new Set(),
+): LayoutSala {
   const opcoes = typeof compactoOuOpcoes === 'object' ? compactoOuOpcoes : {}
   const grupos = new Map<PixelAgentSquad, ExecucaoVisual[]>()
   execucoes.forEach((execucao) => grupos.set(execucao.squad, [...(grupos.get(execucao.squad) || []), execucao]))
@@ -600,8 +606,10 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   })
   planta.arquitetura.salas = planta.arquitetura.salas.map((sala) => {
     if (sala.tipo !== 'squad' || !sala.squad) return sala
-    const ocupantes = (grupos.get(sala.squad as PixelAgentSquad) || []).filter((item) => item.ativa).length
-    return { ...sala, ativa: ocupantes > 0, ocupantes }
+    const membros = grupos.get(sala.squad as PixelAgentSquad) || []
+    const ocupantes = membros.filter((item) => item.ativa).length
+    const temAgenteSaindo = membros.some((item) => agentesEmTransicao.has(item.animacaoChave))
+    return { ...sala, ativa: ocupantes > 0 || temAgenteSaindo, ocupantes }
   })
   const mesas: MesaVisual[] = ordenadas.map(item => {
     const posicao = posicoes.get(item)
@@ -694,10 +702,9 @@ function squadsAtivosSobDemanda(execucoes: ExecucaoVisual[]) {
  * caminhando_para_descanso -> descanso) — ela entra no conjunto retido; o
  * laço de desenho (no `useEffect` do canvas) a libera de volta assim que
  * `fasesRef` reportar 'descanso' — só então ela some da cena de verdade.
- * `trabalhando -> silencioso` NÃO entra aqui de propósito: silencioso nunca
- * fez a execução sumir da cena por ociosidade de posição (a máquina de
- * estados mantém sentado=1, sem levantar) — contrato preservado de
- * `execucoesDoCenarioPrincipal` continua sendo só `ativa` fora da retenção.
+ * Para agentes comuns, tanto `parado` quanto `silencioso` saem pela recepção,
+ * pois ambos deixam de pertencer à cena principal. Diretores são a exceção:
+ * continuam na mesa em silêncio porque são ocupantes fixos do escritório.
  */
 function useSaidaRetida(execucoes: ExecucaoVisual[]) {
   const retidosRef = useRef<Set<string>>(new Set())
@@ -711,8 +718,10 @@ function useSaidaRetida(execucoes: ExecucaoVisual[]) {
       const chave = execucao.animacaoChave
       vistos.add(chave)
       const eraAtiva = ativaAnteriorRef.current.get(chave)
-      const estaParado = execucao.execucao.estado === 'parado'
-      if (eraAtiva && !execucao.ativa && estaParado && !retidosRef.current.has(chave)) {
+      const ehDiretor = IDS_DIRETORES.has(execucao.ficha?.id || '')
+      if (execucao.ativa && retidosRef.current.delete(chave)) {
+        mudou = true
+      } else if (eraAtiva && !execucao.ativa && !ehDiretor && !retidosRef.current.has(chave)) {
         retidosRef.current.add(chave)
         mudou = true
       }
@@ -879,7 +888,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const layout = useMemo(() => calcularLayoutSala(execucoesDoCenario, {
     larguraDisponivel: dimensoesPalco.largura,
     alturaDisponivel: dimensoesPalco.altura,
-  }), [dimensoesPalco.altura, dimensoesPalco.largura, execucoesDoCenario])
+  }, retidosNaSaidaRef.current), [dimensoesPalco.altura, dimensoesPalco.largura, execucoesDoCenario, versaoRetencao])
   // A abertura sempre começa no enquadramento que cabe no palco. A rolagem
   // interna continua disponível somente quando a pessoa aproxima manualmente.
   const zoomMaximoSeguro = ZOOM_MAX
@@ -975,9 +984,61 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
     let ultimoDetalhe = 0
     const progressosDoQuadro = new Map<PixelAgentSquad, number>()
     const estadoDaMesa = (mesa: MesaVisual, agoraMs: number) => {
-      const posMesa = { x: mesa.x - layout.corredorX, y: mesa.y + 24 }; const posDescanso = { x: mesa.descanso.x - layout.corredorX, y: mesa.descanso.y }; const alvo = alvoDaExecucao(mesa.execucao)
+      const entradaGlobal = pontoEntradaDoEscritorio(layout.arquitetura)
+      const posMesa = { x: mesa.x - layout.corredorX, y: mesa.y + 24 }
+      const posSaida = { x: entradaGlobal.x - layout.corredorX, y: entradaGlobal.y }
+      const saindo = retidosNaSaidaRef.current.has(mesa.execucao.animacaoChave)
+      const alvo = saindo ? 'parado' : alvoDaExecucao(mesa.execucao)
       const anteriorEstado = animacoesRef.current.get(mesa.execucao.animacaoChave)
-      const proximo = anteriorEstado ? avancarEstadoAnimacao(anteriorEstado, alvo, posMesa, posDescanso, agoraMs, reduzirMovimento, mesa.execucao.execucao.ferramenta) : criarEstadoInicialBoneco(mesa.execucao.animacaoChave, alvo, posMesa, posDescanso, agoraMs, mesa.execucao.execucao.ferramenta)
+      const origemGlobal = anteriorEstado
+        ? { x: anteriorEstado.x + layout.corredorX, y: anteriorEstado.y }
+        : entradaGlobal
+      const destinoGlobal = alvo === 'parado'
+        ? entradaGlobal
+        : { x: mesa.x, y: mesa.y + 24 }
+      const rota = calcularRotaEscritorio(layout.arquitetura, origemGlobal, destinoGlobal)
+        .map((ponto) => ({ x: ponto.x - layout.corredorX, y: ponto.y }))
+      let proximo: EstadoAnimacaoBoneco
+      if (anteriorEstado) {
+        proximo = avancarEstadoAnimacao(
+          anteriorEstado,
+          alvo,
+          posMesa,
+          posSaida,
+          agoraMs,
+          reduzirMovimento,
+          mesa.execucao.execucao.ferramenta,
+          rota,
+        )
+      } else if (alvo === 'trabalhando') {
+        const naEntrada = criarEstadoInicialBoneco(
+          mesa.execucao.animacaoChave,
+          'parado',
+          posMesa,
+          posSaida,
+          agoraMs,
+          mesa.execucao.execucao.ferramenta,
+        )
+        proximo = avancarEstadoAnimacao(
+          naEntrada,
+          alvo,
+          posMesa,
+          posSaida,
+          agoraMs,
+          reduzirMovimento,
+          mesa.execucao.execucao.ferramenta,
+          rota,
+        )
+      } else {
+        proximo = criarEstadoInicialBoneco(
+          mesa.execucao.animacaoChave,
+          alvo,
+          posMesa,
+          posSaida,
+          agoraMs,
+          mesa.execucao.execucao.ferramenta,
+        )
+      }
       animacoesRef.current.set(mesa.execucao.animacaoChave, proximo); fasesRef.current.set(mesa.execucao.animacaoChave, proximo.fase); return proximo
     }
     const desenhar = (agora: number) => {

@@ -4,9 +4,11 @@
 import {
   criarEstadoInicialBoneco,
   avancarEstadoAnimacao,
+  calcularRotaEscritorio,
   calcularWaypoints,
   interpolarWaypoints,
   lerPostura,
+  pontoEntradaDoEscritorio,
 } from './escritorio-animacao.ts'
 
 let falhas = 0
@@ -38,7 +40,9 @@ conferir('parado -> trabalhando inicia caminhando_para_mesa', b3.fase, 'caminhan
 conferir('postura de view_file é lendo', b3.posturaTrabalho, 'lendo')
 
 // 4. Meio da caminhada através de corredores
-const b4 = avancarEstadoAnimacao(b3, 'trabalhando', posMesa, posDescanso, 2100, false)
+// A caminhada do V8 agora dura 900 ms: curta o bastante para a mudança de
+// estado não parecer lenta, mas ainda visível em dezenas de quadros.
+const b4 = avancarEstadoAnimacao(b3, 'trabalhando', posMesa, posDescanso, 1550, false)
 conferir('meio da caminhada avança posição x e y', b4.x > posDescanso.x && b4.x < posMesa.x, true)
 conferir('continua caminhando_para_mesa', b4.fase, 'caminhando_para_mesa')
 
@@ -151,6 +155,53 @@ for (let t = 1000; t <= 60_000; t += 1000) {
 }
 conferir('agente trabalhando por 60 s nunca levanta nem volta ao descanso', [...fasesDoMinuto], ['trabalhando'])
 conferir('agente permanece sentado na mesma mesa depois dos 60 s', { x: trabalhandoPorUmMinuto.x, y: trabalhandoPorUmMinuto.y }, posMesa)
+
+// 17. Entrada real do V8: recepção -> corredor -> abertura da sala -> mesa.
+const arquiteturaV8 = {
+  corredor: { x: 360, z: 55, largura: 48, profundidade: 770 },
+  recepcao: { x: 65, z: 730, largura: 225, profundidade: 72 },
+  salas: [
+    { x: 542, z: 70, largura: 195, profundidade: 150, abertura: 52 },
+    { x: 966, z: 70, largura: 195, profundidade: 150, abertura: 52 },
+  ],
+}
+const entradaV8 = pontoEntradaDoEscritorio(arquiteturaV8)
+const mesaV8 = { x: 620, y: 160 }
+const rotaEntradaV8 = calcularRotaEscritorio(arquiteturaV8, entradaV8, mesaV8)
+conferir('entrada do V8 nasce ao lado da recepção', entradaV8, { x: 318, y: 824 })
+conferir('rota de entrada passa pelo eixo do corredor', rotaEntradaV8.some((p) => p.x === 384), true)
+conferir('rota cruza a abertura frontal da sala', rotaEntradaV8.some((p) => p.x === 639.5 && p.y === 208), true)
+
+let entrandoV8 = criarEstadoInicialBoneco('entrada-v8', 'parado', mesaV8, entradaV8, 0)
+entrandoV8 = avancarEstadoAnimacao(entrandoV8, 'trabalhando', mesaV8, entradaV8, 0, false, null, rotaEntradaV8)
+conferir('agente novo começa andando na entrada, não na mesa', {
+  fase: entrandoV8.fase,
+  x: entrandoV8.x,
+  y: entrandoV8.y,
+}, {
+  fase: 'caminhando_para_mesa',
+  x: entradaV8.x,
+  y: entradaV8.y,
+})
+const entradaNoMeio = avancarEstadoAnimacao(entrandoV8, 'trabalhando', mesaV8, entradaV8, 450, false, null, rotaEntradaV8)
+conferir('entrada progride por posição intermediária', entradaNoMeio.x !== entradaV8.x && entradaNoMeio.x !== mesaV8.x, true)
+
+// 18. Regressão do teletransporte em troca de sala/mesa.
+const mesaNova = { x: 1050, y: 160 }
+const rotaTroca = calcularRotaEscritorio(arquiteturaV8, mesaV8, mesaNova)
+const antesDaTroca = criarEstadoInicialBoneco('troca-v8', 'trabalhando', mesaV8, entradaV8, 0)
+const iniciouTroca = avancarEstadoAnimacao(antesDaTroca, 'trabalhando', mesaNova, entradaV8, 100, false, null, rotaTroca)
+conferir('troca de sala inicia caminhada em vez de teleportar', {
+  fase: iniciouTroca.fase,
+  x: iniciouTroca.x,
+  y: iniciouTroca.y,
+}, {
+  fase: 'caminhando_para_mesa',
+  x: mesaV8.x,
+  y: mesaV8.y,
+})
+const trocaNoMeio = avancarEstadoAnimacao(iniciouTroca, 'trabalhando', mesaNova, entradaV8, 550, false, null, rotaTroca)
+conferir('troca de sala passa pelo corredor antes da nova mesa', trocaNoMeio.x !== mesaV8.x && trocaNoMeio.x !== mesaNova.x, true)
 
 if (falhas > 0) {
   console.error(`\n${falhas} teste(s) falharam.`)

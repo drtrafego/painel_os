@@ -507,8 +507,8 @@ export function desenharEscritorioV7(ctx:CanvasRenderingContext2D,frame:OfficeV7
     hits.push(...salaEspecialHits(V,frame.layout.arquitetura));
     hits.push(...drawSquadRooms(ctx,V,frame));
     const avatars=[...frame.personagens].sort((a,b)=>{
-      const pa=(a.pose.fase==='descanso')?V.P(a.pose.x,a.pose.y):V.P(a.mesa.x,a.mesa.y+15);
-      const pb=(b.pose.fase==='descanso')?V.P(b.pose.x,b.pose.y):V.P(b.mesa.x,b.mesa.y+15);
+      const pa=(a.pose.andando||a.pose.fase==='descanso')?V.P(a.pose.x,a.pose.y):V.P(a.mesa.x,a.mesa.y+15);
+      const pb=(b.pose.andando||b.pose.fase==='descanso')?V.P(b.pose.x,b.pose.y):V.P(b.mesa.x,b.mesa.y+15);
       return pa.y-pb.y;
     });
     for(const character of avatars)hits.push(drawAgent(ctx,V,character,frame));
