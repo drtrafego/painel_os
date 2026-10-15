@@ -43,9 +43,12 @@ const agente = (id: string, estado: AgenteVivo['estado'], ferramenta: string | n
 
 // 1. CONTRATO PRESERVADO: sem o 3º argumento (retidos), o comportamento é
 // idêntico ao de antes — só agentes `ativa` (trabalhando) aparecem no
-// cenário principal. Isto é o que `escritorio-layout.teste.ts` já trava
-// ("cenário principal mostra somente agentes trabalhando"); aqui confirmo
-// que a MINHA mudança (parâmetro novo, opcional) não afeta quem não o usa.
+// cenário principal, mais os três diretores fixos (Luana/Renato/Bia),
+// sentados como ausentes mesmo sem sessão (achado real de 15/10, ver
+// escritorio-layout.teste.ts "cenário principal preserva os três diretores
+// sem sessão ativa"). Aqui confirmo que a MINHA mudança (parâmetro novo,
+// opcional) não afeta quem não o usa, além desse contrato novo.
+const IDS_DIRETORES_TESTE = new Set(['luana', 'renato', 'bia'])
 const squadsAbertos = new Set(SQUADS_SOB_DEMANDA.map((item) => item.id))
 const doisAgentes = montarExecucoesVisuais([
   agente('exec-a', 'trabalhando'),
@@ -53,8 +56,9 @@ const doisAgentes = montarExecucoesVisuais([
 ], PIXEL_AGENTS)
 const cenarioSemRetidos = execucoesDoCenarioPrincipal(doisAgentes, squadsAbertos)
 conferir(
-  'sem retidos: só quem está trabalhando aparece (comportamento antigo preservado)',
-  cenarioSemRetidos.every((item) => item.execucao.estado === 'trabalhando'),
+  'sem retidos: só quem está trabalhando aparece, mais os 3 diretores fixos (comportamento atualizado 15/10)',
+  cenarioSemRetidos.every((item) =>
+    item.execucao.estado === 'trabalhando' || IDS_DIRETORES_TESTE.has(item.ficha?.id || '')),
 )
 
 // 2. A CORREÇÃO: um agente que acabou de trocar para 'parado' (não está mais
@@ -90,9 +94,9 @@ conferir('caminhada completa chega em descanso (só aqui a retenção libera)', 
 conferir('em descanso, a posição final é a do lounge (posDescanso)', caminhandoConcluido.x === posDescanso.x && caminhandoConcluido.y === posDescanso.y)
 
 // 4. POPULAÇÃO: 0/1/3/12/25/45 agentes trabalhando não travam o layout, e o
-// cenário principal cresce exatamente com a contagem de ativos (CRITERIOS:
-// "3 ativos + 25 parados: os 25 não poluem a cena; contagem operacional
-// correta").
+// cenário principal cresce exatamente com a contagem de ativos mais os 3
+// diretores fixos (CRITÉRIOS: "3 ativos + 25 parados: os 25 não poluem a
+// cena; contagem operacional correta", atualizado 15/10 pros diretores).
 for (const quantidade of [0, 1, 3, 12, 25, 45]) {
   const ativos = Array.from({ length: quantidade }, (_, indice) => agente(`pop-ativo-${indice}`, 'trabalhando'))
   const parados = Array.from({ length: 25 }, (_, indice) => agente(`pop-parado-${indice}`, 'parado'))
@@ -100,8 +104,9 @@ for (const quantidade of [0, 1, 3, 12, 25, 45]) {
   const cenario = execucoesDoCenarioPrincipal(visuais, squadsAbertos)
   const totalAtivasNoCatalogo = visuais.filter((item) => item.ativa).length
   conferir(
-    `${quantidade} ativos: cenário principal mostra exatamente os ativos (25 parados não entram)`,
-    cenario.length === totalAtivasNoCatalogo && cenario.every((item) => item.ativa),
+    `${quantidade} ativos: cenário principal mostra exatamente os ativos mais os 3 diretores fixos (25 parados não entram)`,
+    cenario.length === totalAtivasNoCatalogo + 3
+      && cenario.every((item) => item.ativa || IDS_DIRETORES_TESTE.has(item.ficha?.id || '')),
     `cenario=${cenario.length} ativos=${totalAtivasNoCatalogo}`,
   )
   const layout = calcularLayoutSala(cenario, { larguraDisponivel: 1440, alturaDisponivel: 900 })

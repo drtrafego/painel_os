@@ -40,7 +40,12 @@ function mesaDentroDaSalaDoSquad(layout: ReturnType<typeof calcularLayoutSala>, 
 
 conferir('papéis globais não ganham mesa fixa', catalogoVisual.length === fichasFixas.length)
 conferir('Dev, QA e Explore saem das ilhas fixas', ['dev', 'qa', 'explore'].every((id) => !catalogoVisual.some((item) => item.ficha?.id === id)))
-conferir('sala mista e demais setores começam escondidos sem ativos', desktop.ilhas.every((ilha) => ilha.squad === 'coordenação'))
+// Desde 15/10, bots (Renato) e tráfego (Bia) também ficam sempre visíveis
+// mesmo sem ninguém ativo, pelo mesmo motivo de coordenação (Luana): são os
+// squads-casa dos 3 diretores fixos. Sala mista e os squads sem diretor
+// continuam escondidos sem atividade.
+conferir('sala mista e demais setores (sem diretor) começam escondidos sem ativos',
+  desktop.ilhas.every((ilha) => ['coordenação', 'bots', 'tráfego'].includes(ilha.squad)))
 conferir('coordenação continua no centro quando tudo está parado', Boolean(desktop.ilhas.find((ilha) => ilha.squad === 'coordenação')))
 conferir('comercial começa escondido', !desktop.ilhas.some((ilha) => ilha.squad === 'comercial'))
 conferir('todos os setores operacionais são sob demanda', SQUADS_SOB_DEMANDA.length === 8 && SQUADS_SOB_DEMANDA.every((item) => item.permanenciaAposUltimoAtivoMs === 3 * 60 * 1000))
@@ -142,8 +147,12 @@ const layoutDescansoVazio = calcularLayoutSala(
   filtrarSquadsSobDemanda(montarExecucoesVisuais(sessoesCoordenadoras, PIXEL_AGENTS), new Set()),
   { larguraDisponivel: 990, alturaDisponivel: 600 },
 )
+// 'elza' (não é diretora) em vez de 'bia': desde 15/10 os 3 diretores sem
+// sessão ficam 'silencioso' (sentados como ausentes), não vão pro descanso
+// como os demais agentes 'parado' do catálogo — usar um diretor aqui testaria
+// o comportamento errado.
 const layoutDescansoComOcupante = calcularLayoutSala(
-  montarExecucoesVisuais([], PIXEL_AGENTS).filter((visual) => visual.ficha?.id === 'bia'),
+  montarExecucoesVisuais([], PIXEL_AGENTS).filter((visual) => visual.ficha?.id === 'elza'),
   { larguraDisponivel: 990, alturaDisponivel: 600 },
 )
 conferir('descanso vazio fica encolhido', !layoutDescansoVazio.descansoAberto && layoutDescansoVazio.ocupantesDescanso === 0)
@@ -178,25 +187,53 @@ const todosSetores = montarExecucoesVisuais([
   { id: 'exec-analista', identidade: 'analista', tipo: 'analista', estado: 'trabalhando', fase: 'execução', etapa: 'métricas', ferramenta: 'Read' },
   { id: 'exec-arquiteto', identidade: 'arquiteto', tipo: 'arquiteto', motor: 'claude', estado: 'trabalhando', fase: 'execução', etapa: 'arquitetura', ferramenta: 'Read' },
 ], PIXEL_AGENTS)
+// `montarExecucoesVisuais` reordena pelo catálogo completo: índice 0/1 do
+// array retornado NÃO é confiável (pode cair num dos 3 diretores fixos, que
+// o catálogo prioriza). Achar explicitamente por `ficha.id` (suri/vitor, que
+// sabemos não serem diretores) evita duplicar um diretor sem querer e
+// inflar a contagem (achado real 15/10, caía 5/3 em vez de 3/3).
+const baseSilencioso = todosSetores.find((item) => item.ficha?.id === 'suri')!
+const baseParado = todosSetores.find((item) => item.ficha?.id === 'vitor')!
 const cenarioSomenteAtivos = execucoesDoCenarioPrincipal([
   ...todosSetores,
-  { ...todosSetores[0], chave: 'fixture-silencioso', animacaoChave: 'fixture-silencioso', ativa: false, execucao: { ...todosSetores[0].execucao, estado: 'silencioso' } },
-  { ...todosSetores[1], chave: 'fixture-parado', animacaoChave: 'fixture-parado', ativa: false, execucao: { ...todosSetores[1].execucao, estado: 'parado' } },
+  { ...baseSilencioso, chave: 'fixture-silencioso', animacaoChave: 'fixture-silencioso', ativa: false, execucao: { ...baseSilencioso.execucao, estado: 'silencioso' } },
+  { ...baseParado, chave: 'fixture-parado', animacaoChave: 'fixture-parado', ativa: false, execucao: { ...baseParado.execucao, estado: 'parado' } },
 ], new Set(SQUADS_SOB_DEMANDA.map((item) => item.id)))
 // `montarExecucoesVisuais` expande pro catálogo completo (29 posições fixas),
-// não só pros 8 agentes "trabalhando" passados no fixture — por isso a
-// contagem esperada é o filtro por estado, não `todosSetores.length` bruto
-// (bug do teste original, achado e corrigido 13/10/2026 por mim, Luana: o
-// código já filtrava certo, só a asserção do teste é que comparava com o
-// número errado e reprovava uma implementação correta).
+// não só pros 8 agentes "trabalhando" passados no fixture. O cenário mantém
+// os três diretores fixos, mesmo sem sessão ativa, sentados como ausentes.
 const trabalhandoEmTodosSetores = todosSetores.filter((item) => item.execucao.estado === 'trabalhando').length
-conferir('cenário principal mostra somente agentes trabalhando',
-  cenarioSomenteAtivos.length === trabalhandoEmTodosSetores && cenarioSomenteAtivos.every((item) => item.execucao.estado === 'trabalhando' && item.ativa),
-  `${cenarioSomenteAtivos.length}/${trabalhandoEmTodosSetores}`)
+const diretoresAusentesNoCenario = cenarioSomenteAtivos.filter((item) => ['luana', 'renato', 'bia'].includes(item.ficha?.id || ''))
+conferir('cenário principal preserva os três diretores sem sessão ativa',
+  diretoresAusentesNoCenario.length === 3 && diretoresAusentesNoCenario.every((item) => item.execucao.estado === 'silencioso' && !item.ativa),
+  `${diretoresAusentesNoCenario.length}/3`)
+conferir('cenário principal combina agentes trabalhando e diretores ausentes',
+  cenarioSomenteAtivos.length === trabalhandoEmTodosSetores + 3 && cenarioSomenteAtivos.every((item) => item.ativa || ['luana', 'renato', 'bia'].includes(item.ficha?.id || '')),
+  `${cenarioSomenteAtivos.length}/${trabalhandoEmTodosSetores + 3}`)
 const demandas = new Set(SQUADS_SOB_DEMANDA.map((item) => item.id))
-conferir('cenário com 0 ativos mantém somente coordenação', filtrarSquadsSobDemanda(catalogoVisual, new Set()).every((item) => item.squad === 'coordenação'))
-conferir('cenário com 1 ativo abre somente uma ilha', new Set(filtrarSquadsSobDemanda(umAtivo, new Set(['conteúdo'])).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === 1)
-conferir('cenário com 3 ativos abre exatamente três ilhas', new Set(filtrarSquadsSobDemanda(tresAtivos, new Set(['conteúdo', 'bots', 'análise'])).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === 3)
+// bots e tráfego são squads sob demanda que TAMBÉM têm diretor fixo
+// (Renato/Bia): desde 15/10 eles continuam abertos mesmo com squadsAbertos
+// vazio, igual coordenação. As asserções abaixo contam isso à parte da
+// abertura "por atividade real" que squadsAbertos mede.
+conferir('cenário com 0 ativos mantém só coordenação, bots e tráfego (squads com diretor fixo)',
+  filtrarSquadsSobDemanda(catalogoVisual, new Set()).every((item) => ['coordenação', 'bots', 'tráfego'].includes(item.squad)))
+// squadsAbertos = quem abriu por atividade real; bots/tráfego entram de
+// graça por causa do diretor, SEJA OU NÃO atividade real há neles também
+// (caso de 'vitor' em bots no fixture de 3 ativos, abaixo). O total
+// esperado é a UNIÃO dos dois conjuntos, não a soma: contar squadsAbertos
+// mais os squads de diretor que não estavam nela.
+const squadsDeDiretorSempreAbertos = new Set(['bots', 'tráfego'])
+function squadsEsperadosAbertos(squadsAbertos: ReadonlySet<string>): number {
+  const uniao = new Set(squadsAbertos)
+  for (const squad of squadsDeDiretorSempreAbertos) uniao.add(squad)
+  return uniao.size
+}
+const squadsAbertos1 = new Set(['conteúdo'])
+conferir('cenário com 1 ativo abre a ilha dele mais bots/tráfego (diretores sempre abertos)',
+  new Set(filtrarSquadsSobDemanda(umAtivo, squadsAbertos1).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === squadsEsperadosAbertos(squadsAbertos1))
+const squadsAbertos3 = new Set(['conteúdo', 'bots', 'análise'])
+conferir('cenário com 3 ativos abre as ilhas deles mais bots/tráfego (diretores sempre abertos)',
+  new Set(filtrarSquadsSobDemanda(tresAtivos, squadsAbertos3).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === squadsEsperadosAbertos(squadsAbertos3))
 conferir('cenário com todos os setores abre todas as ilhas sob demanda', new Set(filtrarSquadsSobDemanda(todosSetores, demandas).filter((item) => demandas.has(item.squad)).map((item) => item.squad)).size === demandas.size)
 const layoutTodosSetores = calcularLayoutSala(execucoesDoCenarioPrincipal(todosSetores, demandas))
 const salasAtivasTodosSetores = layoutTodosSetores.arquitetura.salas.filter((sala) => sala.tipo === 'squad' && sala.ativa)
