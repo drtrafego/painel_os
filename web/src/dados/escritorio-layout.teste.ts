@@ -369,8 +369,16 @@ conferir('visão geral preserva exatamente as identidades do catálogo',
 conferir('expor o catálogo não transforma descanso em execução', geralParado.mesas.every((mesa) => !mesa.execucao.ativa))
 for (const quantidade of [1, 2, 3, 6]) {
   const sala = calcularLayoutSala(ocupantes.slice(0, quantidade)).ilhas[0]
-  conferir(`sala mista com ${quantidade} ocupantes não cria postos fantasmas`, sala.postos.length === quantidade && sala.mesas.length === quantidade)
+  conferir(`sala mista com ${quantidade} ocupantes preserva os postos físicos`,
+    sala.mesas.length === quantidade && sala.postos.length >= Math.max(8, quantidade))
 }
+
+const diretorSozinho = catalogoVisual.find((item) => item.ficha?.id === 'luana')!
+const salaDoDiretorSozinho = calcularLayoutSala([diretorSozinho]).ilhas[0]
+conferir('diretor sozinho conserva a mobília completa da sala',
+  salaDoDiretorSozinho.mesas.length === 1 && salaDoDiretorSozinho.postos.length >= 3)
+conferir('sala vazia continua sem postos nem mobília de ocupação',
+  calcularLayoutSala([]).ilhas.length === 0 && calcularLayoutSala([]).mesas.length === 0)
 
 const sessaoCodex = globais[4]
 const visualCodex = ocupantes.find((item) => item.execucao.id === sessaoCodex.id)
