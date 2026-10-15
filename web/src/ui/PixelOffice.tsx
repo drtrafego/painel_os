@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { desenharEscritorioV7 as desenharEscritorioRpg } from './office-v7/OfficeV7'
+import { EscritorioHabblaud } from './office-habblaud/EscritorioHabblaud'
 import { PainelTarefas, PainelUsoPlanos } from './PixelOffice.wall'
 import { montarTarefasParede, type GastosIA } from './PixelOffice.wall-data'
 import type { QuadroTarefasSolicitadas } from './nucleo/dados'
@@ -808,7 +809,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   }, [])
 
   const [termoBusca, setTermoBusca] = useState('')
-  const [abaEscritorio, setAbaEscritorio] = useState<'escritorio' | 'lista' | 'desempenho'>('escritorio')
+  const [abaEscritorio, setAbaEscritorio] = useState<'escritorio' | 'habblaud' | 'lista' | 'desempenho'>('escritorio')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativos' | 'descanso' | 'ociosos'>(soAtivos ? 'ativos' : 'todos')
   const [painelHudAberto, setPainelHudAberto] = useState<'uso' | 'tarefas' | null>(null)
   const debugWalk = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug_walk') === '1'
@@ -1173,6 +1174,16 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               <button
                 type="button"
                 role="tab"
+                aria-selected={abaEscritorio === 'habblaud'}
+                className={`ct-tab-btn ${abaEscritorio === 'habblaud' ? 'ct-tab-active' : ''}`}
+                onClick={() => setAbaEscritorio('habblaud')}
+                data-testid="office-habblaud-tab"
+              >
+                <span aria-hidden="true">🏢</span> Escritório vivo
+              </button>
+              <button
+                type="button"
+                role="tab"
                 aria-selected={abaEscritorio === 'lista'}
                 className={`ct-tab-btn ct-quick-action ${abaEscritorio === 'lista' ? 'ct-tab-active' : ''}`}
                 onClick={() => setAbaEscritorio('lista')}
@@ -1300,6 +1311,14 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
             </div>
           </div>
           <section className="ct-room" aria-label="Sala interativa em perspectiva">
+            {abaEscritorio === 'habblaud' && (
+              <EscritorioHabblaud
+                execucoes={todasExecucoes}
+                statusSonda={statusLeitura}
+                selecionadoId={agenteSelecionadoId}
+                aoSelecionarAgente={aoSelecionarAgente}
+              />
+            )}
             <div
               ref={palcoRef}
               className="ct-room-scroll"
