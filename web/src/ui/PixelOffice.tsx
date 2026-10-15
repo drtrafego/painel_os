@@ -119,6 +119,10 @@ const DURACAO_TRANSICAO_AMBIENTE_MS = 720
 const POSTOS_MOBILIADOS_POR_SALA = 8
 const POSTOS_MOBILIADOS_NA_COORDENACAO = 3
 
+export function progressoDaSalaSquad() {
+  return 1
+}
+
 /** Squads que só ocupam espaço quando a operação os convoca. */
 export const SQUADS_SOB_DEMANDA: ReadonlyArray<{
   id: PixelAgentSquad
@@ -1048,11 +1052,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       const agoraAnimacaoMs = tempoRef.current * 1000
       if (agora - ultimoDetalhe > 400) { ultimoDetalhe = agora; setRelogioDetalhe((valor) => valor + 1) }
       layout.ilhas.forEach((ilha) => {
-        const ehSobDemanda = SQUADS_SOB_DEMANDA.some((item) => item.id === ilha.squad)
-        const alvo = ehSobDemanda && (filtroStatus !== 'todos' || soAtivos) && squadsSobDemandaSaindo.has(ilha.squad) ? 0 : 1
-        const inicial = progressoIlhasRef.current.get(ilha.squad) ?? (ehSobDemanda ? 0 : 1)
-        const passo = reduzirMovimento ? 1 : delta / DURACAO_TRANSICAO_AMBIENTE_MS
-        const proximo = alvo > inicial ? Math.min(alvo, inicial + passo) : Math.max(alvo, inicial - passo)
+        const proximo = progressoDaSalaSquad()
         progressoIlhasRef.current.set(ilha.squad, proximo); progressosDoQuadro.set(ilha.squad, proximo)
       })
       const dpr = Math.min(dimensoesPalco.dpr, 2); const larguraCss = Math.round(layout.largura * zoom); const alturaCss = Math.round(layout.altura * zoom)

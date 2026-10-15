@@ -49,11 +49,8 @@ type Layout = {
 export type OfficeV7Frame = {
   layout:Layout; personagens:readonly Actor[]; tempo:number; progressoDia:number;
   reduzirMovimento:boolean; selecionadoId?:string|null;hoverId?:string|null
-  /** Progresso de entrada/saída (0..1) por squad "sob demanda", calculado em
-   * PixelOffice.tsx (transição de 720ms, ver DURACAO_TRANSICAO_AMBIENTE_MS).
-   * Antes este valor era calculado e nunca chegava ao renderer: a sala
-   * aparecia/sumia seca. Squad ausente do mapa (ex. coordenação, que não é
-   * sob demanda) é tratado como sempre visível (progresso 1). */
+  /** Progresso por squad. Salas físicas de squad recebem 1: a atividade muda
+   * ocupantes e sprites, nunca a existência da sala. */
   progressos?: ReadonlyMap<string, number>
 }
 export type OfficeV7Hit = { chave:string;x:number;y:number;largura:number;altura:number;modulo?:string }
@@ -242,10 +239,8 @@ function glassPanel(ctx:CanvasRenderingContext2D,V:View,x1:number,z1:number,x2:n
  * (ver OfficeV7Frame.progressos); abaixo do limiar a sala não desenha NADA
  * (ela realmente some, em vez de ficar com um indício morto na tela).
  *
- * Squad sem ninguém ativo agora (room.ativa===false) não desenha mais
- * parede/porta/mobília fantasma com a etiqueta "OCULTO" (achado 1 da
- * auditoria de 14/10/2026): vira um indício mínimo, só o contorno do piso e
- * o nome da sala — sem fingir um ambiente fechado que não existe.
+ * A ocupação muda o status da sala, não sua estrutura física: parede, porta
+ * e mobiliário continuam visíveis mesmo quando ninguém está ativo.
  */
 function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room,opcoes:{opacidade?:number;conteudo?:()=>void}={}){
   const opacidade=opcoes.opacidade??1;
@@ -256,15 +251,6 @@ function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room,opcoes:{opacida
   const color=room.cor||'#77938e';
   const labelComOcupantes=isSquad?`${room.label} · ${room.ocupantes??0}`:room.label;
   ctx.save();ctx.globalAlpha=opacidade;
-  if(isSquad&&!active){
-    roundedArea(ctx,V,room,alpha(color,.08),alpha(color,.3));
-    const p=V.P(x+w/2,z+d/2,10);
-    const ww=clamp(labelComOcupantes.length*5.2+34,64,140);
-    rect(ctx,p.x-ww/2,p.y-9,ww,18,'#1c2b2d9c',4,alpha(color,.4));
-    text(ctx,labelComOcupantes,p.x,p.y,7.4,'#c7cfc8',760);
-    ctx.restore();
-    return;
-  }
   const floor=isSquad?alpha(color,.25):'#e8e3d0';
   const inner=isSquad?alpha(color,.13):'#cfd6d0a1';
   const glassFill=isSquad?alpha(color,.12):'#b1e3e637';
@@ -287,7 +273,7 @@ function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room,opcoes:{opacida
   glassPanel(ctx,V,x,z+d,x+half,z+d,h,glassFill,glassStroke);
   glassPanel(ctx,V,x+half+door,z+d,x+w,z+d,h,glassFill,glassStroke);
   if(isSquad){
-    const p=V.P(x+w/2,z+8,h+18);const status='ATIVO';
+    const p=V.P(x+w/2,z+8,h+18);const status=active?'ATIVO':'OCIOSO';
     const ww=clamp(labelComOcupantes.length*6.7+58,112,185);
     ctx.save();ctx.shadowColor='#0b1719aa';ctx.shadowBlur=8;rect(ctx,p.x-ww/2,p.y-13,ww,27,'#20383a',4,color);ctx.restore();
     rect(ctx,p.x-ww/2+6,p.y-7,4,14,color,1);
@@ -461,27 +447,35 @@ function salaEspecialHits(V:View,arquitetura:Architecture):OfficeV7Hit[]{
     });
 }
 /**
- * Desenha as salas de squad FORA do fundo cacheado (opacidade muda a cada
- * quadro) e devolve um hit por sala inteira (parede/porta/placa), achado 3:
+ * Desenha as salas de squad FORA do fundo cacheado e devolve um hit por sala
+ * inteira (parede/porta/placa), achado 3:
  * clicar em qualquer ponto da sala seleciona o mesmo agente que clicar na
  * mesa dele (o ativo, ou o primeiro da ficha quando ninguém está ativo).
- * Sala com progresso 0 nem desenha nem gera hit — ela realmente some
- * (achado 4: a transição de 720ms de PixelOffice.tsx finalmente chega aqui).
+ * A opacidade da sala física é sempre integral; a atividade só altera
+ * ocupantes, estado e sprites.
  */
+export function postosParaRenderizarSala(
+  postos: readonly { x:number;y:number }[],
+  mesas: readonly { x:number;y:number }[],
+): { x:number;y:number }[] {
+  const ocupados=new Set(mesas.map(mesa=>`${mesa.x}:${mesa.y}`));
+  return [...postos.filter(posto=>!ocupados.has(`${posto.x}:${posto.y}`)),...mesas];
+}
 function drawSquadRooms(ctx:CanvasRenderingContext2D,V:View,frame:OfficeV7Frame):OfficeV7Hit[]{
   const hits:OfficeV7Hit[]=[];
   for(const room of frame.layout.arquitetura.salas){
     if(room.tipo!=='squad')continue;
-    const progresso=room.squad!=null?(frame.progressos?.get(room.squad)??1):1;
+    const progresso=1;
     const postos=frame.layout.ilhas.find(ilha=>ilha.squad===room.squad)?.postos??[];
+    const mesasDoSquad=frame.layout.mesas.filter(mesa=>mesa.execucao.squad===room.squad);
+    const mesasParaRenderizar=postosParaRenderizarSala(postos,mesasDoSquad);
     glassRoom(ctx,V,room,{opacidade:progresso,conteudo:()=>{
-      for(const posto of postos){
+      for(const posto of mesasParaRenderizar){
         desk(ctx,V,posto.x,posto.y,room.squad==='coordenação'?'leader':'work');
         chair(ctx,V,posto.x,posto.y+26,.78);
       }
     }});
     if(progresso<=0.01)continue;
-    const mesasDoSquad=frame.layout.mesas.filter(mesa=>mesa.execucao.squad===room.squad);
     if(!mesasDoSquad.length)continue;
     const alvo=mesasDoSquad.find(mesa=>mesa.execucao.ativa)??mesasDoSquad[0];
     hits.push({chave:alvo.execucao.chave,...roomAabb(V,room)});
