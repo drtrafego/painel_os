@@ -114,6 +114,8 @@ const ZOOM_MIN = 0.05
 const ZOOM_MAX = 2.4
 const SALA_MISTA: PixelAgentSquad = 'sala mista'
 const DURACAO_TRANSICAO_AMBIENTE_MS = 720
+const POSTOS_MOBILIADOS_POR_SALA = 8
+const POSTOS_MOBILIADOS_NA_COORDENACAO = 3
 
 /** Squads que só ocupam espaço quando a operação os convoca. */
 export const SQUADS_SOB_DEMANDA: ReadonlyArray<{
@@ -578,10 +580,19 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
   const equipes = ordenadas.filter(item => item.squad !== 'coordenação')
   const planta = planejarCTOffice(direcao.length, equipes.length, parados.length, opcoes)
   const posicoes = new Map<ExecucaoVisual, { x: number; y: number }>()
+  const postosPorSquad = new Map<PixelAgentSquad, Array<{ x: number; y: number }>>()
   ordemSquads.forEach((squad) => {
     const membros = grupos.get(squad) || []
     const sala = salaDoSquad(planta.arquitetura.salas, squad)
-    const postos = sala ? posicoesNaSala(sala, membros.length) : planta.equipes.slice(0, membros.length)
+    // A sala ocupada conserva os postos físicos livres, em vez de reduzir a
+    // mobília ao número de pessoas presentes. Sala sem ocupante continua sem ilha.
+    const postos = sala
+      ? posicoesNaSala(sala, Math.max(
+        membros.length,
+        squad === 'coordenação' ? POSTOS_MOBILIADOS_NA_COORDENACAO : POSTOS_MOBILIADOS_POR_SALA,
+      ))
+      : planta.equipes.slice(0, membros.length)
+    postosPorSquad.set(squad, postos)
     membros.forEach((item, indice) => {
       const posto = postos[indice]
       if (posto) posicoes.set(item, posto)
@@ -608,7 +619,7 @@ export function calcularLayoutSala(execucoes: ExecucaoVisual[], compactoOuOpcoes
       cor: CORES_SQUAD.get(squad) || '#7bcaad',
       tipo: squad === SALA_MISTA ? 'coworking' : 'squad', compacta: false,
       x, y, largura: Math.max(...xs) - x + 43, altura: Math.max(...ys) - y + 65,
-      postos: mesasSquad.map(({ x: px, y: py }) => ({ x: px, y: py })), mesas: mesasSquad,
+      postos: postosPorSquad.get(squad) || [], mesas: mesasSquad,
     }
   })
   mesas.forEach(mesa => { mesa.descanso = { x: planta.arquitetura.lounge.x + planta.arquitetura.lounge.largura / 2, y: planta.arquitetura.lounge.z + 40 } })
