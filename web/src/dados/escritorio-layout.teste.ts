@@ -13,6 +13,7 @@ import {
   filtrarSquadsSobDemanda,
   montarExecucoesVisuais,
   nomeLegivelDaExecucao,
+  progressoDaSalaSquad,
   sessaoEstáNoAr,
 } from '../ui/PixelOffice.tsx'
 
@@ -53,6 +54,9 @@ conferir('comercial permanece alguns minutos depois do último ativo', SQUADS_SO
 conferir('nomes aparecem sob todas as mesas ocupadas', catalogoVisual.every((item) => item.rotulos.length > 0))
 conferir('a planta mantém nove salas físicas dos squads reais', salasModulares.map((sala) => sala.squad).sort().join('|') === squadsFisicosEsperados.join('|'))
 conferir('módulos sem execução ativa começam cinza e fechados', salasModulares.every((sala) => sala.ativa === false && sala.ocupantes === 0))
+conferir('squad sob demanda que nunca teve atividade começa totalmente visível',
+  progressoDaSalaSquad() === 1,
+  String(progressoDaSalaSquad()))
 
 const larguraDesktopRenderizada = desktop.largura * desktop.zoomSugerido
 const alturaDesktopRenderizada = desktop.altura * desktop.zoomSugerido
