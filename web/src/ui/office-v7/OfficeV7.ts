@@ -42,7 +42,10 @@ type Architecture = {
   postosLivres?: readonly {x:number;y:number}[];
   assentosDescanso?: readonly {x:number;y:number}[];
 }
-type Layout = { largura:number; altura:number; arquitetura:Architecture; mesas: readonly Desk[] }
+type Layout = {
+  largura:number; altura:number; arquitetura:Architecture; mesas: readonly Desk[];
+  ilhas: readonly { squad:string; postos:readonly {x:number;y:number}[] }[]
+}
 export type OfficeV7Frame = {
   layout:Layout; personagens:readonly Actor[]; tempo:number; progressoDia:number;
   reduzirMovimento:boolean; selecionadoId?:string|null;hoverId?:string|null
@@ -244,7 +247,7 @@ function glassPanel(ctx:CanvasRenderingContext2D,V:View,x1:number,z1:number,x2:n
  * auditoria de 14/10/2026): vira um indício mínimo, só o contorno do piso e
  * o nome da sala — sem fingir um ambiente fechado que não existe.
  */
-function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room,opcoes:{opacidade?:number}={}){
+function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room,opcoes:{opacidade?:number;conteudo?:()=>void}={}){
   const opacidade=opcoes.opacidade??1;
   if(opacidade<=0.01)return;
   const {x,z,largura:w,profundidade:d,alturaVidro:h,abertura:door}=room;
@@ -279,6 +282,7 @@ function glassRoom(ctx:CanvasRenderingContext2D,V:View,room:Room,opcoes:{opacida
     desk(ctx,V,x+w*.33,z+d*.55,'work');desk(ctx,V,x+w*.72,z+d*.55,'work');
     for(const offset of [.34,.73])chair(ctx,V,x+w*offset,z+d*.88,.78);
   }
+  opcoes.conteudo?.();
   const half=(w-door)/2;
   glassPanel(ctx,V,x,z+d,x+half,z+d,h,glassFill,glassStroke);
   glassPanel(ctx,V,x+half+door,z+d,x+w,z+d,h,glassFill,glassStroke);
@@ -469,7 +473,13 @@ function drawSquadRooms(ctx:CanvasRenderingContext2D,V:View,frame:OfficeV7Frame)
   for(const room of frame.layout.arquitetura.salas){
     if(room.tipo!=='squad')continue;
     const progresso=room.squad!=null?(frame.progressos?.get(room.squad)??1):1;
-    glassRoom(ctx,V,room,{opacidade:progresso});
+    const postos=frame.layout.ilhas.find(ilha=>ilha.squad===room.squad)?.postos??[];
+    glassRoom(ctx,V,room,{opacidade:progresso,conteudo:()=>{
+      for(const posto of postos){
+        desk(ctx,V,posto.x,posto.y,room.squad==='coordenação'?'leader':'work');
+        chair(ctx,V,posto.x,posto.y+26,.78);
+      }
+    }});
     if(progresso<=0.01)continue;
     const mesasDoSquad=frame.layout.mesas.filter(mesa=>mesa.execucao.squad===room.squad);
     if(!mesasDoSquad.length)continue;
