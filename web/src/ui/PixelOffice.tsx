@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { desenharEscritorioV7 as desenharEscritorioRpg } from './office-v7/OfficeV7'
-import { EscritorioHabblaud } from './office-habblaud/EscritorioHabblaud'
+import { EscritorioVivoV8 } from './office-habblaud/EscritorioVivoV8'
 import { PainelTarefas, PainelUsoPlanos } from './PixelOffice.wall'
 import { montarTarefasParede, type GastosIA } from './PixelOffice.wall-data'
 import type { QuadroTarefasSolicitadas } from './nucleo/dados'
@@ -820,6 +820,8 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const zoomAutomaticoRef = useRef(1)
   const hoverIdRef = useRef<string | null>(null)
   const [zoom, setZoom] = useState(1)
+  const [zoomVivoManual, setZoomVivoManual] = useState<number | null>(null)
+  const [zoomVivoSugerido, setZoomVivoSugerido] = useState(1)
   const [dimensoesPalco, setDimensoesPalco] = useState({ largura: 900, altura: 600, dpr: 1, larguraFisica: 900 })
   const [pausado, setPausado] = useState(false)
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
@@ -846,6 +848,8 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const [abaEscritorio, setAbaEscritorio] = useState<'escritorio' | 'habblaud' | 'lista' | 'desempenho'>('escritorio')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativos' | 'descanso' | 'ociosos'>(soAtivos ? 'ativos' : 'todos')
   const [painelHudAberto, setPainelHudAberto] = useState<'uso' | 'tarefas' | null>(null)
+  const abaV8VisivelRef = useRef(true)
+  abaV8VisivelRef.current = abaEscritorio === 'escritorio'
   const debugWalk = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug_walk') === '1'
 
   useEffect(() => {
@@ -1068,6 +1072,9 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
       // só acontece quando `fasesRef` relatou 'descanso' NESTE quadro, nunca
       // antes — é o que garante levantar+caminhar completos antes de sumir.
       liberarConcluidos((chave) => fasesRef.current.get(chave))
+      // Aba oculta: os estados continuam avançando acima, só não se pinta um
+      // canvas invisível enquanto o Escritório vivo desenha o dele.
+      if (!abaV8VisivelRef.current) { quadro = requestAnimationFrame(desenhar); return }
       try {
         const frame = {
           layout,
@@ -1371,21 +1378,25 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 <button
                   type="button"
                   aria-label="Afastar sala"
-                  onClick={() => setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, zoomMaximoSeguro))}
+                  onClick={() => abaEscritorio === 'habblaud'
+                    ? setZoomVivoManual((valor) => limitar((valor ?? zoomVivoSugerido) - 0.1, ZOOM_MIN, zoomMaximoSeguro))
+                    : setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, zoomMaximoSeguro))}
                 >
                   −
                 </button>
                 <button
                   type="button"
                   title="Repor enquadramento"
-                  onClick={() => setZoom(zoomAutomaticoRef.current)}
+                  onClick={() => abaEscritorio === 'habblaud' ? setZoomVivoManual(null) : setZoom(zoomAutomaticoRef.current)}
                 >
-                  {Math.round(zoom * 100)}%
+                  {Math.round((abaEscritorio === 'habblaud' ? zoomVivoManual ?? zoomVivoSugerido : zoom) * 100)}%
                 </button>
                 <button
                   type="button"
                   aria-label="Aproximar sala"
-                  onClick={() => setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))}
+                  onClick={() => abaEscritorio === 'habblaud'
+                    ? setZoomVivoManual((valor) => limitar((valor ?? zoomVivoSugerido) + 0.1, ZOOM_MIN, zoomMaximoSeguro))
+                    : setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))}
                 >
                   +
                 </button>
@@ -1394,11 +1405,16 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
           </div>
           <section className="ct-room" aria-label="Sala interativa em perspectiva">
             {abaEscritorio === 'habblaud' && (
-              <EscritorioHabblaud
+              <EscritorioVivoV8
                 execucoes={todasExecucoes}
-                statusSonda={statusLeitura}
                 selecionadoId={agenteSelecionadoId}
                 aoSelecionarAgente={aoSelecionarAgente}
+                aoAbrirModulo={(modulo) => { if (modulo in POR_ID) abrirModulo(modulo as VistaId) }}
+                pausado={pausado}
+                reduzirMovimento={reduzirMovimento}
+                progressoDia={ambiente.progressoDia}
+                zoomManual={zoomVivoManual}
+                aoZoomSugerido={setZoomVivoSugerido}
               />
             )}
             <div
@@ -1433,7 +1449,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               )
             )}
 
-            {abaEscritorio === 'escritorio' && (
+            {(abaEscritorio === 'escritorio' || abaEscritorio === 'habblaud') && (
               <div className="ct-scene-hud" aria-label="Resumo da operação">
                 <span className={`ct-scene-live ${statusLeitura === 'confirmado' ? 'is-live' : ''}`} title={descricaoSonda}>
                   <i className={`ct-dot ${statusLeitura === 'confirmado' ? 'ct-dot-green' : 'ct-dot-amber'}`} />
