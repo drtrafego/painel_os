@@ -52,6 +52,10 @@ export type OfficeV7Frame = {
   /** Progresso por squad. Salas físicas de squad recebem 1: a atividade muda
    * ocupantes e sprites, nunca a existência da sala. */
   progressos?: ReadonlyMap<string, number>
+  /** Só o "Escritório vivo" liga: a sala de squad passa a obedecer
+   * `progressos` (0 some, 1 montada) e acende quando há alguém trabalhando.
+   * Sem esta flag o V8 ignora `progressos` e mantém toda sala física. */
+  modoVivo?: boolean
 }
 export type OfficeV7Hit = { chave:string;x:number;y:number;largura:number;altura:number;modulo?:string }
 type View = { P:(x:number,z:number,e?:number)=>Point; sceneW:number;sceneH:number }
@@ -461,24 +465,40 @@ export function postosParaRenderizarSala(
   const ocupados=new Set(mesas.map(mesa=>`${mesa.x}:${mesa.y}`));
   return [...postos.filter(posto=>!ocupados.has(`${posto.x}:${posto.y}`)),...mesas];
 }
+/** Montagem da sala no modo vivo: o vidro sobe do piso e a sala ganha opacidade. */
+export function salaMontadaVivo<T extends {alturaVidro:number}>(room:T,progresso:number):{sala:T;opacidade:number}{
+  const p=clamp(progresso,0,1);const suave=p*p*(3-2*p);
+  return {sala:{...room,alturaVidro:room.alturaVidro*(.18+.82*suave)},opacidade:suave};
+}
+function luzDaSala(ctx:CanvasRenderingContext2D,V:View,room:Room){
+  const c=V.P(room.x+room.largura/2,room.z+room.profundidade/2);
+  const raio=Math.max(room.largura,room.profundidade)*.62;
+  const luz=ctx.createRadialGradient(c.x,c.y,4,c.x,c.y,raio);
+  luz.addColorStop(0,'#fff1c466');luz.addColorStop(.6,alpha(room.cor||'#f4d27a',.16));luz.addColorStop(1,'#fff1c400');
+  const {x,z,largura:w,profundidade:d}=room;
+  polygon(ctx,[V.P(x+7,z+7),V.P(x+w-7,z+7),V.P(x+w-7,z+d-7),V.P(x+7,z+d-7)],luz);
+}
 function drawSquadRooms(ctx:CanvasRenderingContext2D,V:View,frame:OfficeV7Frame):OfficeV7Hit[]{
   const hits:OfficeV7Hit[]=[];
-  for(const room of frame.layout.arquitetura.salas){
-    if(room.tipo!=='squad')continue;
-    const progresso=1;
+  for(const salaFisica of frame.layout.arquitetura.salas){
+    if(salaFisica.tipo!=='squad')continue;
+    const vivo=frame.modoVivo?salaMontadaVivo(salaFisica,frame.progressos?.get(salaFisica.squad??'')??0):null;
+    const room=vivo?vivo.sala:salaFisica;
+    const progresso=vivo?vivo.opacidade:1;
     const postos=frame.layout.ilhas.find(ilha=>ilha.squad===room.squad)?.postos??[];
     const mesasDoSquad=frame.layout.mesas.filter(mesa=>mesa.execucao.squad===room.squad);
     const mesasParaRenderizar=postosParaRenderizarSala(postos,mesasDoSquad);
     glassRoom(ctx,V,room,{opacidade:progresso,conteudo:()=>{
+      if(vivo&&room.ativa)luzDaSala(ctx,V,room);
       for(const posto of mesasParaRenderizar){
         desk(ctx,V,posto.x,posto.y,room.squad==='coordenação'?'leader':'work');
         chair(ctx,V,posto.x,posto.y+26,.78);
       }
     }});
-    if(progresso<=0.01)continue;
+    if(progresso<=(vivo?0.5:0.01))continue;
     if(!mesasDoSquad.length)continue;
     const alvo=mesasDoSquad.find(mesa=>mesa.execucao.ativa)??mesasDoSquad[0];
-    hits.push({chave:alvo.execucao.chave,...roomAabb(V,room)});
+    hits.push({chave:alvo.execucao.chave,...roomAabb(V,salaFisica)});
   }
   return hits;
 }
@@ -492,16 +512,21 @@ function paintStatic(ctx:CanvasRenderingContext2D,V:View,frame:OfficeV7Frame){
   for(const p of [[972,450],[1390,455],[976,790],[1395,790],[390,420],[390,735]] as const)plant(ctx,V,p[0],p[1],.8);
   ctx.restore()
 }
-type Cache={key:string;canvas:HTMLCanvasElement};let staticCache:Cache|null=null;
+// Duas vagas: o V8 (oculto ou visível) e o Escritório vivo desenham em
+// canvases diferentes no mesmo quadro; com uma vaga só, um apagava o fundo
+// do outro e o piso era repintado a cada frame.
+const staticCaches=new Map<string,HTMLCanvasElement>();const LIMITE_CACHE_ESTATICO=2;
 function base(ctx:CanvasRenderingContext2D,V:View,f:OfficeV7Frame){
   const key=JSON.stringify([V.sceneW,V.sceneH,f.layout.arquitetura.salas]);
   if(typeof document==='undefined'){paintStatic(ctx,V,f);return}
-  if(!staticCache||staticCache.key!==key){
-    const canvas=document.createElement('canvas');canvas.width=V.sceneW;canvas.height=V.sceneH;
+  let canvas=staticCaches.get(key);
+  if(canvas){staticCaches.delete(key)}else{
+    canvas=document.createElement('canvas');canvas.width=V.sceneW;canvas.height=V.sceneH;
     const cx=canvas.getContext('2d');if(cx)paintStatic(cx,V,f);
-    staticCache={key,canvas};
   }
-  ctx.drawImage(staticCache.canvas,0,0)
+  staticCaches.set(key,canvas);
+  while(staticCaches.size>LIMITE_CACHE_ESTATICO)staticCaches.delete(staticCaches.keys().next().value as string);
+  ctx.drawImage(canvas,0,0)
 }
 export function desenharEscritorioV7(ctx:CanvasRenderingContext2D,frame:OfficeV7Frame):OfficeV7Hit[]{
   const V=v(frame.layout);const hits:OfficeV7Hit[]=[];
@@ -544,5 +569,10 @@ export function desenharEscritorioV7(ctx:CanvasRenderingContext2D,frame:OfficeV7
     const progresso=room.squad!=null?frame.progressos?.get(room.squad):undefined;
     return progresso!==undefined&&progresso>0.01&&progresso<0.99;
   }).length);
+  if(frame.modoVivo){
+    ctx.canvas.dataset.officeMode='vivo';
+    ctx.canvas.dataset.officeVisibleModules=String(squadRooms.filter(room=>(frame.progressos?.get(room.squad??'')??0)>0.01).length);
+    ctx.canvas.dataset.officeLitModules=String(squadRooms.filter(room=>room.ativa&&(frame.progressos?.get(room.squad??'')??0)>0.01).length);
+  }
   return hits
 }
