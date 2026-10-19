@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { desenharEscritorioV7 as desenharEscritorioRpg } from './office-v7/OfficeV7'
 import { EscritorioVivoV8 } from './office-habblaud/EscritorioVivoV8'
+import { EscritorioHabblaud } from './office-habblaud/EscritorioHabblaud'
 import { PainelTarefas, PainelUsoPlanos } from './PixelOffice.wall'
 import { montarTarefasParede, type GastosIA } from './PixelOffice.wall-data'
 import type { QuadroTarefasSolicitadas } from './nucleo/dados'
@@ -845,7 +846,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   }, [])
 
   const [termoBusca, setTermoBusca] = useState('')
-  const [abaEscritorio, setAbaEscritorio] = useState<'escritorio' | 'habblaud' | 'lista' | 'desempenho'>('escritorio')
+  const [abaEscritorio, setAbaEscritorio] = useState<'escritorio' | 'habblaud' | 'vivo-v8' | 'lista' | 'desempenho'>('escritorio')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativos' | 'descanso' | 'ociosos'>(soAtivos ? 'ativos' : 'todos')
   const [painelHudAberto, setPainelHudAberto] = useState<'uso' | 'tarefas' | null>(null)
   const abaV8VisivelRef = useRef(true)
@@ -1273,6 +1274,16 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               <button
                 type="button"
                 role="tab"
+                aria-selected={abaEscritorio === 'vivo-v8'}
+                className={`ct-tab-btn ${abaEscritorio === 'vivo-v8' ? 'ct-tab-active' : ''}`}
+                onClick={() => setAbaEscritorio('vivo-v8')}
+                data-testid="office-vivo-v8-tab"
+              >
+                <span aria-hidden="true">✨</span> Escritório vivo (novo)
+              </button>
+              <button
+                type="button"
+                role="tab"
                 aria-selected={abaEscritorio === 'lista'}
                 className={`ct-tab-btn ct-quick-action ${abaEscritorio === 'lista' ? 'ct-tab-active' : ''}`}
                 onClick={() => setAbaEscritorio('lista')}
@@ -1378,7 +1389,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 <button
                   type="button"
                   aria-label="Afastar sala"
-                  onClick={() => abaEscritorio === 'habblaud'
+                  onClick={() => abaEscritorio === 'vivo-v8'
                     ? setZoomVivoManual((valor) => limitar((valor ?? zoomVivoSugerido) - 0.1, ZOOM_MIN, zoomMaximoSeguro))
                     : setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, zoomMaximoSeguro))}
                 >
@@ -1387,14 +1398,14 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 <button
                   type="button"
                   title="Repor enquadramento"
-                  onClick={() => abaEscritorio === 'habblaud' ? setZoomVivoManual(null) : setZoom(zoomAutomaticoRef.current)}
+                  onClick={() => abaEscritorio === 'vivo-v8' ? setZoomVivoManual(null) : setZoom(zoomAutomaticoRef.current)}
                 >
-                  {Math.round((abaEscritorio === 'habblaud' ? zoomVivoManual ?? zoomVivoSugerido : zoom) * 100)}%
+                  {Math.round((abaEscritorio === 'vivo-v8' ? zoomVivoManual ?? zoomVivoSugerido : zoom) * 100)}%
                 </button>
                 <button
                   type="button"
                   aria-label="Aproximar sala"
-                  onClick={() => abaEscritorio === 'habblaud'
+                  onClick={() => abaEscritorio === 'vivo-v8'
                     ? setZoomVivoManual((valor) => limitar((valor ?? zoomVivoSugerido) + 0.1, ZOOM_MIN, zoomMaximoSeguro))
                     : setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))}
                 >
@@ -1405,6 +1416,14 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
           </div>
           <section className="ct-room" aria-label="Sala interativa em perspectiva">
             {abaEscritorio === 'habblaud' && (
+              <EscritorioHabblaud
+                execucoes={todasExecucoes}
+                statusSonda={statusLeitura}
+                selecionadoId={agenteSelecionadoId}
+                aoSelecionarAgente={aoSelecionarAgente}
+              />
+            )}
+            {abaEscritorio === 'vivo-v8' && (
               <EscritorioVivoV8
                 execucoes={todasExecucoes}
                 selecionadoId={agenteSelecionadoId}
@@ -1449,7 +1468,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               )
             )}
 
-            {(abaEscritorio === 'escritorio' || abaEscritorio === 'habblaud') && (
+            {(abaEscritorio === 'escritorio' || abaEscritorio === 'vivo-v8') && (
               <div className="ct-scene-hud" aria-label="Resumo da operação">
                 <span className={`ct-scene-live ${statusLeitura === 'confirmado' ? 'is-live' : ''}`} title={descricaoSonda}>
                   <i className={`ct-dot ${statusLeitura === 'confirmado' ? 'ct-dot-green' : 'ct-dot-amber'}`} />
