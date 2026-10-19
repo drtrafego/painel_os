@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { desenharEscritorioV7 as desenharEscritorioRpg } from './office-v7/OfficeV7'
-import { EscritorioVivoV8 } from './office-habblaud/EscritorioVivoV8'
 import { EscritorioHabblaud } from './office-habblaud/EscritorioHabblaud'
 import { PainelTarefas, PainelUsoPlanos } from './PixelOffice.wall'
 import { montarTarefasParede, type GastosIA } from './PixelOffice.wall-data'
@@ -822,7 +821,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   const hoverIdRef = useRef<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [zoomVivoManual, setZoomVivoManual] = useState<number | null>(null)
-  const [zoomVivoSugerido, setZoomVivoSugerido] = useState(1)
+  const [zoomVivoSugerido] = useState(1)
   const [dimensoesPalco, setDimensoesPalco] = useState({ largura: 900, altura: 600, dpr: 1, larguraFisica: 900 })
   const [pausado, setPausado] = useState(false)
   const [reduzirMovimento, setReduzirMovimento] = useState(false)
@@ -846,7 +845,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
   }, [])
 
   const [termoBusca, setTermoBusca] = useState('')
-  const [abaEscritorio, setAbaEscritorio] = useState<'escritorio' | 'habblaud' | 'vivo-v8' | 'lista' | 'desempenho'>('escritorio')
+  const [abaEscritorio, setAbaEscritorio] = useState<'escritorio' | 'habblaud' | 'lista' | 'desempenho'>('habblaud')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativos' | 'descanso' | 'ociosos'>(soAtivos ? 'ativos' : 'todos')
   const [painelHudAberto, setPainelHudAberto] = useState<'uso' | 'tarefas' | null>(null)
   const abaV8VisivelRef = useRef(true)
@@ -1255,31 +1254,12 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               <button
                 type="button"
                 role="tab"
-                aria-selected={abaEscritorio === 'escritorio'}
-                className={`ct-tab-btn ${abaEscritorio === 'escritorio' ? 'ct-tab-active' : ''}`}
-                onClick={() => setAbaEscritorio('escritorio')}
-              >
-                <span aria-hidden="true">💺</span> Escritório IA
-              </button>
-              <button
-                type="button"
-                role="tab"
                 aria-selected={abaEscritorio === 'habblaud'}
                 className={`ct-tab-btn ${abaEscritorio === 'habblaud' ? 'ct-tab-active' : ''}`}
                 onClick={() => setAbaEscritorio('habblaud')}
                 data-testid="office-habblaud-tab"
               >
                 <span aria-hidden="true">🏢</span> Escritório vivo
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={abaEscritorio === 'vivo-v8'}
-                className={`ct-tab-btn ${abaEscritorio === 'vivo-v8' ? 'ct-tab-active' : ''}`}
-                onClick={() => setAbaEscritorio('vivo-v8')}
-                data-testid="office-vivo-v8-tab"
-              >
-                <span aria-hidden="true">✨</span> Escritório vivo (novo)
               </button>
               <button
                 type="button"
@@ -1389,7 +1369,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 <button
                   type="button"
                   aria-label="Afastar sala"
-                  onClick={() => abaEscritorio === 'vivo-v8'
+                  onClick={() => abaEscritorio === 'habblaud'
                     ? setZoomVivoManual((valor) => limitar((valor ?? zoomVivoSugerido) - 0.1, ZOOM_MIN, zoomMaximoSeguro))
                     : setZoom((valor) => limitar(valor - 0.1, ZOOM_MIN, zoomMaximoSeguro))}
                 >
@@ -1398,14 +1378,14 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 <button
                   type="button"
                   title="Repor enquadramento"
-                  onClick={() => abaEscritorio === 'vivo-v8' ? setZoomVivoManual(null) : setZoom(zoomAutomaticoRef.current)}
+                  onClick={() => abaEscritorio === 'habblaud' ? setZoomVivoManual(null) : setZoom(zoomAutomaticoRef.current)}
                 >
-                  {Math.round((abaEscritorio === 'vivo-v8' ? zoomVivoManual ?? zoomVivoSugerido : zoom) * 100)}%
+                  {Math.round((abaEscritorio === 'habblaud' ? zoomVivoManual ?? zoomVivoSugerido : zoom) * 100)}%
                 </button>
                 <button
                   type="button"
                   aria-label="Aproximar sala"
-                  onClick={() => abaEscritorio === 'vivo-v8'
+                  onClick={() => abaEscritorio === 'habblaud'
                     ? setZoomVivoManual((valor) => limitar((valor ?? zoomVivoSugerido) + 0.1, ZOOM_MIN, zoomMaximoSeguro))
                     : setZoom((valor) => limitar(valor + 0.1, ZOOM_MIN, zoomMaximoSeguro))}
                 >
@@ -1421,19 +1401,6 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
                 statusSonda={statusLeitura}
                 selecionadoId={agenteSelecionadoId}
                 aoSelecionarAgente={aoSelecionarAgente}
-              />
-            )}
-            {abaEscritorio === 'vivo-v8' && (
-              <EscritorioVivoV8
-                execucoes={todasExecucoes}
-                selecionadoId={agenteSelecionadoId}
-                aoSelecionarAgente={aoSelecionarAgente}
-                aoAbrirModulo={(modulo) => { if (modulo in POR_ID) abrirModulo(modulo as VistaId) }}
-                pausado={pausado}
-                reduzirMovimento={reduzirMovimento}
-                progressoDia={ambiente.progressoDia}
-                zoomManual={zoomVivoManual}
-                aoZoomSugerido={setZoomVivoSugerido}
               />
             )}
             <div
@@ -1468,7 +1435,7 @@ export function PixelOffice({ agentes, catalogo = PIXEL_AGENTS, estado, aoSeleci
               )
             )}
 
-            {(abaEscritorio === 'escritorio' || abaEscritorio === 'vivo-v8') && (
+            {(abaEscritorio === 'escritorio' || abaEscritorio === 'habblaud') && (
               <div className="ct-scene-hud" aria-label="Resumo da operação">
                 <span className={`ct-scene-live ${statusLeitura === 'confirmado' ? 'is-live' : ''}`} title={descricaoSonda}>
                   <i className={`ct-dot ${statusLeitura === 'confirmado' ? 'ct-dot-green' : 'ct-dot-amber'}`} />

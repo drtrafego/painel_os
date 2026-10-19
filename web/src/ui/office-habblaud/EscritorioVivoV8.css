@@ -1,7 +1,0 @@
-.ct-vivo { position:relative; width:100%; min-width:0 }
-.ct-vivo-vazio { position:absolute; z-index:2; left:50%; top:46%; transform:translate(-50%,-50%); display:flex; flex-direction:column; gap:4px; align-items:center; max-width:min(360px,calc(100% - 32px)); padding:14px 18px; border:1px solid #c4b08299; border-radius:10px; background:#20383aeb; color:#fff4d6; text-align:center; font:12px/1.45 Inter,system-ui,Arial,sans-serif; box-shadow:0 10px 30px #0008; pointer-events:none; animation:ct-vivo-surgir .3s ease-out }
-.ct-vivo-vazio strong { font-size:13px; font-weight:700 }
-.ct-vivo-vazio span { color:#c9d6cf }
-.ct-vivo-footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; min-height:28px; padding:7px 16px; border-top:1px solid #38392d; background:#0f1316; font:10px/1.4 Inter,system-ui,Arial,sans-serif; color:#b7b4a4 }
-@keyframes ct-vivo-surgir { from { opacity:0; transform:translate(-50%,-46%) } to { opacity:1; transform:translate(-50%,-50%) } }
-@media (prefers-reduced-motion: reduce) { .ct-vivo-vazio { animation:none } }
