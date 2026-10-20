@@ -506,14 +506,49 @@ def testar_agentes_vivos():
             b"-c\x00model_reasoning_effort=high\x00-m\x00gpt-5.6-sol\x00"
             b"-s\x00workspace-write\x00Investigar [token] com seguran\xc3\xa7a\x00"
         )
-        workers_fake, erro_workers_fake = mod._workers_codex_mecanico(proc=tmp_proc, agora=1100)
-        conferir("worker filho do wrapper é detectado", erro_workers_fake, None)
-        conferir("um PID vira um worker visível", len(workers_fake or []), 1)
+        workers_fallback, erro_workers_fake = mod._workers_codex_mecanico(
+            proc=tmp_proc, agora=1100, pasta=tmp / "registro-codex-ausente",
+        )
+        conferir("fallback detecta o worker filho do wrapper", erro_workers_fake, None)
+        conferir("fallback transforma um PID em worker visível", len(workers_fallback or []), 1)
+        worker_fallback = (workers_fallback or [])[0]
+        conferir("fallback informa quem despachou", worker_fallback.get("dono"), "luana")
+
+        print("\n--- Teste 4b.0: registro explícito do codex_mecanico é a fonte primária")
+        registro_codex = tmp / "jobs-codex-vivos"
+        registro_codex.mkdir()
+        (tmp_proc / "9200" / "stat").write_text(
+            "9200 (bash) S 1 " + "0 " * 17 + "7000\n", encoding="utf-8"
+        )
+        job_id = "luana-19700101T001730Z-9200"
+        (registro_codex / f"{job_id}.json").write_text(json.dumps({
+            "id": job_id,
+            "dono": "luana",
+            "tipo": "codex",
+            "identidade": "worker-codex",
+            "modelo": "gpt-5.6-sol",
+            "esforco": "high",
+            "prompt_resumo": "Investigar [token] com segurança",
+            "started_at": "1970-01-01T00:17:30Z",
+            "pid": 9200,
+            "pid_starttime": 7000,
+        }), encoding="utf-8")
+        workers_fake, erro_registro = mod._workers_codex_mecanico(
+            proc=tmp_proc, agora=1100, pasta=registro_codex,
+        )
+        conferir("registro válido é lido sem erro", erro_registro, None)
+        conferir("registro vira um worker visível", len(workers_fake or []), 1)
         worker_fake = (workers_fake or [])[0]
         conferir("worker informa quem despachou", worker_fake.get("dono"), "luana")
+        conferir("worker registrado usa o contrato tipo codex", worker_fake.get("tipo"), "codex")
         conferir("worker informa modelo e esforço", (worker_fake.get("modelo"), worker_fake.get("esforco")), ("gpt-5.6-sol", "alto"))
         conferir("worker informa duração do processo", worker_fake.get("rodando_ha"), "50s")
         conferir("prompt do worker é curto e redigido", worker_fake.get("tarefa"), "Investigar [token] com segurança")
+        estado_stale = json.loads((registro_codex / f"{job_id}.json").read_text(encoding="utf-8"))
+        estado_stale.update({"id": "luana-stale-9999", "pid": 9999})
+        (registro_codex / "luana-stale-9999.json").write_text(json.dumps(estado_stale), encoding="utf-8")
+        workers_com_stale, _ = mod._workers_codex_mecanico(proc=tmp_proc, agora=1100, pasta=registro_codex)
+        conferir("registro cujo processo terminou não aparece", len(workers_com_stale or []), 1)
         print("\n--- Teste 4b.1: casa padrão preserva workers do codex_mecanico")
         with patch.object(mod, "PROJETOS_DA_CASA", {"luana": "projeto-ausente"}), \
              patch.object(mod, "CODEX_DA_CASA", {"luana": []}), \
@@ -526,14 +561,14 @@ def testar_agentes_vivos():
         conferir(
             "ler_agentes_da_casa sem argumentos agrega worker vivo",
             [a.get("id") for a in casa_padrao_worker["agentes"]],
-            ["worker-codex-9105"],
+            [f"worker-codex-{job_id}"],
         )
         painel_worker = ler_agentes_da_casa(
             projetos={"luana": "projeto-ausente"}, raiz=tmp_proc, codex={},
             processos_claude=None, processos_codex=None, workers_codex=workers_fake,
         )
         conferir("worker sustenta a sonda mesmo sem transcript", painel_worker["ok"], True)
-        conferir("worker entra como execução paralela na sonda", [a.get("id") for a in painel_worker["agentes"]], ["worker-codex-9105"])
+        conferir("worker entra como execução paralela na sonda", [a.get("id") for a in painel_worker["agentes"]], [f"worker-codex-{job_id}"])
 
         print("\n--- Teste 5: Agregação resiliente quando uma sessão falha")
         projetos_com_falha = {

@@ -56,6 +56,10 @@ BRT = ZoneInfo("America/Sao_Paulo")
 AGENT_HOME = Path(os.environ.get("PAINEL_AGENT_HOME", "/home/claude"))
 RAIZ_PROJETOS = AGENT_HOME / ".claude" / "projects"
 PROC = Path("/proc")
+CODEX_JOBS_VIVOS = Path(os.environ.get(
+    "CODEX_JOBS_VIVOS_DIR",
+    "/opt/gastaomatos/luana/.codex_jobs_vivos",
+))
 PROJETO_PADRAO = "-opt-gastaomatos-luana"
 
 # As três sessões da casa. Nome de exibição (dono) -> pasta do projeto em
@@ -344,7 +348,10 @@ def _prompt_do_comando_codex(args: list[str], indice_exec: int) -> str | None:
     return None
 
 
-def _workers_codex_mecanico(proc: Path = PROC, agora: float | None = None) -> tuple[list[dict] | None, str | None]:
+def _workers_codex_mecanico_por_processos(
+    proc: Path = PROC,
+    agora: float | None = None,
+) -> tuple[list[dict] | None, str | None]:
     """Lista cada `codex exec` vivo que descende de `codex_mecanico.sh`.
 
     Sessions/transcripts não são usados para identificar o worker: em tarefas
@@ -426,6 +433,138 @@ def _workers_codex_mecanico(proc: Path = PROC, agora: float | None = None) -> tu
         })
     workers.sort(key=lambda item: item["id"])
     return workers, None
+
+
+def _starttime_do_processo(proc: Path, pid: int) -> int | None:
+    try:
+        bruto = (Path(proc) / str(pid) / "stat").read_text(encoding="utf-8", errors="replace")
+        fim_nome = bruto.rfind(")")
+        return int(bruto[fim_nome + 2:].split()[19])
+    except (FileNotFoundError, ProcessLookupError, PermissionError, OSError, ValueError, IndexError):
+        return None
+
+
+def _wrapper_codex_mecanico_vivo(proc: Path, pid: int, starttime: int) -> bool:
+    args = _args_do_processo(proc, str(pid))
+    if not args or _starttime_do_processo(proc, pid) != starttime:
+        return False
+    return any(
+        Path(arg).name == "codex_mecanico.sh"
+        or re.search(r"(?:^|\s)/opt/gastaomatos/(?:luana|renato|bia)/codex_mecanico\.sh(?:\s|$)", arg)
+        for arg in args
+    )
+
+
+def _worker_codex_registrado(
+    estado: object,
+    arquivo: Path,
+    proc: Path,
+    agora: float,
+) -> dict | None:
+    if not isinstance(estado, dict):
+        raise ValueError("estado não é um objeto")
+    job_id = estado.get("id")
+    dono = estado.get("dono")
+    pid = estado.get("pid")
+    starttime = estado.get("pid_starttime")
+    if not isinstance(job_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{2,119}", job_id):
+        raise ValueError("id inválido")
+    if arquivo.stem != job_id:
+        raise ValueError("id diverge do nome do arquivo")
+    if dono not in PROJETOS_DA_CASA:
+        raise ValueError("dono inválido")
+    if estado.get("tipo") != "codex" or estado.get("identidade") != "worker-codex":
+        raise ValueError("identidade inválida")
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        raise ValueError("pid inválido")
+    if isinstance(starttime, bool) or not isinstance(starttime, int) or starttime <= 0:
+        raise ValueError("starttime inválido")
+    if not _wrapper_codex_mecanico_vivo(proc, pid, starttime):
+        return None
+
+    started_at = estado.get("started_at")
+    if not isinstance(started_at, str):
+        raise ValueError("started_at inválido")
+    try:
+        inicio_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        if inicio_dt.tzinfo is None:
+            raise ValueError
+        inicio_epoch = inicio_dt.timestamp()
+    except ValueError as exc:
+        raise ValueError("started_at inválido") from exc
+
+    prompt = _sanitizar_etapa_codex(str(estado.get("prompt_resumo") or ""))
+    tarefa = prompt or "tarefa técnica em execução"
+    modelo = _texto_curto(estado.get("modelo"), 80)
+    esforco = _texto_curto(estado.get("esforco"), 20)
+    rodando_s = max(0.0, agora - inicio_epoch)
+    return {
+        "id": f"worker-codex-{job_id}",
+        "nome": "Worker Codex",
+        "tipo": "codex",
+        "motor": "codex",
+        "dono": dono,
+        "identidade": "worker-codex",
+        "papel": "Worker técnico (Codex)",
+        "tarefa": tarefa,
+        "descricao": tarefa,
+        "pai": dono,
+        "profundidade": 1,
+        "estado": TRABALHANDO,
+        "fase": "job_codex_mecanico",
+        "etapa": tarefa,
+        "etapa_e_description": False,
+        "ferramenta": None,
+        "silencio_s": 0.0,
+        "ultima_atividade": _hora_br(agora),
+        "inicio": _hora_br(inicio_epoch),
+        "inicio_epoch": inicio_epoch,
+        "transcript_bytes": None,
+        "problema": None,
+        "modelo": modelo,
+        "modelo_legivel": _formatar_modelo(modelo),
+        "esforco": _formatar_esforco(esforco),
+        "ferramentas_usadas": 0,
+        "tokens_total": None,
+        "tokens_formatado": None,
+        "rodando_ha_s": round(rodando_s, 1),
+        "rodando_ha": _formatar_duracao(rodando_s),
+        "quem_mandou": dono,
+        "status": "executando",
+    }
+
+
+def _workers_codex_mecanico(
+    proc: Path = PROC,
+    agora: float | None = None,
+    pasta: Path = CODEX_JOBS_VIVOS,
+) -> tuple[list[dict] | None, str | None]:
+    """Lê jobs registrados pelo wrapper, com fallback para instalações antigas."""
+    pasta = Path(pasta)
+    if not pasta.exists():
+        return _workers_codex_mecanico_por_processos(proc=proc, agora=agora)
+    if not pasta.is_dir():
+        return None, "registro de jobs Codex não é um diretório"
+    try:
+        arquivos = sorted(pasta.glob("*.json"))
+    except OSError as exc:
+        return None, f"falha ao listar registros de jobs Codex ({type(exc).__name__})"
+
+    agora = _agora() if agora is None else agora
+    workers = []
+    invalidos = 0
+    for arquivo in arquivos:
+        try:
+            estado = json.loads(arquivo.read_text(encoding="utf-8"))
+            worker = _worker_codex_registrado(estado, arquivo, proc, agora)
+        except (OSError, ValueError, json.JSONDecodeError):
+            invalidos += 1
+            continue
+        if worker is not None:
+            workers.append(worker)
+    workers.sort(key=lambda item: item["id"])
+    erro = f"{invalidos} registro(s) de job Codex inválido(s) ignorado(s)" if invalidos else None
+    return workers, erro
 
 
 def _resolver_workers_codex_mecanico(workers: object) -> tuple[list[dict] | None, str | None]:
@@ -1633,7 +1772,7 @@ def ler_agentes(projeto: str = PROJETO_PADRAO, raiz: Path | None = None,
     workers_vivos, erro_workers = _resolver_workers_codex_mecanico(workers_codex)
     if codex_vivos is None:
         avisos.append(f"{dono or projeto}: sessões Codex indeterminadas: {erro_processos_codex}")
-    if workers_vivos is None:
+    if erro_workers:
         avisos.append(f"{dono or projeto}: workers Codex indeterminados: {erro_workers}")
     codex = _codex_recentes(
         agora,
